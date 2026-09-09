@@ -43,7 +43,7 @@ import EmojiGlyph from '@/components/common/EmojiGlyph.vue'
 import { useDraggable } from '@/composables/useDraggable.js'
 import { anyModalOpen } from '@/composables/useOpenModals.js'
 import { floatingHidden, installFloatingHide } from '@/composables/useFloatingHide.js'
-import { floatingBottomInset } from '@/desktop/layout.js'
+import { floatingBottomInset, floatingLeftInset } from '@/desktop/layout.js'
 import { usePetsStore } from '@/stores/pets.js'
 import { ailmentMeta, petEmoji } from '@/utils/pets.js'
 import { storageGet, storageSet } from '@/utils/storage.js'
@@ -66,9 +66,11 @@ const { pos, dragging, onPointerDown, wasDragged } = useDraggable({
   size: WIDGET_SIZE,
   defaultCorner: 'bottom-left',
   margin: 16,
-  // Запас под панель задач каркаса (её толщину знает layout.js) — функция
-  // пересчитывается на каждый clamp, так что resize/поворот учитываются.
+  // Запас под панель каркаса (её толщину знает layout.js) — функции
+  // пересчитываются на каждый clamp, так что resize/поворот учитываются.
+  // Слева панель бывает у «Виджетов» и у стола с боковой панелью задач.
   bottomInset: floatingBottomInset,
+  leftInset: floatingLeftInset,
 })
 
 // transform вместо left/top: композит-слой, без layout на каждый кадр драга.

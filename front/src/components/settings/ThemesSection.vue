@@ -53,6 +53,13 @@
       </Transition>
     </AppCard>
 
+    <!-- ── Фон приложения ────────────────────────────────────
+         Обои и градиент живут здесь, а не в «Рабочем столе»: это про то, КАК
+         приложение выглядит, а не как оно раскладывает разделы, и рисуются
+         они одинаково во всех каркасах. -->
+    <AppGradientCard />
+    <DesktopWallpaperCard />
+
     <!-- ── Встроенные темы ───────────────────────────────────── -->
     <SettingsAccordion title="Встроенные темы">
       <div class="theme-grid">
@@ -136,6 +143,8 @@ import AppRow from '@/components/ui/AppRow.vue'
 import SettingsAccordion from '@/components/settings/SettingsAccordion.vue'
 import ThemeCard from '@/components/settings/ThemeCard.vue'
 import ThemeEditorDialog from '@/components/settings/ThemeEditorDialog.vue'
+import AppGradientCard from '@/components/settings/AppGradientCard.vue'
+import DesktopWallpaperCard from '@/components/settings/DesktopWallpaperCard.vue'
 import { useThemeStore } from '@/stores/theme.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { SUBSCRIPTIONS_VISIBLE } from '@/utils/release.js'

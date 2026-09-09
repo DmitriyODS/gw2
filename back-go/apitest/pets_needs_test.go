@@ -363,8 +363,8 @@ func TestPetsStrokeRewardsOwner(t *testing.T) {
 		fmt.Sprintf("/api/pets/stroke/%d", b.ID), a.Token, nil)
 	requireStatus(t, r, 200, "поглаживание коллеги")
 	// Ответ — снапшот ПОГЛАЖЕННОГО питомца.
-	if r.Num("kudos") != 3 {
-		t.Fatalf("владелец должен получить 3 кудоса: %s", r.Raw)
+	if r.Num("kudos") != 2 {
+		t.Fatalf("владелец должен получить 2 кудоса: %s", r.Raw)
 	}
 	if r.Num("xp") != 2 {
 		t.Fatalf("владельцу полагается XP настроения: %s", r.Raw)
@@ -383,7 +383,7 @@ func TestPetsStrokeRewardsOwner(t *testing.T) {
 	// Признание идёт в недельный рейтинг владельца.
 	r = petsAPI.doJSON(t, http.MethodGet, "/api/pets/rating", b.Token, nil)
 	me, ok := r.JSON["me"].(map[string]any)
-	if !ok || me["kudos_week"] != float64(3) {
+	if !ok || me["kudos_week"] != float64(2) {
 		t.Fatalf("поглаживание должно кормить рейтинг признания: %s", r.Raw)
 	}
 }

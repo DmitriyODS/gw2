@@ -7,25 +7,27 @@ import { onBeforeUnmount, ref } from 'vue'
 import { storageGetJSON, storageSetJSON } from '@/utils/storage.js'
 
 // Зажимает {x,y} внутри вьюпорта с отступом margin; bottomInset — доп. запас
-// снизу (мобильная нижняя навигация + safe-area).
-export function clampToViewport(x, y, w, h, margin, vw, vh, bottomInset = 0) {
-  const maxX = Math.max(margin, vw - w - margin)
+// снизу (мобильная нижняя навигация + safe-area), leftInset — слева (боковая
+// панель каркаса).
+export function clampToViewport(x, y, w, h, margin, vw, vh, bottomInset = 0, leftInset = 0) {
+  const minX = margin + leftInset
+  const maxX = Math.max(minX, vw - w - margin)
   const maxY = Math.max(margin, vh - h - margin - bottomInset)
   return {
-    x: Math.min(Math.max(x, margin), maxX),
+    x: Math.min(Math.max(x, minX), maxX),
     y: Math.min(Math.max(y, margin), maxY),
   }
 }
 
 // Ближайший горизонтальный край: сравниваем центр виджета с серединой экрана.
-export function snapX(x, w, margin, vw) {
+export function snapX(x, w, margin, vw, leftInset = 0) {
   const center = x + w / 2
-  return center < vw / 2 ? margin : Math.max(margin, vw - w - margin)
+  return center < vw / 2 ? margin + leftInset : Math.max(margin + leftInset, vw - w - margin)
 }
 
-export function cornerPosition(corner, w, h, margin, vw, vh, bottomInset = 0) {
+export function cornerPosition(corner, w, h, margin, vw, vh, bottomInset = 0, leftInset = 0) {
   const [vert, horiz] = corner.split('-')
-  const x = horiz === 'left' ? margin : Math.max(margin, vw - w - margin)
+  const x = horiz === 'left' ? margin + leftInset : Math.max(margin + leftInset, vw - w - margin)
   const y = vert === 'top' ? margin : Math.max(margin, vh - h - margin - bottomInset)
   return { x, y }
 }
@@ -40,19 +42,22 @@ const DRAG_THRESHOLD = 4
  * @param {number} [opts.margin=16] — отступ от краёв экрана.
  * @param {number|Function} [opts.bottomInset=0] — доп. запас снизу (px или
  *   функция — пересчитывается на каждый clamp, переживает resize/поворот).
+ * @param {number|Function} [opts.leftInset=0] — то же слева: боковая панель
+ *   каркаса, из-под которой виджет должен выходить.
  */
 export function useDraggable({
-  storageKey, size, defaultCorner = 'bottom-left', margin = 16, bottomInset = 0,
+  storageKey, size, defaultCorner = 'bottom-left', margin = 16, bottomInset = 0, leftInset = 0,
 }) {
   const viewportSize = () => ({
     vw: typeof window !== 'undefined' ? window.innerWidth : 1024,
     vh: typeof window !== 'undefined' ? window.innerHeight : 768,
   })
   const resolvedBottomInset = () => (typeof bottomInset === 'function' ? bottomInset() : bottomInset)
+  const resolvedLeftInset = () => (typeof leftInset === 'function' ? leftInset() : leftInset)
   function constrain(x, y) {
     const { vw, vh } = viewportSize()
-    const bi = resolvedBottomInset()
-    return clampToViewport(x, y, size.w, size.h, margin, vw, vh, bi)
+    return clampToViewport(x, y, size.w, size.h, margin, vw, vh,
+      resolvedBottomInset(), resolvedLeftInset())
   }
 
   function loadInitial() {
@@ -61,7 +66,8 @@ export function useDraggable({
     if (saved && Number.isFinite(saved.x) && Number.isFinite(saved.y)) {
       return constrain(saved.x, saved.y)
     }
-    const p = cornerPosition(defaultCorner, size.w, size.h, margin, vw, vh, resolvedBottomInset())
+    const p = cornerPosition(defaultCorner, size.w, size.h, margin, vw, vh,
+      resolvedBottomInset(), resolvedLeftInset())
     return constrain(p.x, p.y)
   }
 
@@ -110,7 +116,7 @@ export function useDraggable({
     window.removeEventListener('pointercancel', onPointerUp)
     if (dragged) {
       const { vw } = viewportSize()
-      const snapped = { ...pos.value, x: snapX(pos.value.x, size.w, margin, vw) }
+      const snapped = { ...pos.value, x: snapX(pos.value.x, size.w, margin, vw, resolvedLeftInset()) }
       pos.value = constrain(snapped.x, snapped.y)
     }
     storageSetJSON(storageKey, pos.value)
@@ -131,7 +137,7 @@ export function useDraggable({
   // Пересобрать позицию к ближайшему краю при повороте экрана/ресайзе.
   function onResize() {
     const { vw } = viewportSize()
-    pos.value = constrain(snapX(pos.value.x, size.w, margin, vw), pos.value.y)
+    pos.value = constrain(snapX(pos.value.x, size.w, margin, vw, resolvedLeftInset()), pos.value.y)
   }
   if (typeof window !== 'undefined') window.addEventListener('resize', onResize)
 

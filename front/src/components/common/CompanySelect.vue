@@ -5,9 +5,9 @@
        независимо (controlled mode). -->
   <template v-if="fixed">
     <!-- Выбирать не из чего (одна компания) — тот же вид, но без стрелки. -->
-    <div v-bind="$attrs" class="company-button is-static" :title="companyLabel">
+    <div v-bind="$attrs" class="company-button is-static" :class="{ compact }" :title="companyLabel">
       <span class="material-symbols-outlined company-button-ico">business_center</span>
-      <span class="company-button-label">{{ companyLabel }}</span>
+      <span v-if="!compact" class="company-button-label">{{ companyLabel }}</span>
     </div>
   </template>
 
@@ -17,14 +17,18 @@
       ref="triggerEl"
       type="button"
       class="company-button"
-      :class="{ open }"
+      :class="{ open, compact }"
       @click="toggle"
       :aria-expanded="open"
       :title="activeLabel || placeholder"
     >
       <span class="material-symbols-outlined company-button-ico">business_center</span>
-      <span class="company-button-label">{{ activeLabel || placeholder }}</span>
-      <span class="material-symbols-outlined company-button-chev">expand_more</span>
+      <!-- Компактный вид — только значок: в узкой боковой панели название
+           компании занимает строку целиком, а оно есть в подсказке. -->
+      <template v-if="!compact">
+        <span class="company-button-label">{{ activeLabel || placeholder }}</span>
+        <span class="material-symbols-outlined company-button-chev">expand_more</span>
+      </template>
     </button>
 
     <Teleport to="body">
@@ -139,6 +143,8 @@ defineOptions({ inheritAttrs: false })
 const props = defineProps({
   modelValue: { default: undefined }, // если передан — controlled mode (не трогает companies.activeCompanyId)
   placeholder: { type: String, default: 'Все компании' },
+  /** Кнопка-значок без подписи (узкие панели). */
+  compact: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(['update:modelValue'])
@@ -332,6 +338,19 @@ watch(() => auth.companyId, (v) => {
 }
 
 .company-button.is-static { cursor: default; }
+
+/* Компактная кнопка — квадрат со значком. Размеры задаём тройкой min/max/размер:
+   глобальный мобильный `button { min-height }` иначе растянет её в овал. */
+.company-button.compact {
+  justify-content: center;
+  width: 36px;
+  min-width: 36px;
+  max-width: 36px;
+  height: 36px;
+  min-height: 36px;
+  max-height: 36px;
+  padding: 0;
+}
 
 .company-button:hover:not(.is-static),
 .company-button.open {

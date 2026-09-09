@@ -1,5 +1,5 @@
 /**
- * Какой каркас показывать: окна, планшет или телефон.
+ * Какой каркас показывать: окна, виджеты, планшет или телефон.
  *
  * Окна хороши мышью и плохи пальцем: попасть в кромку окна, потянуть заголовок
  * и прицелиться в кнопку 32×32 на сенсорном экране трудно. Поэтому у большого
@@ -14,6 +14,11 @@
  * ширину: сенсорный ноутбук с мышью остаётся столом, планшет и обёртка на нём
  * получают планшетный каркас. Промах автоопределения человек чинит сам —
  * «Настройки → Рабочий стол → Раскладка».
+ *
+ * `widgets` — раскладка обычного приложения: боковая панель разделов слева,
+ * один раздел во всё остальное место. Сам её `auto` не выбирает никогда (это
+ * вкус, а не свойство устройства) и на телефоне она недоступна: панель в
+ * пятую часть узкого экрана не оставила бы места разделу.
  */
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { storageGet, storageSet } from '@/utils/storage.js'
@@ -21,7 +26,7 @@ import { storageGet, storageSet } from '@/utils/storage.js'
 const KEY = 'gw_shell_mode'
 
 /** Что можно выбрать руками. */
-export const SHELL_MODES = ['auto', 'windows', 'tablet']
+export const SHELL_MODES = ['auto', 'windows', 'tablet', 'widgets']
 
 // Ниже этого — телефон при любой настройке: две зоны рядом там бессмысленны.
 const PHONE_AT = 768
@@ -39,7 +44,7 @@ export function setShellMode(mode) {
 }
 
 /**
- * @returns {{ shell: import('vue').ComputedRef<'windows'|'tablet'|'phone'>,
+ * @returns {{ shell: import('vue').ComputedRef<'windows'|'widgets'|'tablet'|'phone'>,
  *             touchLarge: import('vue').ComputedRef<boolean> }}
  */
 export function useShellMode() {
@@ -68,6 +73,7 @@ export function useShellMode() {
 
   const shell = computed(() => {
     if (width.value <= PHONE_AT) return 'phone'
+    if (shellModeSetting.value === 'widgets') return 'widgets'
     if (shellModeSetting.value === 'tablet') return 'tablet'
     if (shellModeSetting.value === 'windows') return 'windows'
     return touchLarge.value ? 'tablet' : 'windows'

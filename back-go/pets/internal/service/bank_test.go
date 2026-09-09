@@ -131,7 +131,7 @@ func (f *fakeBank) WithdrawSavings(_ context.Context, userID int64, amount int) 
 	return p.Kudos, p.BankSavings, true, nil
 }
 
-func (f *fakeBank) AccrueSavings(_ context.Context, userID, _ int64, ratePct int) (int, error) {
+func (f *fakeBank) AccrueSavings(_ context.Context, userID, _ int64, ratePct, dailyMax int) (int, error) {
 	p := f.pets.byUser[userID]
 	if p == nil || p.BankSavings <= 0 || p.BankSavingsAccruedAt == nil {
 		return 0, nil
@@ -140,7 +140,11 @@ func (f *fakeBank) AccrueSavings(_ context.Context, userID, _ int64, ratePct int
 	if days < 1 {
 		return 0, nil
 	}
-	interest := p.BankSavings * ratePct / 100 * days
+	perDay := p.BankSavings * ratePct / 100
+	if dailyMax > 0 && perDay > dailyMax {
+		perDay = dailyMax
+	}
+	interest := perDay * days
 	p.BankSavings += interest
 	at := p.BankSavingsAccruedAt.Add(time.Duration(days) * 24 * time.Hour)
 	p.BankSavingsAccruedAt = &at
@@ -594,6 +598,30 @@ func TestBankSavingsInterestLazyAccrual(t *testing.T) {
 	}
 	if !slices.Contains(env.bank.kinds(1), "bank_interest") {
 		t.Errorf("леджер процентов: %v", env.bank.kinds(1))
+	}
+}
+
+// Крупный вклад упирается в дневной потолок процента: иначе накопивший
+// перестаёт зарабатывать кудосы работой и начинает их печатать вкладом.
+func TestBankSavingsInterestDailyCap(t *testing.T) {
+	env := newEnv()
+	ctx := context.Background()
+
+	pet, _ := env.pets.GetOrCreate(ctx, 1, 10)
+	// 10%/день от 100 000 — это 10 000 в сутки без капа.
+	pet.BankSavings = 100_000
+	yesterday := time.Now().Add(-25 * time.Hour)
+	pet.BankSavingsAccruedAt = &yesterday
+
+	bank, err := env.svc.GetBank(ctx, 1, 10)
+	if err != nil {
+		t.Fatalf("GetBank: %v", err)
+	}
+	if bank.InterestPaid == nil || *bank.InterestPaid != domain.SavingsInterestDailyMax {
+		t.Errorf("interest_paid = %v, want %d", bank.InterestPaid, domain.SavingsInterestDailyMax)
+	}
+	if want := 100_000 + domain.SavingsInterestDailyMax; bank.Savings != want {
+		t.Errorf("savings после начисления = %d, want %d", bank.Savings, want)
 	}
 }
 

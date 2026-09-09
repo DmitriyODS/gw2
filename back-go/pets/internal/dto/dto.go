@@ -609,7 +609,10 @@ type BankDTO struct {
 	TopGenerous       []*GenerousDTO `json:"top_generous"`
 	Goals             []*GoalDTO     `json:"goals"`
 	GoalsMax          int            `json:"goals_max"`
-	Funds             []*FundDTO     `json:"funds"`
+	// SavingsDailyMax — потолок процента по вкладу за сутки: без него фронт
+	// обещал бы доход, которого не будет.
+	SavingsDailyMax int        `json:"savings_daily_max"`
+	Funds           []*FundDTO `json:"funds"`
 	// InterestPaid — разовое: проценты, начисленные при этом обращении.
 	InterestPaid *int `json:"interest_paid,omitempty"`
 	// LoanCashback — разовое: кэшбэк, начисленный за возврат кредита в срок.
@@ -629,6 +632,7 @@ func NewBank(p *domain.Pet, tier domain.BankTier, next *domain.BankTier,
 		MonthIn: monthIn, MonthOut: monthOut,
 		TopGenerous: make([]*GenerousDTO, 0, len(top)),
 		Goals:       []*GoalDTO{}, GoalsMax: domain.GoalsMax, Funds: []*FundDTO{},
+		SavingsDailyMax: domain.SavingsInterestDailyMax,
 	}
 	if next != nil {
 		n := newBankTier(*next)

@@ -9,7 +9,7 @@ import (
 
 // TestPetsTaskClosedHookAcrossServices — сквозной сценарий геймификации:
 // закрытие задачи в tasksvc → gRPC-хук OnTaskClosed (fire-and-forget после
-// коммита) → petsvc начисляет герою кудосы (+50) и XP (+8) и эмитит
+// коммита) → petsvc начисляет герою кудосы (+25) и XP (+8) и эмитит
 // pet:update, которое доезжает клиентам через мост шлюза (комната
 // user_<id>).
 func TestPetsTaskClosedHookAcrossServices(t *testing.T) {
@@ -35,29 +35,29 @@ func TestPetsTaskClosedHookAcrossServices(t *testing.T) {
 		return int64(id) == admin.ID
 	}, 15*time.Second)
 
-	// 2. Начисления герою: +50 кудосов (task_closed) и +8 XP (xp_task).
+	// 2. Начисления герою: +25 кудосов (task_closed) и +8 XP (xp_task).
 	deadline := time.Now().Add(10 * time.Second)
 	var kudos, xp float64
 	for time.Now().Before(deadline) {
 		pr := petsAPI.doJSON(t, http.MethodGet, "/api/pets/pet", admin.Token, nil)
 		requireStatus(t, pr, 200, "pet после закрытия")
 		kudos, xp = pr.Num("kudos"), pr.Num("xp")
-		if kudos == 50 && xp == 12 {
+		if kudos == 25 && xp == 12 {
 			break
 		}
 		time.Sleep(300 * time.Millisecond)
 	}
-	// 50 кудосов и 8 XP за задачу; XP свежего (полного сил) питомца множится
+	// 25 кудосов и 8 XP за задачу; XP свежего (полного сил) питомца множится
 	// настроением ×1.5 → 12.
-	if kudos != 50 || xp != 12 {
-		t.Fatalf("начисления за закрытие: kudos=%v xp=%v, ожидалось 50/12", kudos, xp)
+	if kudos != 25 || xp != 12 {
+		t.Fatalf("начисления за закрытие: kudos=%v xp=%v, ожидалось 25/12", kudos, xp)
 	}
 
 	// 3. Рейтинг компании видит кудосы недели героя.
 	rt := petsAPI.doJSON(t, http.MethodGet, "/api/pets/rating", admin.Token, nil)
 	requireStatus(t, rt, 200, "рейтинг")
 	me, _ := rt.JSON["me"].(map[string]any)
-	if me == nil || me["kudos_week"].(float64) != 50 {
+	if me == nil || me["kudos_week"].(float64) != 25 {
 		t.Fatalf("kudos_week героя после закрытия: %v", me)
 	}
 }
@@ -90,14 +90,14 @@ func TestPetsUnitStoppedAwardsKudosAndXP(t *testing.T) {
 		gr := petsAPI.doJSON(t, http.MethodGet, "/api/pets/pet", member.Token, nil)
 		requireStatus(t, gr, 200, "pet после юнита")
 		kudos, xp = gr.Num("kudos"), gr.Num("xp")
-		if kudos >= 15 && xp >= 15 {
+		if kudos >= 7 && xp >= 15 {
 			break
 		}
 		time.Sleep(300 * time.Millisecond)
 	}
-	// 30 минут → 15 кудосов (UnitKudos(30)) и 10 XP (30/3), помноженные на
+	// 30 минут → 7 кудосов (UnitKudos(30)) и 10 XP (30/3), помноженные на
 	// настроение свежего питомца (×1.5) → 15.
-	if kudos != 15 || xp != 15 {
-		t.Fatalf("начисления за 30-минутный юнит: kudos=%v xp=%v, ожидалось 15/15", kudos, xp)
+	if kudos != 7 || xp != 15 {
+		t.Fatalf("начисления за 30-минутный юнит: kudos=%v xp=%v, ожидалось 7/15", kudos, xp)
 	}
 }

@@ -47,6 +47,10 @@ import { useDesktopNotifications } from '@/composables/useDesktopNotifications.j
    между панелями статусов и задач (якориться к кнопке на телефоне некуда). */
 const props = defineProps({
   full: { type: Boolean, default: false },
+  /* С какой стороны панель каркаса, из которой раскрывается центр. Пусто —
+     сторона панели задач из настроек; каркас «Виджеты» присылает свою ('left'):
+     его панель к настройкам панели задач отношения не имеет. */
+  side: { type: String, default: '' },
 })
 
 const emit = defineEmits(['close'])
@@ -60,6 +64,9 @@ const { items, dismiss, clearAll } = useDesktopNotifications()
    центром кнопки, у краёв экрана — прижимается с отступом. */
 const PANEL_W = 420
 
+const side = computed(() => props.side || prefs.taskbarSide)
+const vertical = computed(() => side.value === 'left' || side.value === 'right')
+
 const anchorStyle = computed(() => {
   // Во весь экран якорь не нужен — раскладку целиком держит CSS.
   if (props.full) return {}
@@ -67,11 +74,11 @@ const anchorStyle = computed(() => {
   const bar = desktop.taskbarRect
   const gap = 24
 
-  // Вертикальная панель задач: центр уведомлений выезжает вбок от неё и
+  // Вертикальная панель каркаса: центр уведомлений выезжает вбок от неё и
   // держится по вертикали у кнопки, а не по центру экрана.
-  if (prefs.taskbarVertical) {
+  if (vertical.value) {
     const style = { width: `${width}px`, bottom: 'auto', top: `${Math.max(12, Math.round(bar.y))}px` }
-    if (prefs.taskbarSide === 'left') style.left = `${Math.round(bar.x + bar.w + gap)}px`
+    if (side.value === 'left') style.left = `${Math.round(bar.x + bar.w + gap)}px`
     else style.right = `${Math.round(window.innerWidth - bar.x + gap)}px`
     return style
   }
@@ -80,7 +87,7 @@ const anchorStyle = computed(() => {
   const left = Math.min(Math.max(12, center - width / 2), window.innerWidth - width - 12)
   const style = { left: `${Math.round(left)}px`, width: `${width}px` }
   // Панель сверху — центр уведомлений раскрывается вниз.
-  if (prefs.taskbarSide === 'top') {
+  if (side.value === 'top') {
     style.top = `calc(var(--taskbar-height) + ${gap}px)`
     style.bottom = 'auto'
   }

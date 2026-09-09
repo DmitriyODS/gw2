@@ -94,7 +94,9 @@
 
           <div v-if="slots.search && !compactSearch" class="head-search"><slot name="search" :narrow="false" /></div>
 
-          <div v-if="slots.subhead" class="head-sub"><slot name="subhead" :narrow="narrowPage" /></div>
+          <div v-if="slots.subhead" class="head-sub">
+            <slot name="subhead" :narrow="narrowPage" :compact="compactPage" />
+          </div>
 
           <div v-if="slots.status && !hasTitleRow()" class="head-status"><slot name="status" /></div>
 
@@ -189,7 +191,7 @@ const props = defineProps({
   },
 })
 
-const emit = defineEmits(['back', 'command', 'menu', 'narrow-change'])
+const emit = defineEmits(['back', 'command', 'menu', 'narrow-change', 'compact-change'])
 const slots = useSlots()
 
 /* Раздел, открытый окном рабочего стола, уже подписан заголовком самого окна —
@@ -233,6 +235,14 @@ function hasTitleRow() {
 const panelEl = ref(null)
 const narrowPage = useNarrowWidth(panelEl, 640)
 
+/* Второй порог — «строка управления переполнена». До 640px раздел прячет
+   управление в меню «ещё» целиком, но между 640 и 1100 в строку помещается
+   что-то одно: поиск, набор записей ИЛИ вкладки вида. Разделы с несколькими
+   переключателями (ежедневники, календари) по этому флагу оставляют в строке
+   главное, а остальное уводят в «ещё» — иначе шапка расползается на три-четыре
+   ряда, как было в «Ежедневниках». */
+const compactPage = useNarrowWidth(panelEl, 1100)
+
 /* Свёрнутый в лупу поиск — приём ТЕЛЕФОНА, а не узкой панели: на столе окно
    бывает уже 640px сколько угодно, но вертикали там вдоволь, и поиск обязан
    оставаться полноценной строкой — искать по таблице приходится постоянно.
@@ -247,6 +257,7 @@ const compactSearch = computed(() =>
 /* Тесноту панели знает не только шапка: от неё зависят и состав команд, и вид
    содержимого — а слот-проп доступен лишь внутри тела (см. AppListDetail). */
 watch(narrowPage, (v) => emit('narrow-change', v))
+watch(compactPage, (v) => emit('compact-change', v), { immediate: true })
 
 /* Плавающая кнопка — приём ТЕЛЕФОНА, как и свёрнутый поиск: на рабочем столе
    окно бывает уже 640px сколько угодно, но там она просто накрывает содержимое
@@ -386,8 +397,9 @@ function hasHead() {
 .head-sub > :deep(.search-field) { flex: 1 1 200px; }
 
 /* Поиск раздела: широко — тянется вместе с фильтрами, тесно — кнопка-лупа
-   при названии. */
-.head-search { display: flex; align-items: center; flex: 1 1 200px; min-width: 0; }
+   при названии. Рост ограничен: растягиваясь на всю строку, поиск выдавливал
+   переключатели раздела на второй и третий ряд. */
+.head-search { display: flex; align-items: center; flex: 1 1 200px; max-width: 380px; min-width: 0; }
 .head-search.compact { flex: 0 0 auto; }
 
 .head-status {

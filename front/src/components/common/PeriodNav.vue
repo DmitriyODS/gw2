@@ -32,7 +32,7 @@
     <!-- Тесная панель переключает вид пунктом меню «ещё» (см. periodViews.js):
          строка вкладок съедала бы место, которого и так нет. -->
     <AppTabs
-      v-if="!tight"
+      v-if="!tight && views"
       class="pn-views"
       :model-value="view"
       :tabs="PERIOD_VIEWS"
@@ -57,6 +57,9 @@ defineProps({
   view: { type: String, default: 'week' },
   /** Тесная панель: «Сегодня» значком, вкладки видов не показываем. */
   tight: { type: Boolean, default: false },
+  /** Показывать вкладки видов. Панели средней ширины гасят их отдельно от
+      `tight`: место под «Сегодня» и период ещё есть, а под вкладки уже нет. */
+  views: { type: Boolean, default: true },
 })
 
 defineEmits(['step', 'today', 'update:view'])

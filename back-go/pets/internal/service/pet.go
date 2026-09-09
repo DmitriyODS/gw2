@@ -808,8 +808,8 @@ func (s *Service) HealPet(ctx context.Context, userID, companyID int64) (*dto.Pe
 
 // StrokePet — внимание коллеге, за которое платят обе стороны и выигрывают
 // тоже обе: гладящий отдаёт StrokeCost кудосов и получает немного XP своему
-// питомцу, ВЛАДЕЛЕЦ поглаженного — StrokeRewardKudos кудосов (больше, чем
-// потрачено), XP и закрытую потребность в общении. Кудосы владельца идут в
+// питомцу, ВЛАДЕЛЕЦ поглаженного — StrokeRewardKudos кудосов, XP и закрытую
+// потребность в общении. Кудосы владельца идут в
 // счётчики признания (недельный рейтинг и сезонный трек) — поглаживание и
 // есть признание. Дневной лимит — на ОДНОГО чужого питомца (pet_strokes).
 func (s *Service) StrokePet(ctx context.Context, strokerID, petOwnerID, companyID int64) (*dto.PetDTO, error) {

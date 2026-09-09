@@ -71,6 +71,7 @@
         @back="detailOpen = false"
         @menu="toggle"
         @command="onCommand"
+        @compact-change="compact = $event"
       >
         <!-- Поиск — в строку названия: в тесной панели он сворачивается в лупу
              и не отнимает у списка дел целую строку. -->
@@ -88,11 +89,11 @@
         <!-- В тесной панели строка управления остаётся только под навигацию по
              дням: набор записей и вид ушли в меню «ещё». -->
         <template
-          v-if="store.selected && (!narrow || store.subtab === 'active')"
+          v-if="store.selected && (!compact || store.subtab === 'active')"
           #subhead="{ narrow: tight }"
         >
           <AppTabs
-            v-if="!tight"
+            v-if="!compact"
             :model-value="store.subtab"
             :tabs="subtabs"
             dense
@@ -104,6 +105,7 @@
             :label="periodLabel"
             :view="store.view"
             :tight="tight"
+            :views="!compact"
             @step="store.step($event)"
             @today="store.today()"
             @update:view="store.setView($event)"
@@ -409,6 +411,9 @@ const notif = useNotificationsStore()
 /* Узкая раскладка — свойство самой панели (раздел живёт окном рабочего стола),
    поэтому её сообщает AppListDetail, а не медиазапрос по ширине экрана. */
 const narrow = ref(false)
+/* Строка управления переполнена: набор записей ещё влезает, а вкладки вида уже
+   нет — они уходят в меню «ещё» (см. AppPage compact-change). */
+const compact = ref(false)
 const detailOpen = ref(false)
 
 function selectDiary(id) {
@@ -428,9 +433,10 @@ const commands = computed(() => {
   return [
     ...(own ? [{ key: 'add', label: 'Запись', icon: 'add', variant: 'filled', primary: true, fab: true }] : []),
     /* Тесная панель: набор записей и вид периода уезжают в меню — две строки
-       вкладок стоили дороже, чем сам список дел. */
-    ...(narrow.value ? [subtabCommand.value] : []),
-    ...(narrow.value && store.subtab === 'active' ? [periodViewCommand(store.view)] : []),
+       вкладок стоили дороже, чем сам список дел. В строке остаётся поиск и
+       навигация по дням, ради которых сюда и приходят. */
+    ...(compact.value ? [subtabCommand.value] : []),
+    ...(compact.value && store.subtab === 'active' ? [periodViewCommand(store.view)] : []),
     ...(own ? [{ key: 'rename', label: 'Переименовать', icon: 'edit' }] : []),
     ...(own ? [{ key: 'share', label: 'Поделиться', icon: 'share' }] : []),
     { key: 'export', label: 'Экспорт в XLSX', icon: 'download' },

@@ -94,7 +94,9 @@
             </div>
           </div>
           <p class="kb-card-hint">
-            Проценты капают за каждые полные сутки по ставке вашего уровня.
+            Проценты капают за каждые полные сутки по ставке вашего уровня<template
+              v-if="bank.savings_daily_max"
+            >, но не больше {{ bank.savings_daily_max }} в сутки</template>.
             <template v-if="bank.loan > 0"> Пока есть долг, вклад закрыт.</template>
           </p>
           <div class="kb-field">
@@ -524,7 +526,9 @@ const goalsTotal = computed(() =>
 const savingsTomorrow = computed(() => {
   const b = bank.value
   if (!b?.savings) return 0
-  return Math.floor(b.savings * b.tier.savings_rate_pct / 100)
+  const perDay = Math.floor(b.savings * b.tier.savings_rate_pct / 100)
+  // Суточный процент сервер режет потолком — обещать больше нельзя.
+  return b.savings_daily_max ? Math.min(perDay, b.savings_daily_max) : perDay
 })
 
 const tierPercent = computed(() => {

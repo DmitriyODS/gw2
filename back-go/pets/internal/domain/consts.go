@@ -102,8 +102,8 @@ const (
 
 // Дневные капы кудосов по источникам (неизвестный источник — кап 10).
 var DailyCaps = map[string]int{
-	"unit":        300, // завершённые юниты
-	"task_closed": 300, // закрытые задачи
+	"unit":        150, // завершённые юниты
+	"task_closed": 150, // закрытые задачи
 }
 
 const DefaultDailyCap = 10
@@ -113,10 +113,10 @@ const DefaultDailyCap = 10
 // больше (максимум достигается на 2 часах). Закрытая задача — фиксированные
 // KudosTaskClosed кудосов.
 const (
-	KudosUnitMin       = 10
-	KudosUnitMax       = 30
+	KudosUnitMin       = 5
+	KudosUnitMax       = 15
 	KudosUnitMaxMinute = 120 // при этой длительности юнита достигается максимум
-	KudosTaskClosed    = 50
+	KudosTaskClosed    = 25
 )
 
 // UnitKudos — линейный рост кудосов за юнит от KudosUnitMin к KudosUnitMax.
@@ -153,15 +153,15 @@ const (
 
 // ── Поглаживание чужих питомцев ──────────────────────────────────────
 // Внимание коллеги — реальная ценность: гладящий платит StrokeCost, а
-// ВЛАДЕЛЕЦ поглаженного питомца получает StrokeRewardKudos кудосов (больше,
-// чем потрачено — разницу эмитирует платформа), XP и закрытую потребность в
-// общении. Гладящему достаётся немного XP своему питомцу и своё общение.
+// ВЛАДЕЛЕЦ поглаженного питомца получает StrokeRewardKudos кудосов, XP и
+// закрытую потребность в общении. Гладящему достаётся немного XP своему
+// питомцу и своё общение.
 // Дневной лимит — на ОДНОГО чужого питомца, не на общее число.
 
 const (
 	StrokeCost           = 3
 	StrokeDailyMaxPerPet = 3
-	StrokeRewardKudos    = 3 // владельцу поглаженного питомца
+	StrokeRewardKudos    = 2 // владельцу поглаженного питомца
 	StrokeMoodXP         = 2 // ему же
 	StrokeStrokerXP      = 1 // питомцу гладящего
 )
@@ -177,8 +177,8 @@ const (
 	AdventureDailyMax   = 3   // приключений в день
 	AdventureMinMinutes = 120 // минимум пути — 2 часа
 	AdventureMaxMinutes = 240 // максимум пути — 4 часа
-	AdventureKudosMin   = 3
-	AdventureKudosMax   = 10
+	AdventureKudosMin   = 2
+	AdventureKudosMax   = 5
 	AdventureXPMin      = 5
 	AdventureXPMax      = 15
 )
@@ -276,6 +276,12 @@ const (
 	FundsFinishedShown = 3 // сколько завершённых сборов показывать в сводке
 
 	BankStatsDays = 14 // окно динамики прихода/расхода в статистике
+
+	// Потолок ЕЖЕДНЕВНОГО процента по вкладу. Без него крупный вклад платит
+	// больше, чем приносит вся работа за день (ставка простая, но считается
+	// от тела): накопивший переставал зарабатывать кудосы и начинал их
+	// печатать. Кап делает вклад прибавкой к работе, а не заменой ей.
+	SavingsInterestDailyMax = 500
 
 	// Досрочный возврат питомца из приключения (без награды за поход).
 	AdventureRecallCost = 150
@@ -393,7 +399,7 @@ var StreakMilestones = map[int]bool{
 
 // ── Ежедневный квест ───────────────────────────────────────────────
 
-const QuestRewardKudos = 100
+const QuestRewardKudos = 50
 
 type QuestTemplate struct {
 	Kind   string

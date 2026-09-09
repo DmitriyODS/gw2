@@ -3,10 +3,10 @@
  * разделы меню «Пуск» (свои группы, переименования, состав, порядок, свёрнутость),
  * размер плиток и обои.
  *
- * Раскладка «Пуска» (пункты layouts.*) хранится ОТДЕЛЬНО для стола, мобилы и
- * планшета — это разные экраны с разной геометрией, и человек расставляет
- * плитки на них независимо: широкая на телефоне не обязана быть широкой на
- * столе. Обои, живые плитки и панель задач — общие, это не про раскладку.
+ * Раскладка «Пуска» (пункты layouts.*) хранится ОТДЕЛЬНО для стола, мобилы,
+ * планшета и «Виджетов» — это разные экраны с разной геометрией, и человек
+ * расставляет плитки на них независимо: широкая на телефоне не обязана быть
+ * широкой на столе, а в узкой панели «Виджетов» размера у плиток нет вовсе. Обои, живые плитки и панель задач — общие, это не про раскладку.
  * САМ выбор каркаса сюда не относится: он про устройство, а не про человека,
  * и живёт локально (см. composables/useShellMode.js).
  *
@@ -25,7 +25,7 @@ const SAVE_DELAY = 700
 // Сколько последних картинок обоев помним для быстрого возврата.
 const WALLPAPER_HISTORY = 10
 
-export const PLATFORMS = ['desktop', 'mobile', 'tablet']
+export const PLATFORMS = ['desktop', 'mobile', 'tablet', 'widgets']
 
 function emptyLayout() {
   return {
@@ -43,7 +43,9 @@ function emptyLayout() {
 
 function empty() {
   return {
-    layouts: { desktop: emptyLayout(), mobile: emptyLayout(), tablet: emptyLayout() },
+    layouts: {
+      desktop: emptyLayout(), mobile: emptyLayout(), tablet: emptyLayout(), widgets: emptyLayout(),
+    },
     wallpaper: null,
     // Обои экрана блокировки — свой рецепт: запертый экран человек видит
     // чаще, чем рабочий стол, и оформляет его отдельно.
@@ -61,6 +63,12 @@ function empty() {
     // Меню «Пуск» всегда открывается во весь экран (иначе — обычная панель,
     // а полный экран включается кнопкой в самом меню). Тоже только про стол.
     startFullscreen: false,
+    // Боковая панель каркаса «Виджеты»: ширина в пикселях (0 — пятая часть
+    // экрана по умолчанию), свёрнутость до полоски значков и что показывать —
+    // избранное (закреплённые) или все разделы по категориям.
+    widgetsWidth: 0,
+    widgetsCollapsed: false,
+    widgetsView: 'pinned',
   }
 }
 
@@ -95,6 +103,7 @@ function normalize(raw) {
       desktop: normalizeLayout(legacy || p.layouts.desktop),
       mobile: normalizeLayout(legacy ? null : p.layouts.mobile),
       tablet: normalizeLayout(legacy ? null : p.layouts.tablet),
+      widgets: normalizeLayout(legacy ? null : p.layouts.widgets),
     },
     wallpaper: p.wallpaper && typeof p.wallpaper === 'object' ? p.wallpaper : null,
     lockWallpaper: p.lockWallpaper && typeof p.lockWallpaper === 'object' ? p.lockWallpaper : null,
@@ -105,6 +114,9 @@ function normalize(raw) {
     tileLive: p.tileLive && typeof p.tileLive === 'object' ? { ...p.tileLive } : {},
     taskbarSide: TASKBAR_SIDES.includes(p.taskbarSide) ? p.taskbarSide : 'bottom',
     startFullscreen: p.startFullscreen === true,
+    widgetsWidth: Number.isFinite(p.widgetsWidth) ? Math.max(0, Math.round(p.widgetsWidth)) : 0,
+    widgetsCollapsed: p.widgetsCollapsed === true,
+    widgetsView: p.widgetsView === 'all' ? 'all' : 'pinned',
   }
 }
 
@@ -119,6 +131,9 @@ export const useDesktopPrefsStore = defineStore('desktopPrefs', () => {
   const liveTiles = computed(() => prefs.value.liveTiles)
   const taskbarSide = computed(() => prefs.value.taskbarSide)
   const startFullscreen = computed(() => prefs.value.startFullscreen)
+  const widgetsWidth = computed(() => prefs.value.widgetsWidth)
+  const widgetsCollapsed = computed(() => prefs.value.widgetsCollapsed)
+  const widgetsView = computed(() => prefs.value.widgetsView)
   // Вертикальная панель (слева/справа) — другая раскладка кнопок и другие
   // якоря всплывающих панелей.
   const taskbarVertical = computed(() => taskbarSide.value === 'left' || taskbarSide.value === 'right')
@@ -299,6 +314,24 @@ export const useDesktopPrefsStore = defineStore('desktopPrefs', () => {
     scheduleSave()
   }
 
+  /* Боковая панель каркаса «Виджеты». Границы ширины держит сам каркас (они
+     зависят от экрана), сюда приезжает уже зажатое значение. */
+  function setWidgetsWidth(px) {
+    prefs.value.widgetsWidth = Math.max(0, Math.round(px) || 0)
+    scheduleSave()
+  }
+
+  function setWidgetsCollapsed(on) {
+    prefs.value.widgetsCollapsed = !!on
+    scheduleSave()
+  }
+
+  /** Что показывает панель «Виджетов»: 'pinned' (избранное) или 'all'. */
+  function setWidgetsView(view) {
+    prefs.value.widgetsView = view === 'all' ? 'all' : 'pinned'
+    scheduleSave()
+  }
+
   function setWallpaper(recipe) {
     prefs.value.wallpaper = recipe ? { ...recipe } : null
     const url = recipe?.image?.url
@@ -336,6 +369,8 @@ export const useDesktopPrefsStore = defineStore('desktopPrefs', () => {
   return {
     prefs, loaded, wallpaper, wallpapers, liveTiles, customized,
     taskbarSide, taskbarVertical, startFullscreen, setTaskbarSide, setStartFullscreen,
+    widgetsWidth, widgetsCollapsed, widgetsView,
+    setWidgetsWidth, setWidgetsCollapsed, setWidgetsView,
     layout, tileSize, isPinned, pinnedList, load, setTileSize, setGroupOrder, moveTileToGroup,
     addGroup, renameGroup, removeGroup, isCollapsed, toggleCollapsed,
     pin, unpin, togglePin, setPinnedOrder, setLiveTiles, isTileLive, setTileLive, toggleTileLive,

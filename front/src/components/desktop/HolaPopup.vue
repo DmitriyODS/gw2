@@ -38,7 +38,7 @@
  * держит CSS — отступы под системные вырезы известны только ему.
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
-import { taskbarReserve } from '@/desktop/layout.js'
+import { taskbarHeightReserve } from '@/desktop/layout.js'
 import HolaPanel from '@/components/hola/HolaPanel.vue'
 import HolaIcon from '@/components/common/HolaIcon.vue'
 
@@ -60,11 +60,12 @@ const rect = ref(panelRect())
 const WIDE_AT = 900
 const wide = ref(typeof window !== 'undefined' && window.innerWidth >= WIDE_AT)
 
-/* Центр экрана с поправкой на панель задач: на невысоком экране панель не
-   должна наполовину уезжать под неё. */
+/* Центр экрана с поправкой на панель каркаса: на невысоком экране панель не
+   должна наполовину уезжать под неё. Боковая панель высоты не отнимает —
+   иначе рядом с ней Hola съёживалась бы на треть экрана. */
 function panelRect() {
   const vw = window.innerWidth
-  const vh = window.innerHeight - taskbarReserve()
+  const vh = window.innerHeight - taskbarHeightReserve()
   const w = Math.min(SIZE.w, vw - MARGIN * 2)
   const h = Math.min(SIZE.h, vh - MARGIN * 2)
   return {

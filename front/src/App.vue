@@ -18,8 +18,12 @@
     <template v-else-if="authStore.token">
       <!-- Каркас-«ОС»: мышью — рабочий стол с окнами, пальцем — стартовый экран
            с плитками и панель задач (на планшете к ним добавляется вторая
-           зона). Разделы у всех трёх общие, см. composables/useShellMode.js. -->
-      <DesktopShell v-if="shell === 'windows'" />
+           зона), а по выбору — «Виджеты»: боковая панель разделов и один
+           раздел рядом. Разделы у всех общие, см. composables/useShellMode.js.
+           Каркас «Виджеты» — ленивый чанк: его выбирают руками, и платить за
+           него первым кадром остальные не должны. -->
+      <WidgetsShell v-if="shell === 'widgets'" />
+      <DesktopShell v-else-if="shell === 'windows'" />
       <MobileShell v-else :platform="shell === 'tablet' ? 'tablet' : 'mobile'" />
       <ActiveUnitModal v-if="unitsStore.activeUnit && !unitsStore.minimized" />
       <!-- UI звонка монтируется только когда звонок есть: он тянет за собой
@@ -51,7 +55,7 @@
          (там вертикальные жесты заняты) и в оконном каркасе, где обновление
          закрыло бы разложенные окна. -->
     <PullToRefresh
-      :active="!!authStore.token && !isFullscreenRoute && callStore.phase === 'idle' && shell !== 'windows'"
+      :active="!!authStore.token && !isFullscreenRoute && callStore.phase === 'idle' && touchShell"
     />
     <!-- Выбор получателя для текста из системного «Поделиться» (Android). -->
     <NewChatDialog v-if="sharePickOpen" v-model="sharePickOpen" @pick="onSharePickRecipient" />
@@ -102,6 +106,7 @@ const IncomingCallOverlay = defineAsyncComponent(() => import('@/components/call
 const CallView = defineAsyncComponent(() => import('@/components/call/CallView.vue'))
 const ReturnCallBanner = defineAsyncComponent(() => import('@/components/call/ReturnCallBanner.vue'))
 const ScreenLockOverlay = defineAsyncComponent(() => import('@/components/common/ScreenLockOverlay.vue'))
+const WidgetsShell = defineAsyncComponent(() => import('@/components/widgets/WidgetsShell.vue'))
 const LegalConsentOverlay = defineAsyncComponent(() => import('@/components/legal/LegalConsentOverlay.vue'))
 
 const authStore = useAuthStore()
@@ -120,8 +125,10 @@ const { usesGroove } = useCompanySettings()
 const isFullscreenRoute = computed(() => !!route.meta?.fullscreen && !!authStore.user)
 // Есть ли что показывать про звонок: ринг, активный звонок или предложение вернуться.
 const callPresent = computed(() => callStore.phase !== 'idle' || !!callStore.rejoinCall)
-// Какой каркас показывать: окна, планшет или телефон (см. useShellMode).
+// Какой каркас показывать: окна, виджеты, планшет или телефон (см. useShellMode).
 const { shell } = useShellMode()
+// Сенсорные каркасы: только у них уместна оттяжка вниз для обновления.
+const touchShell = computed(() => shell.value === 'phone' || shell.value === 'tablet')
 
 // Десктоп-обёртка: счётчик непрочитанных на иконке приложения
 // (док/панель задач/трей). В браузере GrooveDesktop нет — no-op.

@@ -53,6 +53,7 @@
         @back="detailOpen = false"
         @menu="toggle"
         @command="onCommand"
+        @compact-change="compact = $event"
       >
         <!-- Поиск — в строку названия: в тесной панели он сворачивается в лупу
              и не отнимает у сетки дней целую строку. -->
@@ -72,6 +73,7 @@
             :label="periodLabel"
             :view="store.view"
             :tight="tight"
+            :views="!compact"
             @step="store.step($event)"
             @today="store.today()"
             @update:view="store.setView($event)"
@@ -324,6 +326,8 @@ const notif = useNotificationsStore()
 /* Узкая раскладка — свойство самой панели (раздел живёт окном рабочего стола),
    поэтому её сообщает AppListDetail, а не медиазапрос по ширине экрана. */
 const narrow = ref(false)
+// Строка управления переполнена — вкладки вида уходят в меню «ещё».
+const compact = ref(false)
 const detailOpen = ref(false)
 
 function selectCalendar(id) {
@@ -339,7 +343,7 @@ const commands = computed(() => {
     { key: 'add', label: 'Запись', icon: 'add', variant: 'filled', primary: true, fab: true },
     // Тесная панель: вид периода уезжает в меню — строка вкладок там дороже
     // самой сетки дней.
-    ...(narrow.value ? [periodViewCommand(store.view)] : []),
+    ...(compact.value ? [periodViewCommand(store.view)] : []),
     { key: 'shares', label: 'Внешние ссылки', icon: 'link' },
     { key: 'export', label: 'Экспорт в XLSX', icon: 'download' },
   ]
