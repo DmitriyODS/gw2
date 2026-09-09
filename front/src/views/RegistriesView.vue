@@ -4,17 +4,28 @@
     :loading="store.loadingList && !store.registries.length"
     @narrow-change="narrow = $event"
   >
+    <!-- Список реестров — общий EntityList: закрепление, папки и порядок в нём
+         личные (у реестра много совладельцев, а раскладка панели — своя). -->
     <template #list="{ toggle }">
-      <RegistryList
-        :registries="store.registries"
+      <EntityList
+        section="registries"
+        title="Реестры"
+        :items="store.registries"
         :selected-id="store.selectedId"
         :scope="store.scope"
-        :renaming-id="renamingId"
+        :scopes="SCOPES"
+        icon="list_alt"
+        :hint="registryHint"
         :narrow="narrow"
+        :renaming-id="renamingId"
+        rename-placeholder="Название реестра"
+        create-label="Создать новый"
+        :menu-items="registryMenu"
+        :empty="listEmpty"
         @select="selectRegistry"
         @update:scope="store.setScope"
         @create="openCreate"
-        @context="onRegistryContext"
+        @command="onListCommand"
         @rename="applyRename"
         @rename-cancel="renamingId = null"
         @toggle="toggle"
@@ -116,18 +127,6 @@
         />
       </AppPage>
     </template>
-
-    <!-- Контекстное меню реестра: переименовать, поделиться (подменю), удалить.
-         Подменю ContextMenu само разворачивается в ту сторону, где есть место, —
-         у краёв экрана и в узкой панели оно не обрезается. -->
-    <ContextMenu
-      :visible="menuOpen"
-      :x="menuX"
-      :y="menuY"
-      :items="menuItems"
-      @select="onMenuSelect"
-      @close="menuOpen = false"
-    />
 
     <RegistryStructureDialog
       v-model="structureOpen"
@@ -248,7 +247,7 @@ import { useRoute } from 'vue-router'
 import RegistryColumnsDialog from '@/components/registry/RegistryColumnsDialog.vue'
 import RegistryExportDialog from '@/components/registry/RegistryExportDialog.vue'
 import RegistryIssueDialog from '@/components/registry/RegistryIssueDialog.vue'
-import RegistryList from '@/components/registry/RegistryList.vue'
+import EntityList from '@/components/common/EntityList.vue'
 import RegistryQrFindDialog from '@/components/registry/RegistryQrFindDialog.vue'
 import RegistryQrPrintDialog from '@/components/registry/RegistryQrPrintDialog.vue'
 import RegistryRecordDialog from '@/components/registry/RegistryRecordDialog.vue'
@@ -260,7 +259,6 @@ import AppButton from '@/components/ui/AppButton.vue'
 import AppListDetail from '@/components/ui/AppListDetail.vue'
 import AppPage from '@/components/ui/AppPage.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
-import ContextMenu from '@/components/common/ContextMenu.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import SearchField from '@/components/common/SearchField.vue'
 import { useRegistryColumns } from '@/composables/useRegistryColumns.js'
@@ -395,16 +393,32 @@ const registryToDelete = ref(null)
 const hasQrFields = computed(() => (store.selected?.fields || []).some(hasQr))
 const totalPages = computed(() => Math.max(1, Math.ceil(store.total / store.filters.per_page)))
 
-// ── Контекстное меню списка ──
-const menuOpen = ref(false)
-const menuX = ref(0)
-const menuY = ref(0)
-const menuTarget = ref(null)
+// ── Пункты списка ──
 const renamingId = ref(null)
 
-const menuItems = computed(() => {
-  const r = menuTarget.value
-  if (!r) return []
+const SCOPES = [
+  { value: 'all', label: 'Все' },
+  { value: 'mine', label: 'Мои' },
+  { value: 'shared', label: 'Поделились' },
+  { value: 'company', label: 'Компания' },
+]
+
+const EMPTY = {
+  mine: { icon: 'list_alt', title: 'Своих реестров нет', subtitle: 'Создайте первый — кнопка внизу панели.' },
+  shared: { icon: 'group', title: 'С вами не делились', subtitle: 'Здесь появятся реестры, к которым вам открыли доступ.' },
+  company: { icon: 'domain', title: 'Реестров компании нет', subtitle: 'Здесь появятся реестры, открытые всей компании.' },
+  all: { icon: 'list_alt', title: 'Реестров нет', subtitle: 'Создайте первый — кнопка внизу панели.' },
+}
+const listEmpty = computed(() => EMPTY[store.scope] || EMPTY.all)
+
+/* Подпись пункта — чей реестр. У своих её нет: «мой» и так понятно, а лишняя
+   строка у каждого пункта только съедает высоту списка. */
+function registryHint(r) {
+  return r.my_access === 'owner' ? '' : (r.owner_name || '')
+}
+
+/* Действия над самим реестром; организация списка — забота EntityList. */
+function registryMenu(r) {
   const manage = ['admin', 'owner'].includes(r.my_access)
   /* Пункт опознаётся полем `action` (контракт ContextMenu): у пункта с
      подменю его нет — он лишь раскрывает детей, а выполняются уже они. */
@@ -424,13 +438,6 @@ const menuItems = computed(() => {
     { divider: true },
     { label: 'Удалить', icon: 'delete', danger: true, action: 'delete', disabled: r.my_access !== 'owner' },
   ]
-})
-
-function onRegistryContext(r, e) {
-  menuTarget.value = r
-  menuX.value = e.clientX
-  menuY.value = e.clientY
-  menuOpen.value = true
 }
 
 const shareLinkOpen = ref(false)
@@ -448,10 +455,8 @@ function openShare(action, registry = store.selected) {
   shareCompanyOpen.value = action === 'share-company'
 }
 
-function onMenuSelect(action) {
-  const r = menuTarget.value
+function onListCommand(action, r) {
   if (!r) return
-  menuOpen.value = false
   if (action === 'structure') {
     openStructure(r)
     return

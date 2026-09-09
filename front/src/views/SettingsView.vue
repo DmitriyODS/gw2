@@ -329,7 +329,7 @@ onMounted(() => {
 })
 
 // Раздел может смениться в уже открытом окне: «Персонализация» с рабочего
-// стола ведёт на /settings?section=desktop, когда настройки уже открыты.
+// стола ведёт на /settings?section=theme, когда настройки уже открыты.
 watch(() => route.query.section, (key) => {
   const resolved = resolveSectionKey(key)
   if (resolved && sectionByKey.value[resolved] && resolved !== activeSection.value) {

@@ -1,6 +1,10 @@
 <template>
+  <!-- Подтверждение — короткий вопрос в одну-две строки, поэтому размер `sm`:
+       на широком экране `md` растягивался вдвое, и кнопки «Отмена»/«Удалить»
+       разъезжались по разным краям полосы. -->
   <AppDialog
     :model-value="visible"
+    size="sm"
     :tone="dangerConfirm ? 'danger' : 'primary'"
     :title="header"
     :subtitle="message"

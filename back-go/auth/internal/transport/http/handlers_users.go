@@ -216,6 +216,32 @@ func (h *handlers) saveDesktopPrefs(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"prefs": resp})
 }
 
+// Организация списков разделов (закрепление, порядок, папки боковых панелей) —
+// личная и переезжает между устройствами: раскладывает человек под себя.
+func (h *handlers) listPrefs(c *fiber.Ctx) error {
+	resp, err := h.eps.GetListPrefs(c.Context(), currentUser(c).ID)
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(fiber.Map{"prefs": resp})
+}
+
+func (h *handlers) saveListPrefs(c *fiber.Ctx) error {
+	var body struct {
+		Prefs json.RawMessage `json:"prefs"`
+	}
+	if err := c.BodyParser(&body); err != nil {
+		return badRequest(c, "Неверный формат запроса")
+	}
+	resp, err := h.eps.SaveListPrefs(c.Context(), endpoint.SaveListPrefsEpRequest{
+		UserID: currentUser(c).ID, Prefs: body.Prefs,
+	})
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(fiber.Map{"prefs": resp})
+}
+
 func (h *handlers) uploadAvatar(c *fiber.Ctx) error {
 	fileHeader, err := c.FormFile("file")
 	if err != nil {

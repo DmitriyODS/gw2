@@ -4,71 +4,34 @@
     :loading="store.loadingList && !store.schedules.length"
     @narrow-change="narrow = $event"
   >
-    <!-- Список расписаний. Их много и они независимы: у каждого свой цикл,
-         свои категории и поля — папок и наборов у раздела нет. -->
+    <!-- Список расписаний — общий EntityList. Их много и они независимы: у
+         каждого свой цикл, свои категории и поля, поэтому раскладывать список
+         по папкам и закреплять частые человек может под себя. -->
     <template #list="{ toggle }">
-      <AppPage
-        embedded
+      <EntityList
+        section="schedules"
         title="Расписания"
-        show-title
-        :menu="!narrow"
-        menu-icon="left_panel_close"
-        menu-label="Свернуть список"
-        @menu="toggle"
-      >
-        <template #subhead>
-          <!-- Вкладки делят строку поровну: колонка списка узка по замыслу, и
-               пилюля по содержимому оставляла справа пустое место, а сами
-               вкладки выходили разной ширины. -->
-          <AppTabs
-            :model-value="store.tab"
-            :tabs="[
-              { value: 'mine', label: 'Мои' },
-              { value: 'shared', label: 'Поделились' },
-            ]"
-            class="sv-tabs"
-            full-width
-            @update:model-value="store.setTab($event)"
-          />
-        </template>
-
-        <EmptyState
-          v-if="!store.schedules.length"
-          size="sm"
-          icon="calendar_view_week"
-          :title="store.tab === 'mine' ? 'Расписаний нет' : 'С вами не делились'"
-          :subtitle="store.tab === 'mine'
-            ? 'Заведите расписание — учёбы, работы или тренировок.'
-            : 'Здесь появятся расписания, которые вам открыли.'"
-        />
-        <AppStack v-else :gap="6">
-          <template v-for="s in store.schedules" :key="s.id">
-            <AppInlineEdit
-              v-if="renamingId === s.id"
-              :model-value="s.name"
-              placeholder="Название расписания"
-              :maxlength="120"
-              @save="applyRename(s, $event)"
-              @cancel="renamingId = null"
-            />
-            <AppRow
-              v-else
-              :title="s.name"
-              :hint="scheduleHint(s)"
-              icon="calendar_view_week"
-              dense
-              clickable
-              :selected="s.id === store.selectedId"
-              @click="openSchedule(s.id)"
-              @contextmenu.prevent="openRowMenu(s, $event)"
-            />
-          </template>
-        </AppStack>
-
-        <template v-if="store.tab === 'mine'" #footer>
-          <AppButton variant="glass" icon="add" label="Новое расписание" @click="createOpen = true" />
-        </template>
-      </AppPage>
+        :items="store.schedules"
+        :selected-id="store.selectedId"
+        :scope="store.tab"
+        :scopes="tabs"
+        icon="calendar_view_week"
+        :hint="scheduleHint"
+        :narrow="narrow"
+        :renaming-id="renamingId"
+        rename-placeholder="Название расписания"
+        create-label="Новое расписание"
+        :can-create="store.tab === 'mine'"
+        :menu-items="scheduleMenu"
+        :empty="listEmpty"
+        @select="openSchedule"
+        @update:scope="store.setTab($event)"
+        @create="createOpen = true"
+        @command="onListCommand"
+        @rename="applyRename"
+        @rename-cancel="renamingId = null"
+        @toggle="toggle"
+      />
     </template>
 
     <!-- Шкала выбранного расписания. -->
@@ -230,15 +193,6 @@
     :days="days"
   />
 
-  <ContextMenu
-    :visible="rowMenuOpen"
-    :x="rowMenuX"
-    :y="rowMenuY"
-    :items="rowMenuItems"
-    @select="onRowMenu"
-    @close="rowMenuOpen = false"
-  />
-
   <ConfirmDialog
     :visible="!!scheduleToDelete"
     header="Удалить расписание?"
@@ -259,17 +213,15 @@ import { useRoute } from 'vue-router'
 import InputText from 'primevue/inputtext'
 import Select from 'primevue/select'
 import AppButton from '@/components/ui/AppButton.vue'
-import AppInlineEdit from '@/components/ui/AppInlineEdit.vue'
 import AppDialog from '@/components/ui/AppDialog.vue'
 import AppField from '@/components/ui/AppField.vue'
 import AppListDetail from '@/components/ui/AppListDetail.vue'
 import AppPage from '@/components/ui/AppPage.vue'
-import AppRow from '@/components/ui/AppRow.vue'
 import AppStack from '@/components/ui/AppStack.vue'
 import AppTabs from '@/components/ui/AppTabs.vue'
 import BrandLoader from '@/components/common/BrandLoader.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
-import ContextMenu from '@/components/common/ContextMenu.vue'
+import EntityList from '@/components/common/EntityList.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import ScheduleItemDialog from '@/components/schedule/ScheduleItemDialog.vue'
 import SchedulePrintPreview from '@/components/schedule/SchedulePrintPreview.vue'
@@ -309,14 +261,16 @@ const shareOpen = ref(false)
 const printOpen = ref(false)
 const fileInput = ref(null)
 
-/* Контекстное меню строки списка: те же действия, что и в шапке открытого
-   расписания, но над ЛЮБЫМ из списка — не открывая его ради переименования
-   или выгрузки. */
-const rowMenuOpen = ref(false)
-const rowMenuX = ref(0)
-const rowMenuY = ref(0)
-const rowMenuTarget = ref(null)
 const renamingId = ref(null)
+
+const tabs = [
+  { value: 'mine', label: 'Мои' },
+  { value: 'shared', label: 'Поделились' },
+]
+
+const listEmpty = computed(() => (store.tab === 'mine'
+  ? { icon: 'calendar_view_week', title: 'Расписаний нет', subtitle: 'Заведите расписание — учёбы, работы или тренировок.' }
+  : { icon: 'group', title: 'С вами не делились', subtitle: 'Здесь появятся расписания, которые вам открыли.' }))
 const scheduleToDelete = ref(null)
 
 const days = computed(() => visibleDays(store.items, todayWeekday.value))
@@ -409,9 +363,10 @@ const commands = computed(() => {
   ]
 })
 
-const rowMenuItems = computed(() => {
-  const s = rowMenuTarget.value
-  if (!s) return []
+/* Пункты самого расписания: те же действия, что и в шапке открытого, но над
+   ЛЮБЫМ из списка — не открывая его ради переименования или выгрузки.
+   Организация списка (закрепление, папки, порядок) — забота EntityList. */
+function scheduleMenu(s) {
   // Чужое расписание открыто только на чтение (уровней доступа у раздела нет).
   const own = !s.shared
   return [
@@ -431,21 +386,12 @@ const rowMenuItems = computed(() => {
     { divider: true },
     { label: 'Удалить', icon: 'delete', danger: true, action: 'delete', disabled: !own },
   ]
-})
-
-function openRowMenu(s, e) {
-  rowMenuTarget.value = s
-  rowMenuX.value = e.clientX
-  rowMenuY.value = e.clientY
-  rowMenuOpen.value = true
 }
 
 /* Диалоги настроек, ссылок и печати работают с ОТКРЫТЫМ расписанием (им нужны
    его занятия), поэтому пункт меню сперва открывает своё. Переименование и
    выгрузка идут по id — открывать ради них чужой экран незачем. */
-async function onRowMenu(action) {
-  const s = rowMenuTarget.value
-  rowMenuOpen.value = false
+async function onListCommand(action, s) {
   if (!s) return
   switch (action) {
     case 'rename': renamingId.value = s.id; break

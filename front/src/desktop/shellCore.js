@@ -14,6 +14,7 @@ import router from '@/router/index.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useDesktopStore } from '@/stores/desktop.js'
 import { useDesktopPrefsStore } from '@/stores/desktopPrefs.js'
+import { useListPrefsStore } from '@/stores/listPrefs.js'
 import { useLiveTilesStore } from '@/stores/liveTiles.js'
 import { useActivityStore } from '@/stores/activity.js'
 import { usePermission } from '@/composables/usePermission.js'
@@ -58,6 +59,7 @@ export function useShellCore({
   const auth = useAuthStore()
   const desktop = useDesktopStore()
   const prefs = useDesktopPrefsStore()
+  const listPrefs = useListPrefsStore()
   const live = useLiveTilesStore()
   const activity = useActivityStore()
   const { isSuperAdmin, hasActiveCompany } = usePermission()
@@ -152,6 +154,10 @@ export function useShellCore({
     }
     desktop.closeAll()
     prefs.reset()
+    /* Организация боковых списков — тоже личная: без сброса следующий на этом
+       устройстве видел бы чужие папки (стор считает себя уже загруженным и
+       своих настроек не запросил бы). */
+    listPrefs.reset()
     live.reset()
     activity.reset()
     clearNotificationJournal()

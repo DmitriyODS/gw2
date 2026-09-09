@@ -69,6 +69,8 @@ type AuthService interface {
 	SetMyVacation(ctx context.Context, userID, companyID int64, on bool) (*dto.User, error)
 	GetDesktopPrefs(ctx context.Context, userID int64) (json.RawMessage, error)
 	SaveDesktopPrefs(ctx context.Context, userID int64, prefs json.RawMessage) (json.RawMessage, error)
+	GetListPrefs(ctx context.Context, userID int64) (json.RawMessage, error)
+	SaveListPrefs(ctx context.Context, userID int64, prefs json.RawMessage) (json.RawMessage, error)
 	UploadAvatar(ctx context.Context, userID int64, fileBytes []byte) (*dto.User, error)
 	DeleteAvatar(ctx context.Context, userID int64) (*dto.User, error)
 	GetUser(ctx context.Context, actor *domain.User, userID int64) (*dto.User, error)

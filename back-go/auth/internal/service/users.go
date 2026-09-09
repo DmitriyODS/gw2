@@ -1079,3 +1079,43 @@ func (s *Service) SaveDesktopPrefs(ctx context.Context, userID int64, prefs json
 	}
 	return prefs, nil
 }
+
+/* ── Организация списков разделов ──────────────────────────────────
+   Закрепление, ручной порядок и папки боковых панелей (ежедневники, реестры,
+   формы, расписания, календари). Это личный взгляд на список, а не свойство
+   сущности: в одном списке соседствуют свои и расшаренные записи, и папка
+   заводится под себя. Объект для сервера непрозрачен — структуру ведёт фронт;
+   потолок больше, чем у рабочего стола: разделов много и в каждом свои папки. */
+
+const listPrefsMaxBytes = 64 * 1024
+
+func (s *Service) GetListPrefs(ctx context.Context, userID int64) (json.RawMessage, error) {
+	user, err := s.repo.GetByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if user == nil {
+		return nil, errUserNotFound
+	}
+	if len(user.ListPrefs) == 0 {
+		return json.RawMessage("{}"), nil
+	}
+	return json.RawMessage(user.ListPrefs), nil
+}
+
+func (s *Service) SaveListPrefs(ctx context.Context, userID int64, prefs json.RawMessage) (json.RawMessage, error) {
+	if len(prefs) == 0 {
+		prefs = json.RawMessage("{}")
+	}
+	if len(prefs) > listPrefsMaxBytes {
+		return nil, domain.NewError("VALIDATION", "Настройки списков слишком большие", 400)
+	}
+	var obj map[string]any
+	if err := json.Unmarshal(prefs, &obj); err != nil {
+		return nil, domain.NewError("VALIDATION", "Настройки списков должны быть объектом", 400)
+	}
+	if err := s.repo.UpdateFields(ctx, userID, map[string]any{"list_prefs": prefs}); err != nil {
+		return nil, err
+	}
+	return prefs, nil
+}

@@ -336,7 +336,7 @@ const LOGOUT_ACTIONS = [
 ]
 
 function onMenuSelect(action) {
-  if (action === 'personalize') return open('/settings?section=desktop')
+  if (action === 'personalize') return open('/settings?section=theme')
   if (action === 'help') return open('/settings?section=help')
   if (action === 'logout') { logoutAsk.value = true; return }
   if (action === 'lock') { screenLock.lock(); return }

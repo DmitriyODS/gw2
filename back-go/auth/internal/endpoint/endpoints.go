@@ -70,6 +70,8 @@ type Endpoints struct {
 	SetMyVacation          endpoint.Endpoint
 	GetDesktopPrefs        endpoint.Endpoint
 	SaveDesktopPrefs       endpoint.Endpoint
+	GetListPrefs           endpoint.Endpoint
+	SaveListPrefs          endpoint.Endpoint
 	UploadAvatar           endpoint.Endpoint
 	DeleteAvatar           endpoint.Endpoint
 	GetUser                endpoint.Endpoint
@@ -202,6 +204,13 @@ type VacationEpRequest struct {
 // SaveDesktopPrefsEpRequest — личные настройки рабочего стола (непрозрачный
 // для сервера JSON-объект).
 type SaveDesktopPrefsEpRequest struct {
+	UserID int64
+	Prefs  json.RawMessage
+}
+
+// SaveListPrefsEpRequest — личная организация списков разделов (закрепление,
+// порядок, папки); для сервера тоже непрозрачный JSON-объект.
+type SaveListPrefsEpRequest struct {
 	UserID int64
 	Prefs  json.RawMessage
 }
@@ -507,6 +516,13 @@ func New(svc service.AuthService) Endpoints {
 		SaveDesktopPrefs: func(ctx context.Context, request any) (any, error) {
 			req := request.(SaveDesktopPrefsEpRequest)
 			return svc.SaveDesktopPrefs(ctx, req.UserID, req.Prefs)
+		},
+		GetListPrefs: func(ctx context.Context, request any) (any, error) {
+			return svc.GetListPrefs(ctx, request.(int64))
+		},
+		SaveListPrefs: func(ctx context.Context, request any) (any, error) {
+			req := request.(SaveListPrefsEpRequest)
+			return svc.SaveListPrefs(ctx, req.UserID, req.Prefs)
 		},
 		UploadAvatar: func(ctx context.Context, request any) (any, error) {
 			req := request.(AvatarEpRequest)

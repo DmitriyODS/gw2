@@ -40,9 +40,16 @@
 
           <!-- Поиск раздела: НА ТЕЛЕФОНЕ он свёрнут в лупу и встаёт ПРЯМО в
                строку названия — там отдельная строка ради одного поля съедала
-               бы у содержимого полсотни пикселей. -->
-          <div v-if="slots.search && compactSearch" class="head-search compact">
-            <slot name="search" :narrow="true" />
+               бы у содержимого полсотни пикселей. По просьбе раздела
+               (`search-in-title`) он стоит там же и развёрнутым: так поиск
+               оказывается в углу шапки, как в календарях и почте, а строка
+               управления целиком достаётся навигации по периоду. -->
+          <div
+            v-if="slots.search && (compactSearch || searchInTitleRow)"
+            class="head-search"
+            :class="{ compact: compactSearch }"
+          >
+            <slot name="search" :narrow="compactSearch" />
           </div>
 
           <!-- Команды стоят при названии, а не при фильтрах: так строка ниже
@@ -92,7 +99,7 @@
             @click="$emit('back')"
           />
 
-          <div v-if="slots.search && !compactSearch" class="head-search"><slot name="search" :narrow="false" /></div>
+          <div v-if="slots.search && !compactSearch && !searchInTitleRow" class="head-search"><slot name="search" :narrow="false" /></div>
 
           <div v-if="slots.subhead" class="head-sub">
             <slot name="subhead" :narrow="narrowPage" :compact="compactPage" />
@@ -189,6 +196,10 @@ const props = defineProps({
     default: 'phone',
     validator: (v) => ['phone', 'narrow'].includes(v),
   },
+  /** Поиск стоит в строке НАЗВАНИЯ, а не управления: строка управления тогда
+   *  целиком достаётся навигации и переключателям раздела. В тесной панели
+   *  правило снимается — там названию и так тесно. */
+  searchInTitle: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(['back', 'command', 'menu', 'narrow-change', 'compact-change'])
@@ -254,6 +265,10 @@ const compactSearch = computed(() =>
   narrowPage.value && (props.searchCompact === 'narrow' || isMobile.value),
 )
 
+/* Поиск при названии — приём широкой шапки: в тесной панели название и так
+   занимает строку целиком, и поле рядом с ним сжалось бы до бесполезного. */
+const searchInTitleRow = computed(() => props.searchInTitle && hasTitleRow() && !narrowPage.value)
+
 /* Тесноту панели знает не только шапка: от неё зависят и состав команд, и вид
    содержимого — а слот-проп доступен лишь внутри тела (см. AppListDetail). */
 watch(narrowPage, (v) => emit('narrow-change', v))
@@ -282,7 +297,7 @@ function commandsBelow() {
    строку — лишний отступ на пустом месте (заметно на телефоне). */
 function hasControlsRow() {
   return !!slots.subhead ||
-    (!!slots.search && !compactSearch.value) ||
+    (!!slots.search && !compactSearch.value && !searchInTitleRow.value) ||
     (!hasTitleRow() && (
       !!slots.commands || barCommands.value.length > 0 || props.back || props.menu || !!slots.status
     ))
@@ -433,6 +448,14 @@ function hasHead() {
 }
 
 .page-body.flush { padding: 0; }
+
+/* Тело — последний блок панели, значит его нижние углы и есть углы панели.
+   Без своего скругления содержимое без полей (сетка дней, лента, таблица)
+   рисовалось прямоугольником поверх скруглённого края. */
+.page-body:last-child {
+  border-bottom-left-radius: var(--radius-xl);
+  border-bottom-right-radius: var(--radius-xl);
+}
 .page-body.no-scroll { overflow: hidden; display: flex; flex-direction: column; }
 
 .page-state {
@@ -478,10 +501,12 @@ function hasHead() {
    целиком — кромка экрана и есть край раздела. */
 .page.edge { padding: 0; }
 .page.edge > .page-panel { border: none; border-radius: 0; }
+.page.edge .page-body { border-radius: 0; }
 
 @media (max-width: 768px) {
   .page { padding: 0; }
   .page-panel { border: none; border-radius: 0; }
+  .page-body { border-radius: 0; }
   .page-head { gap: 8px; padding: 12px 14px 8px; }
   .head-title-row, .head-line { gap: 8px; }
   .page-body { padding: 4px 14px 16px; }

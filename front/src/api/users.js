@@ -23,6 +23,14 @@ export const getDesktopPrefs = () => apiRequest('/users/me/desktop')
 export const saveDesktopPrefs = (prefs) =>
   apiRequest('/users/me/desktop', { method: 'PUT', body: { prefs } })
 
+// Организация списков разделов (закрепление, ручной порядок, папки боковых
+// панелей ежедневников, реестров, форм, расписаний, календарей) — тоже личная и
+// непрозрачная для сервера; структуру ведёт stores/listPrefs.js.
+export const getListPrefs = () => apiRequest('/users/me/lists')
+
+export const saveListPrefs = (prefs) =>
+  apiRequest('/users/me/lists', { method: 'PUT', body: { prefs } })
+
 export const deleteAvatar = () => apiRequest('/users/me/avatar', { method: 'DELETE' })
 
 export const uploadAvatar = (file) => {

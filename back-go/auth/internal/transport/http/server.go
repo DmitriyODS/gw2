@@ -138,6 +138,8 @@ func NewServer(eps endpoint.Endpoints, verifier *pasetoauth.Verifier,
 	usersAPI.Patch("/me/vacation", auth.RequireAuth, h.setMyVacation)
 	usersAPI.Get("/me/desktop", auth.RequireAuth, h.desktopPrefs)
 	usersAPI.Put("/me/desktop", auth.RequireAuth, h.saveDesktopPrefs)
+	usersAPI.Get("/me/lists", auth.RequireAuth, h.listPrefs)
+	usersAPI.Put("/me/lists", auth.RequireAuth, h.saveListPrefs)
 	usersAPI.Post("/me/avatar", auth.RequireAuth, h.uploadAvatar)
 	usersAPI.Delete("/me/avatar", auth.RequireAuth, h.deleteAvatar)
 	usersAPI.Get("/:id<int>/identicon", h.identicon) // публичный (img src)

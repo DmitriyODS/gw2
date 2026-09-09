@@ -45,6 +45,21 @@ config.global.stubs = {
   'router-link': RouterLinkStub,
 }
 
+// jsdom не реализует matchMedia, а компоненты спрашивают у него про телефон и
+// про «мышь есть?» (поиск раздела, боковые списки) — заглушка «не совпало».
+if (typeof globalThis.matchMedia === 'undefined') {
+  globalThis.matchMedia = (query) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addEventListener() {},
+    removeEventListener() {},
+    addListener() {},
+    removeListener() {},
+    dispatchEvent: () => false,
+  })
+}
+
 // jsdom не реализует ResizeObserver, а компоненты меряют им свои размеры
 // (панель задач рабочего стола, поле ввода мессенджера) — заглушка-пустышка.
 if (typeof globalThis.ResizeObserver === 'undefined') {

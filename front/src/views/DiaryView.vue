@@ -4,55 +4,48 @@
     :loading="store.loadingList && !store.diaries.length"
     @narrow-change="narrow = $event"
   >
-    <!-- Список ежедневников -->
+    <!-- Список ежедневников. Раскладка панели — общий EntityList: закрепление,
+         папки и ручной порядок здесь ЛИЧНЫЕ. Во вкладке «Поделились» их нет
+         вовсе: там чужие ежедневники, их обычно два-три, и заводить под них
+         папки незачем — панель остаётся просто списком. -->
     <template #list="{ toggle }">
-      <AppPage
-        embedded
+      <EntityList
+        section="diaries"
         title="Ежедневники"
-        show-title
-        :menu="!narrow"
-        menu-icon="left_panel_close"
-        menu-label="Свернуть список"
-        :commands="listCommands"
-        @menu="toggle"
-        @command="openCreateDiary"
+        :items="store.diaries"
+        :selected-id="store.selectedId"
+        :scope="store.tab"
+        :scopes="tabs"
+        :icon="store.tab === 'shared' ? 'folder_shared' : 'book'"
+        :narrow="narrow"
+        :renaming-id="renamingId"
+        rename-placeholder="Название ежедневника"
+        create-label="Новый ежедневник"
+        :can-create="store.tab === 'mine'"
+        :organizable="store.tab === 'mine'"
+        :menu-items="diaryMenu"
+        :drop-id="dropDiaryId"
+        :empty="listEmpty"
+        @select="selectDiary"
+        @create="openCreateDiary"
+        @update:scope="store.setTab"
+        @command="onListCommand"
+        @rename="applyRename"
+        @rename-cancel="renamingId = null"
+        @toggle="toggle"
+        @item-dragover="onDiaryDragOver"
+        @item-dragleave="onDiaryDragLeave"
+        @item-drop="onDiaryDrop"
       >
-        <template #subhead>
-          <AppTabs :model-value="store.tab" :tabs="tabs" full-width dense @update:model-value="store.setTab" />
+        <!-- Подпись пункта: чей ежедневник и сколько дел закрыто. -->
+        <template #hint="{ item }">
+          <span v-if="item.shared || store.tab === 'shared'">{{ item.owner_name }}</span>
+          <span v-if="diaryTotal(item)" class="dv-side-progress">
+            <span class="dv-side-bar"><span class="dv-side-fill" :style="{ width: diaryPct(item) + '%' }" /></span>
+            <span class="dv-side-count">{{ item.done_count || 0 }}/{{ diaryTotal(item) }}</span>
+          </span>
         </template>
-
-        <EmptyState
-          v-if="!store.diaries.length"
-          size="sm"
-          icon="book"
-          :title="store.tab === 'shared' ? 'С вами пока не делились' : 'Ежедневников нет'"
-          :subtitle="store.tab === 'shared' ? 'Здесь появятся ежедневники, которыми с вами поделились.' : 'Создайте первый — он появится в этом списке.'"
-        />
-        <AppStack v-else :gap="6">
-          <AppRow
-            v-for="d in store.diaries"
-            :key="d.id"
-            :title="d.name"
-            :icon="store.tab === 'shared' ? 'folder_shared' : 'book'"
-            dense
-            clickable
-            :selected="d.id === store.selectedId"
-            :tone="dropDiaryId === d.id ? 'primary' : 'neutral'"
-            @click="selectDiary(d.id)"
-            @dragover="onDiaryDragOver($event, d)"
-            @dragleave="dropDiaryId === d.id && (dropDiaryId = null)"
-            @drop="onDiaryDrop($event, d)"
-          >
-            <template v-if="store.tab === 'shared' || diaryTotal(d)" #hint>
-              <span v-if="store.tab === 'shared'">{{ d.owner_name }}</span>
-              <span v-if="diaryTotal(d)" class="dv-side-progress">
-                <span class="dv-side-bar"><span class="dv-side-fill" :style="{ width: diaryPct(d) + '%' }" /></span>
-                <span class="dv-side-count">{{ d.done_count || 0 }}/{{ diaryTotal(d) }}</span>
-              </span>
-            </template>
-          </AppRow>
-        </AppStack>
-      </AppPage>
+      </EntityList>
     </template>
 
     <!-- Выбранный ежедневник -->
@@ -68,13 +61,16 @@
         :commands="commands"
         flush
         :scroll="false"
+        search-in-title
         @back="detailOpen = false"
         @menu="toggle"
         @command="onCommand"
         @compact-change="compact = $event"
       >
-        <!-- Поиск — в строку названия: в тесной панели он сворачивается в лупу
-             и не отнимает у списка дел целую строку. -->
+        <!-- Поиск стоит В СТРОКЕ НАЗВАНИЯ (как в календарях и почте): строка
+             ниже тогда целиком достаётся навигации по дням, а не делится с
+             полем, к которому обращаются редко. На телефоне он сворачивается
+             в лупу там же. -->
         <template v-if="store.selected" #search="{ narrow: tight }">
           <SearchField
             v-model="searchInput"
@@ -86,25 +82,28 @@
           />
         </template>
 
-        <!-- В тесной панели строка управления остаётся только под навигацию по
-             дням: набор записей и вид ушли в меню «ещё». -->
-        <template
-          v-if="store.selected && (!compact || store.subtab === 'active')"
-          #subhead="{ narrow: tight }"
-        >
+        <!-- Набор записей — переключатель самого раздела, поэтому он стоит при
+             названии, а не в строке фильтров: «Все задачи» и «Архив» убирают
+             навигацию по дням целиком, и шапка становится в одну строку. -->
+        <template v-if="store.selected && !compact" #status>
           <AppTabs
-            v-if="!compact"
             :model-value="store.subtab"
             :tabs="subtabs"
+            variant="tint"
             dense
             @update:model-value="store.setSubtab"
           />
+        </template>
 
+        <!-- Строка управления нужна ТОЛЬКО активным записям — периоду и виду.
+             Как только строка перестаёт вмещать всё (панель уже 1100px), вид
+             уезжает в меню «ещё», а набор записей — из строки названия туда же:
+             подпись периода важнее и сокращаться до многоточия не должна. -->
+        <template v-if="store.selected && store.subtab === 'active'" #subhead>
           <PeriodNav
-            v-if="store.subtab === 'active'"
             :label="periodLabel"
             :view="store.view"
-            :tight="tight"
+            :tight="narrow"
             :views="!compact"
             @step="store.step($event)"
             @today="store.today()"
@@ -356,14 +355,23 @@
 
     <DiaryShareDialog v-model="shareOpen" :diary-id="store.selectedId" />
 
-    <!-- Создание/переименование ежедневника -->
+    <!-- Создание ежедневника (переименование — прямо в списке) -->
     <AppDialog
       v-model="nameOpen"
-      :title="nameMode === 'create' ? 'Новый ежедневник' : 'Переименовать'" size="sm" :busy="nameBusy"
+      title="Новый ежедневник" size="sm" :busy="nameBusy"
       :actions="[{ kind: 'cancel', label: 'Отмена' }, { kind: 'confirm', label: 'Сохранить' }]"
       @cancel="nameOpen = false" @confirm="saveName"
     >
-      <input ref="nameInput" v-model="nameValue" class="dv-name-input" type="text" placeholder="Например, Личные дела" maxlength="120" @keydown.enter="saveName" />
+      <AppField v-slot="{ id }" label="Название" required>
+        <InputText
+          :id="id"
+          v-model="nameValue"
+          maxlength="120"
+          placeholder="Например, Личные дела"
+          autofocus
+          @keyup.enter="saveName"
+        />
+      </AppField>
     </AppDialog>
 
     <ConfirmDialog
@@ -382,15 +390,16 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import InputText from 'primevue/inputtext'
 import AppDialog from '@/components/ui/AppDialog.vue'
+import AppField from '@/components/ui/AppField.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppListDetail from '@/components/ui/AppListDetail.vue'
 import AppPage from '@/components/ui/AppPage.vue'
-import AppRow from '@/components/ui/AppRow.vue'
-import AppStack from '@/components/ui/AppStack.vue'
 import AppTabs from '@/components/ui/AppTabs.vue'
+import EntityList from '@/components/common/EntityList.vue'
 import BrandLoader from '@/components/common/BrandLoader.vue'
 import PeriodNav from '@/components/common/PeriodNav.vue'
 import { periodViewCommand, parseViewCommand } from '@/utils/periodViews.js'
@@ -400,11 +409,13 @@ import DiaryShareDialog from '@/components/diary/DiaryShareDialog.vue'
 import TaskForm from '@/components/tasks/TaskForm.vue'
 import { useDiariesStore, dayKey } from '@/stores/diaries.js'
 import { useAuthStore } from '@/stores/auth.js'
+import { useListPrefsStore } from '@/stores/listPrefs.js'
 import { exportEntries, getEntries } from '@/api/diaries.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { saveBlob } from '@/utils/download.js'
 
 const store = useDiariesStore()
+const listPrefs = useListPrefsStore()
 const route = useRoute()
 const authStore = useAuthStore()
 const notif = useNotificationsStore()
@@ -421,12 +432,42 @@ function selectDiary(id) {
   detailOpen.value = true
 }
 
-const listCommands = computed(() => (store.tab === 'mine'
-  ? [{ key: 'new-diary', label: 'Ежедневник', icon: 'add', variant: 'filled', primary: true }]
-  : []))
+/* Пункты меню самого ежедневника. Организация списка (закрепить, папка,
+   порядок) — забота EntityList, здесь только действия над сущностью. */
+function diaryMenu(d) {
+  if (d.shared || store.tab === 'shared') return []
+  return [
+    { label: 'Переименовать', icon: 'edit', action: 'rename' },
+    { label: 'Поделиться', icon: 'share', action: 'share' },
+    { label: 'Удалить', icon: 'delete', action: 'delete', danger: true },
+  ]
+}
+
+const listEmpty = computed(() => (store.tab === 'shared'
+  ? { icon: 'folder_shared', title: 'С вами пока не делились', subtitle: 'Здесь появятся ежедневники, которыми с вами поделились.' }
+  : { icon: 'book', title: 'Ежедневников нет', subtitle: 'Создайте первый — он появится в этом списке.' }))
+
+// Переименование идёт прямо в списке (AppInlineEdit), а не диалогом.
+const renamingId = ref(null)
+
+function onListCommand(action, d) {
+  if (action === 'rename') { renamingId.value = d.id; return }
+  if (action === 'share') { store.select(d.id); shareOpen.value = true; return }
+  if (action === 'delete') { store.select(d.id); confirmDeleteDiary.value = true }
+}
+
+async function applyRename(d, name) {
+  const value = name.trim()
+  renamingId.value = null
+  if (!value || value === d.name) return
+  try { await store.renameDiary(d.id, value) }
+  catch (e) { notif.error(e?.message || 'Не удалось переименовать') }
+}
 
 /* Команды шапки: создание записи — главное действие (в тесной панели уезжает на
-   плавающую кнопку), управление ежедневником — в меню «ещё». */
+   плавающую кнопку), управление ежедневником — в меню «ещё». Переименование
+   живёт в контекстном меню списка (как у реестров, форм и расписаний): правка
+   идёт прямо в пункте, и в шапке ей места нет. */
 const commands = computed(() => {
   if (!store.selected) return []
   const own = !store.readonly
@@ -437,7 +478,6 @@ const commands = computed(() => {
        навигация по дням, ради которых сюда и приходят. */
     ...(compact.value ? [subtabCommand.value] : []),
     ...(compact.value && store.subtab === 'active' ? [periodViewCommand(store.view)] : []),
-    ...(own ? [{ key: 'rename', label: 'Переименовать', icon: 'edit' }] : []),
     ...(own ? [{ key: 'share', label: 'Поделиться', icon: 'share' }] : []),
     { key: 'export', label: 'Экспорт в XLSX', icon: 'download' },
     ...(own ? [{ key: 'delete', label: 'Удалить ежедневник', icon: 'delete', tone: 'danger' }] : []),
@@ -449,7 +489,6 @@ function onCommand(key) {
   if (view) return store.setView(view)
   if (key.startsWith('subtab:')) return store.setSubtab(key.slice(7))
   if (key === 'add') openCreate()
-  else if (key === 'rename') openRenameDiary()
   else if (key === 'share') shareOpen.value = true
   else if (key === 'export') doExport()
   else if (key === 'delete') confirmDeleteDiary.value = true
@@ -549,6 +588,10 @@ function onDiaryDragOver(ev, d) {
   ev.dataTransfer.dropEffect = 'move'
   dropDiaryId.value = d.id
 }
+function onDiaryDragLeave(ev, d) {
+  if (dropDiaryId.value === d.id) dropDiaryId.value = null
+}
+
 async function onDiaryDrop(ev, d) {
   if (dragEntryId.value == null || d.id === store.selectedId) return
   ev.preventDefault()
@@ -752,25 +795,18 @@ async function toggleDone(e, done) {
 
 // Шаринг
 const shareOpen = ref(false)
-// Создание/переименование ежедневника
+// Создание ежедневника (переименование идёт прямо в списке).
 const nameOpen = ref(false)
-const nameMode = ref('create')
 const nameValue = ref('')
 const nameBusy = ref(false)
-const nameInput = ref(null)
-function openCreateDiary() { nameMode.value = 'create'; nameValue.value = ''; nameOpen.value = true; nextTick(() => nameInput.value?.focus()) }
-function openRenameDiary() { nameMode.value = 'rename'; nameValue.value = store.selected?.name || ''; nameOpen.value = true; nextTick(() => nameInput.value?.focus()) }
+function openCreateDiary() { nameValue.value = ''; nameOpen.value = true }
 async function saveName() {
   const name = nameValue.value.trim()
   if (!name) { notif.error('Укажите название'); return }
   nameBusy.value = true
   try {
-    if (nameMode.value === 'create') {
-      const d = await store.createDiary(name)
-      store.select(d.id)
-    } else {
-      await store.renameDiary(store.selectedId, name)
-    }
+    const d = await store.createDiary(name)
+    store.select(d.id)
     nameOpen.value = false
   } catch (e) {
     notif.error(e?.message || 'Не удалось сохранить')
@@ -781,9 +817,15 @@ async function saveName() {
 
 const confirmDeleteDiary = ref(false)
 async function doDeleteDiary() {
+  const id = store.selectedId
   confirmDeleteDiary.value = false
-  try { await store.removeDiary(store.selectedId); notif.success('Ежедневник удалён') }
-  catch (e) { notif.error(e?.message || 'Не удалось удалить') }
+  try {
+    await store.removeDiary(id)
+    // Личная организация списка переживает удаление — забываем запись сами:
+    // «пропал из списка» само по себе не повод (вкладки показывают разные наборы).
+    listPrefs.forget('diaries', id)
+    notif.success('Ежедневник удалён')
+  } catch (e) { notif.error(e?.message || 'Не удалось удалить') }
 }
 
 // Создание задачи с юнитом из записи
@@ -844,13 +886,10 @@ watch(() => store.loadingEntries, () => nextTick(measureWeekColumn))
 </script>
 
 <style scoped>
-.dv-side-owner { font-size: 12px; opacity: 0.8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dv-side-progress { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
 .dv-side-bar { flex: 1; height: 4px; border-radius: var(--radius-full); background: var(--color-surface-highest); overflow: hidden; }
 .dv-side-fill { display: block; height: 100%; border-radius: inherit; background: var(--color-success); transition: width 0.25s; }
 .dv-side-count { flex-shrink: 0; font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; opacity: 0.85; }
-/* кнопка «Управление» — только на мобайле */
-
 /* Тело */
 .dv-body { position: relative; flex: 1; min-height: 0; overflow: auto; }
 .dv-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; background: var(--color-outline-dim); min-height: 100%; }
@@ -951,21 +990,6 @@ watch(() => store.loadingEntries, () => nextTick(measureWeekColumn))
 /* Архив по дням */
 .dv-arc-group + .dv-arc-group { margin-top: 6px; }
 .dv-arc-daylabel { padding: 12px 4px 6px; font-size: 13px; font-weight: 700; color: var(--color-text-dim); text-transform: capitalize; }
-
-.dv-name-input { width: 100%; padding: 12px 14px; font: inherit; color: var(--color-text); background: var(--color-surface-high); background: var(--glass-bg); box-shadow: var(--glass-edge); border: 1px solid var(--acrylic-border); border-radius: var(--radius-md); outline: none; }
-.dv-name-input:focus { border-color: var(--color-primary); }
-
-/* Мобайл: кнопка-селектор ежедневника (открывает шторку) */
-.dv-mobile-bar { flex: none; padding: 8px 12px 4px; }
-.dv-diary-select {
-  display: flex; align-items: center; gap: 10px; width: 100%; padding: 11px 14px;
-  border: 1px solid var(--acrylic-border); border-radius: var(--radius-full);
-  background: var(--acrylic-card-bg); background: var(--glass-bg); box-shadow: var(--glass-edge);
-  color: var(--color-text); font: inherit; font-weight: 600; font-size: 15px; cursor: pointer;
-}
-.dv-diary-select-icon { color: var(--color-primary); font-size: 20px; flex-shrink: 0; }
-.dv-diary-select-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
-.dv-diary-select-chev { color: var(--color-text-dim); flex-shrink: 0; }
 
 /* Телефон: тело скроллится под панель задач каркаса — оставляем ей воздух. */
 @media (max-width: 768px) {

@@ -4,37 +4,21 @@
     :loading="store.loadingList && !store.calendars.length"
     @narrow-change="narrow = $event"
   >
-    <!-- Список календарей -->
+    <!-- Список календарей — общий EntityList: сами календари заводит
+         администратор компании, а закрепление, папки и порядок панели личные. -->
     <template #list="{ toggle }">
-      <AppPage
-        embedded
+      <EntityList
+        section="calendars"
         title="Календари"
-        show-title
-        :menu="!narrow"
-        menu-icon="left_panel_close"
-        menu-label="Свернуть список"
-        @menu="toggle"
-      >
-        <EmptyState
-          v-if="!store.calendars.length"
-          size="sm"
-          icon="event_note"
-          title="Календарей нет"
-          subtitle="Их заводит администратор компании."
-        />
-        <AppStack v-else :gap="6">
-          <AppRow
-            v-for="c in store.calendars"
-            :key="c.id"
-            :title="c.name"
-            icon="event_note"
-            dense
-            clickable
-            :selected="c.id === store.selectedId"
-            @click="selectCalendar(c.id)"
-          />
-        </AppStack>
-      </AppPage>
+        :items="store.calendars"
+        :selected-id="store.selectedId"
+        icon="event_note"
+        :narrow="narrow"
+        :can-create="false"
+        :empty="{ icon: 'event_note', title: 'Календарей нет', subtitle: 'Их заводит администратор компании.' }"
+        @select="selectCalendar"
+        @toggle="toggle"
+      />
     </template>
 
     <!-- Выбранный календарь -->
@@ -304,10 +288,9 @@ import AppButton from '@/components/ui/AppButton.vue'
 import AppDialog from '@/components/ui/AppDialog.vue'
 import AppListDetail from '@/components/ui/AppListDetail.vue'
 import AppPage from '@/components/ui/AppPage.vue'
-import AppRow from '@/components/ui/AppRow.vue'
-import AppStack from '@/components/ui/AppStack.vue'
 import BrandLoader from '@/components/common/BrandLoader.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
+import EntityList from '@/components/common/EntityList.vue'
 import PeriodNav from '@/components/common/PeriodNav.vue'
 import SearchField from '@/components/common/SearchField.vue'
 import { useCalendarsStore, dayKey } from '@/stores/calendars.js'

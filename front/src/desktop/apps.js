@@ -115,6 +115,7 @@ export const APPS = [
     size: [1200, 820],
     min: [560, 440],
     available: always,
+    about: { version: '2.0.0', date: '2026-09-09' },
   },
   {
     id: 'notes',

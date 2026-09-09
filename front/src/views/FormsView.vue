@@ -4,21 +4,38 @@
     :loading="store.loadingList && !store.forms.length"
     @narrow-change="narrow = $event"
   >
+    <!-- Список форм — общий EntityList: закрепление, папки и порядок личные. -->
     <template #list="{ toggle }">
-      <FormList
-        :forms="store.forms"
+      <EntityList
+        section="forms"
+        title="Формы и опросы"
+        label-key="title"
+        :items="store.forms"
         :selected-id="store.selectedId"
         :scope="store.scope"
-        :renaming-id="renamingId"
+        :scopes="SCOPES"
+        :icon-of="(f) => (f.quiz ? 'quiz' : 'assignment')"
+        :hint="formHint"
         :narrow="narrow"
+        :renaming-id="renamingId"
+        rename-placeholder="Название формы"
+        :rename-maxlength="200"
+        create-label="Создать форму"
+        :menu-items="formMenu"
+        :empty="listEmpty"
         @select="selectForm"
         @update:scope="store.setScope"
         @create="createOpen = true"
-        @context="onContext"
+        @command="onListCommand"
         @rename="applyRename"
         @rename-cancel="renamingId = null"
         @toggle="toggle"
-      />
+      >
+        <template #chips="{ item }">
+          <AppChip size="sm" :tone="statusMeta(item.status).tone" :label="statusMeta(item.status).label" />
+          <AppChip v-if="item.responses" size="sm" icon="forum" :label="String(item.responses)" title="Собрано ответов" />
+        </template>
+      </EntityList>
     </template>
 
     <template #detail="{ collapsed, toggle }">
@@ -132,15 +149,6 @@
       </AppPage>
     </template>
 
-    <ContextMenu
-      :visible="menuOpen"
-      :x="menuX"
-      :y="menuY"
-      :items="menuItems"
-      @select="onMenuSelect"
-      @close="menuOpen = false"
-    />
-
     <AppDialog
       v-model="createOpen"
       title="Новая форма"
@@ -241,6 +249,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute } from 'vue-router'
 import InputText from 'primevue/inputtext'
 import AppButton from '@/components/ui/AppButton.vue'
+import AppChip from '@/components/ui/AppChip.vue'
 import AppDialog from '@/components/ui/AppDialog.vue'
 import AppListDetail from '@/components/ui/AppListDetail.vue'
 import AppPage from '@/components/ui/AppPage.vue'
@@ -248,13 +257,12 @@ import AppStack from '@/components/ui/AppStack.vue'
 import AppSwitchRow from '@/components/ui/AppSwitchRow.vue'
 import AppTabs from '@/components/ui/AppTabs.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
-import ContextMenu from '@/components/common/ContextMenu.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
+import EntityList from '@/components/common/EntityList.vue'
 import SearchField from '@/components/common/SearchField.vue'
 import FormAssignees from '@/components/forms/FormAssignees.vue'
 import FormEditor from '@/components/forms/FormEditor.vue'
 import FormFill from '@/components/forms/FormFill.vue'
-import FormList from '@/components/forms/FormList.vue'
 import FormResponseDialog from '@/components/forms/FormResponseDialog.vue'
 import FormResponses from '@/components/forms/FormResponses.vue'
 import FormSettings from '@/components/forms/FormSettings.vue'
@@ -266,6 +274,7 @@ import { useAuthStore } from '@/stores/auth.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { exportResponses, getFill, submitResponse, updateMyResponse, uploadFile } from '@/api/forms.js'
 import { saveBlob } from '@/utils/download.js'
+import { statusMeta } from '@/utils/formFields.js'
 
 const store = useFormsStore()
 const route = useRoute()
@@ -515,16 +524,42 @@ async function doDuplicate() {
   }
 }
 
-// ── Контекстное меню списка ──
-const menuOpen = ref(false)
-const menuX = ref(0)
-const menuY = ref(0)
-const menuTarget = ref(null)
+// ── Пункты списка ──
 const renamingId = ref(null)
 
-const menuItems = computed(() => {
-  const f = menuTarget.value
-  if (!f) return []
+const SCOPES = [
+  { value: 'all', label: 'Все' },
+  { value: 'mine', label: 'Мои' },
+  { value: 'assigned', label: 'Назначены' },
+  { value: 'shared', label: 'Совместные' },
+]
+
+const EMPTY = {
+  mine: { icon: 'assignment', title: 'Своих форм нет', subtitle: 'Создайте первую — кнопка внизу панели.' },
+  assigned: { icon: 'assignment_turned_in', title: 'Вам ничего не назначили', subtitle: 'Здесь появятся формы, которые нужно заполнить.' },
+  shared: { icon: 'group', title: 'Совместных форм нет', subtitle: 'Здесь появятся формы, где вам открыли ответы или правку.' },
+  all: { icon: 'assignment', title: 'Форм пока нет', subtitle: 'Создайте первую — кнопка внизу панели.' },
+}
+const listEmpty = computed(() => EMPTY[store.scope] || EMPTY.all)
+
+/* Подпись пункта: у чужой формы — хозяин, у назначенной — срок ответа и
+   отметка «отвечено». Своя форма подписи не требует. */
+function formHint(f) {
+  const parts = []
+  if (f.my_access !== 'owner' && f.owner_name) parts.push(f.owner_name)
+  if (f.my_due_at) parts.push(f.my_responded ? 'Вы ответили' : `Ответить до ${dueText(f.my_due_at)}`)
+  else if (f.my_responded) parts.push('Вы ответили')
+  return parts.join(' · ')
+}
+
+function dueText(value) {
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return ''
+  return d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' })
+}
+
+/* Действия над самой формой; организация списка — забота EntityList. */
+function formMenu(f) {
   const manage = ['edit', 'owner'].includes(f.my_access)
   return [
     { label: 'Переименовать', icon: 'edit', action: 'rename', disabled: !manage },
@@ -541,19 +576,10 @@ const menuItems = computed(() => {
     { divider: true },
     { label: 'Удалить', icon: 'delete', danger: true, action: 'delete', disabled: f.my_access !== 'owner' },
   ]
-})
-
-function onContext(f, e) {
-  menuTarget.value = f
-  menuX.value = e.clientX
-  menuY.value = e.clientY
-  menuOpen.value = true
 }
 
-async function onMenuSelect(action) {
-  const f = menuTarget.value
+async function onListCommand(action, f) {
   if (!f) return
-  menuOpen.value = false
   if (action === 'rename') {
     renamingId.value = f.id
     return
