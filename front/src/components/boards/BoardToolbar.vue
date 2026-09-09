@@ -1,132 +1,307 @@
 <script setup>
-/* Панель инструментов холста: выбор инструмента, цвет, толщина, заливка и
-   масштаб. Плавающая — чтобы не отъедать рабочую площадь доски. */
-import { computed } from 'vue'
-import { SCENE_COLORS, STROKE_WIDTHS, TEXT_SIZES } from '@/utils/boardScene.js'
+/* Панель инструментов холста: выбор инструмента, цвет, толщина, заливка,
+   прозрачность и масштаб. Плавающая — чтобы не отъедать рабочую площадь доски.
+
+   Инструментов стало больше, чем помещается в ряд, поэтому родственные собраны
+   в ГРУППЫ (кисти, фигуры, выделение): кнопка показывает выбранный инструмент
+   группы, а повторный клик по активной кнопке открывает список остальных — тот
+   же приём, что в панелях графических редакторов. */
+import { computed, ref } from 'vue'
+import ContextMenu from '@/components/common/ContextMenu.vue'
+import BoardColorPopover from '@/components/boards/BoardColorPopover.vue'
+import SizePopover from '@/components/boards/SizePopover.vue'
+import { ERASER_SIZES, SCENE_COLORS, STROKE_WIDTHS, TEXT_SIZES, isHexColor } from '@/utils/boardScene.js'
 
 const props = defineProps({
   tool: { type: String, required: true },
   color: { type: String, required: true },
   fill: { type: String, default: '' },
   width: { type: Number, required: true },
+  opacity: { type: Number, default: 1 },
   textSize: { type: Number, required: true },
+  eraserSize: { type: Number, default: 32 },
+  eraseMode: { type: String, default: 'pixel' },
+  polygonSides: { type: Number, default: 5 },
+  polygonStar: { type: Boolean, default: false },
   zoom: { type: Number, default: 1 },
   hasSelection: { type: Boolean, default: false },
 })
 
 const emit = defineEmits([
   'update:tool', 'update:color', 'update:fill', 'update:width', 'update:textSize',
+  'update:opacity', 'update:eraserSize', 'update:eraseMode', 'update:polygonSides', 'update:polygonStar',
   'zoom-in', 'zoom-out', 'fit', 'add-image', 'delete-selected',
 ])
 
-const TOOLS = [
-  { key: 'select', icon: 'arrow_selector_tool', label: 'Выделение' },
-  { key: 'pan', icon: 'pan_tool', label: 'Рука' },
-  { key: 'pen', icon: 'draw', label: 'Перо' },
-  { key: 'marker', icon: 'ink_highlighter', label: 'Маркер' },
-  { key: 'eraser', icon: 'ink_eraser', label: 'Ластик' },
-  { key: 'line', icon: 'horizontal_rule', label: 'Линия' },
-  { key: 'arrow', icon: 'arrow_right_alt', label: 'Стрелка' },
-  { key: 'rect', icon: 'crop_square', label: 'Прямоугольник' },
-  { key: 'ellipse', icon: 'circle', label: 'Овал' },
-  { key: 'diamond', icon: 'change_history', label: 'Ромб' },
-  { key: 'text', icon: 'title', label: 'Надпись' },
-  { key: 'sticky', icon: 'sticky_note_2', label: 'Липкая заметка' },
-  { key: 'comment', icon: 'add_comment', label: 'Комментарий' },
+/* Каждая запись — либо одиночный инструмент, либо группа с вариантами. Значок
+   группы берётся у выбранного варианта: панель показывает, чем рисуют сейчас. */
+const GROUPS = [
+  {
+    id: 'select',
+    items: [
+      { key: 'select', icon: 'arrow_selector_tool', label: 'Выделение' },
+      { key: 'lasso', icon: 'gesture', label: 'Лассо' },
+    ],
+  },
+  { id: 'pan', items: [{ key: 'pan', icon: 'pan_tool', label: 'Рука' }] },
+  {
+    id: 'draw',
+    items: [
+      { key: 'pencil', icon: 'draw', label: 'Карандаш' },
+      { key: 'brush', icon: 'brush', label: 'Кисть' },
+      { key: 'marker', icon: 'ink_highlighter', label: 'Маркер' },
+    ],
+  },
+  {
+    id: 'vector',
+    items: [
+      { key: 'pen', icon: 'stylus_note', label: 'Перо (кривые Безье)' },
+      { key: 'nodes', icon: 'linear_scale', label: 'Правка узлов' },
+      { key: 'curve', icon: 'polyline', label: 'Кривая по точкам' },
+    ],
+  },
+  { id: 'eraser', items: [{ key: 'eraser', icon: 'ink_eraser', label: 'Ластик' }] },
+  {
+    id: 'shape',
+    items: [
+      { key: 'line', icon: 'horizontal_rule', label: 'Линия' },
+      { key: 'arrow', icon: 'arrow_right_alt', label: 'Стрелка' },
+      { key: 'rect', icon: 'crop_square', label: 'Прямоугольник' },
+      { key: 'ellipse', icon: 'circle', label: 'Овал' },
+      { key: 'diamond', icon: 'change_history', label: 'Ромб' },
+      { key: 'polygon', icon: 'pentagon', label: 'Многоугольник' },
+      { key: 'star', icon: 'star', label: 'Звезда' },
+    ],
+  },
+  { id: 'fill', items: [{ key: 'fill', icon: 'format_color_fill', label: 'Заливка' }] },
+  { id: 'eyedropper', items: [{ key: 'eyedropper', icon: 'colorize', label: 'Пипетка' }] },
+  { id: 'text', items: [{ key: 'text', icon: 'title', label: 'Надпись' }] },
+  { id: 'sticky', items: [{ key: 'sticky', icon: 'sticky_note_2', label: 'Липкая заметка' }] },
+  { id: 'comment', items: [{ key: 'comment', icon: 'add_comment', label: 'Комментарий' }] },
 ]
 
-// Заливка и толщина нужны не всем инструментам — панель не должна пестрить.
-const showFill = computed(() => ['rect', 'ellipse', 'diamond'].includes(props.tool) || props.hasSelection)
-const showWidth = computed(() => !['text', 'sticky', 'comment'].includes(props.tool) || props.hasSelection)
+// Выбранный вариант каждой группы: помним, чтобы кнопка не «сбрасывалась» на
+// первый пункт после перехода к другому инструменту.
+const chosen = ref({ select: 'select', draw: 'pencil', vector: 'pen', shape: 'rect' })
+const menu = ref({ visible: false, x: 0, y: 0, items: [] })
+const colorPopover = ref({ open: false, anchor: { x: 0, y: 0 }, target: 'color' })
+/* Величины (толщина, ластик, кегль) задаются ползунком с полем — набор
+   пресетов в меню не давал ни промежуточных значений, ни крупных. */
+const sizePopover = ref({ open: false, anchor: { x: 0, y: 0 }, kind: 'width' })
+
+// «Звезда» — тот же многоугольник, но с вершинами через одну: отдельного
+// инструмента в сцене нет, различает флаг polygonStar.
+const activeKey = computed(() => (props.tool === 'polygon' && props.polygonStar ? 'star' : props.tool))
+
+const groupState = computed(() => GROUPS.map((g) => {
+  const pickedKey = g.items.length > 1 ? (chosen.value[g.id] || g.items[0].key) : g.items[0].key
+  const item = g.items.find((i) => i.key === pickedKey) || g.items[0]
+  const active = g.items.some((i) => i.key === activeKey.value)
+  // У активной группы показываем то, чем рисуют, а не то, что было выбрано.
+  const shown = active ? (g.items.find((i) => i.key === activeKey.value) || item) : item
+  return { ...g, shown, active }
+}))
+
+const showFill = computed(() => ['rect', 'ellipse', 'diamond', 'polygon', 'curve', 'pen', 'fill'].includes(props.tool)
+  || props.hasSelection)
 const showTextSize = computed(() => props.tool === 'text')
+const showEraser = computed(() => props.tool === 'eraser')
+const showWidth = computed(() => !['text', 'sticky', 'comment', 'eraser', 'eyedropper', 'fill', 'nodes'].includes(props.tool)
+  || props.hasSelection)
 const zoomPercent = computed(() => `${Math.round(props.zoom * 100)}%`)
+const opacityPercent = computed(() => `${Math.round(props.opacity * 100)}%`)
+
+const swatchStyle = (value) => {
+  if (isHexColor(value)) return { background: value }
+  const found = SCENE_COLORS.find((c) => c.key === value)
+  if (!found) return { background: 'var(--color-surface-variant)' }
+  return { background: found.token ? `var(${found.token})` : found.value }
+}
+
+function pickTool(key) {
+  if (key === 'star') {
+    emit('update:polygonStar', true)
+    emit('update:tool', 'polygon')
+    return
+  }
+  if (key === 'polygon') emit('update:polygonStar', false)
+  emit('update:tool', key)
+}
+
+function onGroupClick(group, e) {
+  if (group.items.length === 1) {
+    pickTool(group.items[0].key)
+    return
+  }
+  // Клик по неактивной группе просто выбирает её инструмент, по активной —
+  // открывает остальные варианты.
+  if (!group.active) {
+    pickTool(group.shown.key)
+    return
+  }
+  openMenu(e, group.items.map((i) => ({
+    label: i.label, icon: i.icon, action: `tool:${i.key}`,
+  })))
+}
+
+function openMenu(e, items) {
+  const rect = e.currentTarget.getBoundingClientRect()
+  menu.value = { visible: true, x: rect.left, y: rect.top - 6, items }
+}
+
+// Настройки величины для каждой кнопки: границы, пресеты и режимы ластика.
+const SIZE_KINDS = {
+  width: { title: 'Толщина линии', min: 0, max: 200, presets: STROKE_WIDTHS, zeroLabel: 'без обводки' },
+  eraser: { title: 'Ластик', min: 2, max: 400, presets: ERASER_SIZES, modes: [
+    { key: 'pixel', label: 'Пиксели' },
+    { key: 'object', label: 'Объекты' },
+  ] },
+  text: { title: 'Размер надписи', min: 8, max: 200, presets: TEXT_SIZES },
+}
+
+const sizeKind = computed(() => SIZE_KINDS[sizePopover.value.kind] || SIZE_KINDS.width)
+
+const sizeValue = computed(() => ({
+  width: props.width,
+  eraser: props.eraserSize,
+  text: props.textSize,
+}[sizePopover.value.kind] ?? 0))
+
+function openSize(e, kind) {
+  const rect = e.currentTarget.getBoundingClientRect()
+  sizePopover.value = { open: true, anchor: { x: rect.left + rect.width / 2, y: rect.top }, kind }
+}
+
+function onSizeChange(value) {
+  const event = { width: 'update:width', eraser: 'update:eraserSize', text: 'update:textSize' }[sizePopover.value.kind]
+  if (event) emit(event, value)
+}
+
+const opacityItems = computed(() => [100, 75, 50, 25, 10].map((p) => ({
+  label: `${p}%`,
+  icon: Math.round(props.opacity * 100) === p ? 'radio_button_checked' : 'radio_button_unchecked',
+  action: `opacity:${p}`,
+})))
+
+const sidesItems = computed(() => [3, 4, 5, 6, 8, 12].map((n) => ({
+  label: `${n} вершин`,
+  icon: props.polygonSides === n ? 'radio_button_checked' : 'radio_button_unchecked',
+  action: `sides:${n}`,
+})))
+
+function onMenuSelect(action) {
+  menu.value.visible = false
+  const [kind, value] = action.split(':')
+  switch (kind) {
+    case 'tool':
+      // Запоминаем выбор внутри группы — кнопка панели покажет его и потом.
+      for (const g of GROUPS) {
+        if (g.items.some((i) => i.key === value)) chosen.value = { ...chosen.value, [g.id]: value }
+      }
+      pickTool(value)
+      break
+    case 'opacity': emit('update:opacity', Number(value) / 100); break
+    case 'sides': emit('update:polygonSides', Number(value)); break
+    default: break
+  }
+}
+
+function openColor(e, target) {
+  const rect = e.currentTarget.getBoundingClientRect()
+  colorPopover.value = { open: true, anchor: { x: rect.left + rect.width / 2, y: rect.bottom }, target }
+}
+
+function onColorSelect(value) {
+  emit(colorPopover.value.target === 'fill' ? 'update:fill' : 'update:color', value)
+}
 </script>
 
 <template>
   <div class="bt">
     <div class="bt-group bt-tools">
       <button
-        v-for="t in TOOLS"
-        :key="t.key"
+        v-for="g in groupState"
+        :key="g.id"
         type="button"
         class="bt-btn"
-        :class="{ 'is-active': tool === t.key }"
-        :title="t.label"
-        :aria-label="t.label"
-        :aria-pressed="tool === t.key"
-        @click="emit('update:tool', t.key)"
+        :class="{ 'is-active': g.active, 'has-more': g.items.length > 1 }"
+        :title="g.items.length > 1 ? `${g.shown.label} — ещё раз для выбора` : g.shown.label"
+        :aria-label="g.shown.label"
+        :aria-pressed="g.active"
+        @click="onGroupClick(g, $event)"
       >
-        <span class="material-symbols-outlined">{{ t.icon }}</span>
+        <span class="material-symbols-outlined">{{ g.shown.icon }}</span>
       </button>
       <button type="button" class="bt-btn" title="Картинка" aria-label="Картинка" @click="emit('add-image')">
         <span class="material-symbols-outlined">image</span>
       </button>
     </div>
 
-    <div class="bt-group bt-colors">
+    <div class="bt-group">
       <button
-        v-for="c in SCENE_COLORS"
-        :key="c.key"
         type="button"
         class="bt-swatch"
-        :class="{ 'is-active': color === c.key }"
-        :style="{ '--sw': `var(${c.token})` }"
-        :title="hasSelection ? `${c.label} — перекрасить выделенное` : c.label"
-        :aria-label="c.label"
-        :aria-pressed="color === c.key"
-        @click="emit('update:color', c.key)"
+        :style="swatchStyle(color)"
+        :title="hasSelection ? 'Цвет — перекрасить выделенное' : 'Цвет'"
+        aria-label="Цвет"
+        @click="openColor($event, 'color')"
       />
-    </div>
-
-    <div v-if="showFill" class="bt-group bt-colors">
       <button
-        type="button"
-        class="bt-swatch bt-swatch--none"
-        :class="{ 'is-active': !fill }"
-        title="Без заливки"
-        aria-label="Без заливки"
-        @click="emit('update:fill', '')"
-      >
-        <span class="material-symbols-outlined">block</span>
-      </button>
-      <button
-        v-for="c in SCENE_COLORS.slice(1)"
-        :key="`f-${c.key}`"
+        v-if="showFill"
         type="button"
         class="bt-swatch bt-swatch--fill"
-        :class="{ 'is-active': fill === c.key }"
-        :style="{ '--sw': `var(${c.token})` }"
-        :title="`Заливка: ${c.label.toLowerCase()}`"
-        :aria-label="`Заливка: ${c.label.toLowerCase()}`"
-        @click="emit('update:fill', c.key)"
-      />
-    </div>
-
-    <div v-if="showWidth" class="bt-group">
-      <button
-        v-for="w in STROKE_WIDTHS"
-        :key="w"
-        type="button"
-        class="bt-btn bt-width"
-        :class="{ 'is-active': width === w }"
-        :title="`Толщина ${w}`"
-        :aria-label="`Толщина ${w}`"
-        @click="emit('update:width', w)"
+        :class="{ 'bt-swatch--none': !fill }"
+        :style="fill ? swatchStyle(fill) : {}"
+        title="Заливка"
+        aria-label="Заливка"
+        @click="openColor($event, 'fill')"
       >
-        <span class="bt-width-dot" :style="{ width: `${Math.min(w + 2, 18)}px`, height: `${Math.min(w + 2, 18)}px` }" />
+        <span v-if="!fill" class="material-symbols-outlined">block</span>
       </button>
-    </div>
-
-    <div v-if="showTextSize" class="bt-group">
       <button
-        v-for="s in TEXT_SIZES"
-        :key="s"
+        v-if="tool === 'polygon'"
         type="button"
         class="bt-btn bt-size"
-        :class="{ 'is-active': textSize === s }"
-        :title="`Размер ${s}`"
-        @click="emit('update:textSize', s)"
-      >{{ s }}</button>
+        title="Число вершин"
+        aria-label="Число вершин"
+        @click="openMenu($event, sidesItems)"
+      >{{ polygonSides }}</button>
+    </div>
+
+    <div class="bt-group">
+      <button
+        v-if="showWidth"
+        type="button"
+        class="bt-btn bt-width"
+        :title="`Толщина ${width}`"
+        aria-label="Толщина"
+        @click="openSize($event, 'width')"
+      >
+        <span class="bt-width-dot" :style="{ width: `${Math.min(width + 2, 18)}px`, height: `${Math.min(width + 2, 18)}px` }" />
+      </button>
+      <button
+        v-if="showEraser"
+        type="button"
+        class="bt-btn bt-size"
+        :title="eraseMode === 'pixel' ? 'Ластик: пиксели' : 'Ластик: объекты'"
+        aria-label="Настройки ластика"
+        @click="openSize($event, 'eraser')"
+      >{{ eraseMode === 'pixel' ? eraserSize : 'об' }}</button>
+      <button
+        v-if="showTextSize"
+        type="button"
+        class="bt-btn bt-size"
+        title="Размер надписи"
+        aria-label="Размер надписи"
+        @click="openSize($event, 'text')"
+      >{{ textSize }}</button>
+      <button
+        type="button"
+        class="bt-btn bt-size"
+        title="Непрозрачность"
+        aria-label="Непрозрачность"
+        @click="openMenu($event, opacityItems)"
+      >{{ opacityPercent }}</button>
     </div>
 
     <div class="bt-group">
@@ -151,6 +326,39 @@ const zoomPercent = computed(() => `${Math.round(props.zoom * 100)}%`)
         <span class="material-symbols-outlined">delete</span>
       </button>
     </div>
+
+    <ContextMenu
+      :visible="menu.visible"
+      :x="menu.x"
+      :y="menu.y"
+      :items="menu.items"
+      @select="onMenuSelect"
+      @close="menu.visible = false"
+    />
+
+    <SizePopover
+      v-model="sizePopover.open"
+      :anchor="sizePopover.anchor"
+      :value="sizeValue"
+      :min="sizeKind.min"
+      :max="sizeKind.max"
+      :title="sizeKind.title"
+      :presets="sizeKind.presets"
+      :zero-label="sizeKind.zeroLabel || ''"
+      :modes="sizeKind.modes || []"
+      :mode="eraseMode"
+      @update:value="onSizeChange"
+      @update:mode="(v) => emit('update:eraseMode', v)"
+    />
+
+    <BoardColorPopover
+      v-model="colorPopover.open"
+      :anchor="colorPopover.anchor"
+      :value="colorPopover.target === 'fill' ? fill : color"
+      :allow-none="colorPopover.target === 'fill'"
+      :title="colorPopover.target === 'fill' ? 'Заливка' : 'Цвет'"
+      @select="onColorSelect"
+    />
   </div>
 </template>
 
@@ -194,6 +402,7 @@ const zoomPercent = computed(() => `${Math.round(props.zoom * 100)}%`)
 .bt-tools { flex-wrap: nowrap; }
 
 .bt-btn {
+  position: relative;
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
@@ -216,6 +425,17 @@ const zoomPercent = computed(() => `${Math.round(props.zoom * 100)}%`)
 .bt-btn--danger { color: var(--color-error); }
 .bt-btn .material-symbols-outlined { font-size: 20px; }
 
+/* Уголок у кнопки-группы: подсказывает, что внутри есть ещё инструменты. */
+.bt-btn.has-more::after {
+  content: '';
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  border-top: 4px solid transparent;
+  border-right: 4px solid currentColor;
+  opacity: 0.7;
+}
+
 .bt-size { font-size: 12px; font-weight: 600; }
 
 .bt-width-dot {
@@ -225,24 +445,22 @@ const zoomPercent = computed(() => `${Math.round(props.zoom * 100)}%`)
 
 .bt-swatch {
   flex: 0 0 auto;
-  min-width: 22px;
-  max-width: 22px;
-  min-height: 22px;
-  max-height: 22px;
+  min-width: 24px;
+  max-width: 24px;
+  min-height: 24px;
+  max-height: 24px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   padding: 0;
-  border: 2px solid transparent;
+  border: 2px solid var(--color-outline-dim);
   border-radius: 50%;
-  background: var(--sw, var(--color-text));
+  background: var(--color-text);
   color: var(--color-text-muted);
   cursor: pointer;
 }
 
-/* Рамку выделения рисуем внутренней тенью: внешнюю срезает прокрутка панели. */
-.bt-swatch.is-active { box-shadow: inset 0 0 0 2px var(--color-surface), 0 0 0 2px var(--color-primary); }
-.bt-swatch--fill { opacity: 0.55; }
+.bt-swatch--fill { opacity: 0.75; }
 .bt-swatch--none { background: var(--color-surface-variant); }
 .bt-swatch--none .material-symbols-outlined { font-size: 14px; }
 

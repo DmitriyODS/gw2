@@ -1,7 +1,12 @@
 <script setup>
 /* Экран доски: холст на всю площадь, плавающий тулбар, автосохранение сцены и
    совместное рисование. Миниатюра плитки снимается с самого холста после
-   паузы в рисовании — список досок выглядит как галерея эскизов. */
+   паузы в рисовании — список досок выглядит как галерея эскизов.
+
+   Режим кадров (лента внизу) превращает доску в покадровую анимацию: объекты
+   получают метку кадра, «калька» показывает соседние, а готовое уезжает
+   видеофайлом. Всё это — свойства той же сцены, поэтому отдельного хранилища
+   у анимации нет. */
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import InputText from 'primevue/inputtext'
@@ -11,10 +16,13 @@ import ContextMenu from '@/components/common/ContextMenu.vue'
 import BoardCanvas from '@/components/boards/BoardCanvas.vue'
 import BoardToolbar from '@/components/boards/BoardToolbar.vue'
 import CommentPopup from '@/components/boards/CommentPopup.vue'
+import ExportAnimationDialog from '@/components/boards/ExportAnimationDialog.vue'
+import FrameTimeline from '@/components/boards/FrameTimeline.vue'
 import LayersPanel from '@/components/boards/LayersPanel.vue'
+import PropertiesPanel from '@/components/boards/PropertiesPanel.vue'
 import ShareDialog from '@/components/boards/ShareDialog.vue'
 import * as api from '@/api/boards.js'
-import { emptyScene, normalizeScene } from '@/utils/boardScene.js'
+import { FPS_RANGE, emptyScene, newId, normalizeScene } from '@/utils/boardScene.js'
 import { sceneToPreview } from '@/utils/boardExport.js'
 import { BOARD_EXPORT_ITEMS, boardExportFormat, useBoardDownload } from '@/composables/useBoardDownload.js'
 import { useBoardCollab } from '@/composables/useBoardCollab.js'
@@ -42,14 +50,30 @@ const shareOpen = ref(false)
 const canvasRef = ref(null)
 const fileInput = ref(null)
 
-const tool = ref('pen')
+const tool = ref('pencil')
 const color = ref('ink')
 const fill = ref('')
 const strokeWidth = ref(4)
+const opacity = ref(1)
 const textSize = ref(18)
+const eraserSize = ref(32)
+const eraseMode = ref('pixel')
+const polygonSides = ref(5)
+const polygonStar = ref(false)
 const selection = ref([])
 const activeLayer = ref('')
 const layersOpen = ref(false)
+const propsOpen = ref(true)
+
+// Режим кадров: лента, текущий кадр, глубина кальки и проигрывание.
+const framesOpen = ref(false)
+const currentFrame = ref('')
+const onionDepth = ref(1)
+const playing = ref(false)
+const exportingVideo = ref(false)
+const exportProgress = ref(0)
+const exportOpen = ref(false)
+
 // Открытое обсуждение: сам комментарий и точка на экране, где стоит булавка.
 const activeComment = ref(null)
 const commentAnchor = ref({ x: 0, y: 0 })
@@ -72,6 +96,32 @@ const canEdit = computed(() => !board.value || board.value.my_access !== 'view')
 const me = computed(() => ({ id: auth.userId, fio: auth.user?.fio || '' }))
 const zoom = computed(() => canvasRef.value?.camera?.scale || 1)
 const background = computed(() => normalizeScene(scene.value).background)
+const frames = computed(() => normalizeScene(scene.value).animation?.frames || [])
+// Панель свойств и дерево слоёв показывают ТЕ ЖЕ объекты, что выделены на
+// холсте: выделение живёт в холсте, наружу приходит списком id.
+const selectedObjects = computed(() => {
+  const ids = new Set(selection.value)
+  return normalizeScene(scene.value).objects.filter((o) => ids.has(o.id))
+})
+
+/* Свойства показываются САМИ, как только на холсте что-то выделено, и уходят
+   вместе с выделением. Закрытая крестиком панель молчит до следующего нажатия
+   кнопки «Свойства»: иначе она возвращалась бы на каждый клик по холсту. */
+const showProps = computed(() => propsOpen.value && selection.value.length > 0)
+
+/* Калька: предыдущие кадры бледнеют с удалением от текущего. Во время
+   проигрывания её нет — иначе ролик смотрится смазанным. */
+const onion = computed(() => {
+  if (!framesOpen.value || playing.value || !onionDepth.value || !currentFrame.value) return []
+  const list = frames.value
+  const index = list.findIndex((f) => f.id === currentFrame.value)
+  const out = []
+  for (let back = onionDepth.value; back >= 1; back -= 1) {
+    const ghost = list[index - back]
+    if (ghost) out.push({ frame: ghost.id, alpha: 0.35 / back })
+  }
+  return out
+})
 
 const { others: peers, start: startCollab, sendCursor, sendScene, sendOps } = useBoardCollab({
   boardId,
@@ -92,6 +142,12 @@ async function load() {
     title.value = data.title || ''
     scene.value = normalizeScene(data.scene)
     activeLayer.value = scene.value.layers[scene.value.layers.length - 1].id
+    // Доска с кадрами открывается в режиме анимации на первом кадре: иначе
+    // холст показал бы только «общие» объекты, а кадры казались бы потерянными.
+    if (frames.value.length) {
+      framesOpen.value = true
+      currentFrame.value = frames.value[0].id
+    }
     startCollab()
   } catch {
     notify.error('Не удалось открыть доску')
@@ -100,6 +156,7 @@ async function load() {
     loading.value = false
   }
 }
+
 
 // ── Правки и сохранение ──────────────────────────────────────────
 
@@ -140,6 +197,18 @@ function applyRemoteOps(ops) {
 function onLayersUpdate(layers) {
   onSceneUpdate({ ...normalizeScene(scene.value), layers })
   sendScene() // порядок и видимость слоёв — свойство всей сцены, не объекта
+}
+
+/** Объекты правит дерево слоёв: порядок, видимость, блокировка, слой. */
+function onObjectsUpdate(objects) {
+  onSceneUpdate({ ...normalizeScene(scene.value), objects })
+  sendScene() // порядок объектов — свойство всей сцены, не одного объекта
+}
+
+/** Лента кадров меняет и кадры, и объекты — это правка всей сцены. */
+function onFramesUpdate(next) {
+  onSceneUpdate(next)
+  sendScene()
 }
 
 function pushHistory(snapshot) {
@@ -235,6 +304,52 @@ function setBackground(key) {
   onSceneUpdate({ ...normalizeScene(scene.value), background: key })
 }
 
+// ── Кадры ────────────────────────────────────────────────────────
+
+/* Первое включение заводит один кадр, а нарисованное раньше остаётся ОБЩИМ
+   (видно во всех кадрах) — это фон анимации. Так включение режима ничего не
+   прячет и легко отменяется. */
+function toggleFrames() {
+  if (framesOpen.value) {
+    framesOpen.value = false
+    currentFrame.value = ''
+    return
+  }
+  if (!frames.value.length) {
+    if (!canEdit.value) return
+    const first = { id: newId(), name: 'Кадр 1' }
+    onSceneUpdate({ ...normalizeScene(scene.value), animation: { fps: FPS_RANGE.def, frames: [first] } })
+    sendScene()
+    currentFrame.value = first.id
+  } else if (!currentFrame.value) {
+    currentFrame.value = frames.value[0].id
+  }
+  framesOpen.value = true
+}
+
+function openAnimationExport() {
+  if (!frames.value.length) {
+    notify.warn('Сначала добавьте кадры анимации')
+    return
+  }
+  exportOpen.value = true
+}
+
+/** Собрать ролик или гифку по настройкам диалога. */
+async function exportAnimation({ format, ...options }) {
+  exportingVideo.value = true
+  exportProgress.value = 0
+  try {
+    await downloadBoard({ id: boardId.value, title: title.value }, format, scene.value, {
+      ...options,
+      onProgress: (value) => { exportProgress.value = value },
+    })
+    exportOpen.value = false
+  } finally {
+    exportingVideo.value = false
+  }
+}
+
 // ── Картинки ─────────────────────────────────────────────────────
 
 function pickImage() {
@@ -274,6 +389,8 @@ const boardMenuItems = computed(() => [
     ],
   },
   { label: layersOpen.value ? 'Скрыть слои' : 'Слои', icon: 'layers', action: 'layers' },
+  { label: propsOpen.value ? 'Скрыть свойства' : 'Свойства', icon: 'tune', action: 'props' },
+  { label: framesOpen.value ? 'Скрыть кадры' : 'Кадры анимации', icon: 'animation', action: 'frames' },
   { divider: true },
   { label: 'Скачать', icon: 'download', action: 'export' },
   ...(canEdit.value ? [{ label: 'Поделиться', icon: 'share', action: 'share' }] : []),
@@ -290,6 +407,8 @@ function onBoardMenu(action) {
   else if (action === 'redo') redo()
   else if (action.startsWith('bg:')) setBackground(action.slice(3))
   else if (action === 'layers') layersOpen.value = !layersOpen.value
+  else if (action === 'props') propsOpen.value = !propsOpen.value
+  else if (action === 'frames') toggleFrames()
   else if (action === 'share') shareOpen.value = true
   // Экспорт — своё меню; открываем его там же, где стояло это.
   else if (action === 'export') {
@@ -305,6 +424,10 @@ function openExportMenu(e) {
 // может лежать состояние до последнего автосохранения.
 function exportBoard(action) {
   const format = boardExportFormat(action)
+  if (format === 'animation') {
+    openAnimationExport()
+    return
+  }
   if (format) downloadBoard({ id: boardId.value, title: title.value }, format, scene.value)
 }
 
@@ -338,6 +461,17 @@ watch(color, (v) => { if (selection.value.length) canvasRef.value?.applyStyle({ 
 watch(fill, (v) => { if (selection.value.length) canvasRef.value?.applyStyle({ fill: v }) })
 watch(strokeWidth, (v) => { if (selection.value.length) canvasRef.value?.applyStyle({ width: v }) })
 watch(textSize, (v) => { if (selection.value.length) canvasRef.value?.applyStyle({ size: v }) })
+watch(opacity, (v) => { if (selection.value.length) canvasRef.value?.applyStyle({ opacity: v }) })
+
+// Кадр мог исчезнуть (удалил соавтор или сам) — переходим на первый.
+watch(frames, (list) => {
+  if (!list.length) {
+    framesOpen.value = false
+    currentFrame.value = ''
+  } else if (!list.some((f) => f.id === currentFrame.value)) {
+    currentFrame.value = list[0].id
+  }
+})
 
 watch(boardId, () => { if (boardId.value) load() })
 watch(title, () => {
@@ -422,6 +556,27 @@ watch(title, () => {
         >
           <span class="material-symbols-outlined">layers</span>
         </button>
+        <button
+          type="button"
+          class="be-btn"
+          :class="{ 'is-active': propsOpen }"
+          title="Свойства выделенного"
+          aria-label="Свойства выделенного"
+          @click="propsOpen = !propsOpen"
+        >
+          <span class="material-symbols-outlined">tune</span>
+        </button>
+        <button
+          type="button"
+          class="be-btn"
+          :class="{ 'is-active': framesOpen }"
+          title="Кадры анимации"
+          aria-label="Кадры анимации"
+          :disabled="!canEdit && !frames.length"
+          @click="toggleFrames"
+        >
+          <span class="material-symbols-outlined">animation</span>
+        </button>
         <button type="button" class="be-btn" title="Скачать" aria-label="Скачать" @click="openExportMenu">
           <span class="material-symbols-outlined">download</span>
         </button>
@@ -448,16 +603,25 @@ watch(title, () => {
           :color="color"
           :fill="fill"
           :width="strokeWidth"
+          :opacity="opacity"
           :text-size="textSize"
+          :eraser-size="eraserSize"
+          :erase-mode="eraseMode"
+          :polygon-sides="polygonSides"
+          :polygon-star="polygonStar"
           :read-only="!canEdit"
           :peers="peers"
           :active-layer="activeLayer"
+          :frame="framesOpen ? currentFrame : ''"
+          :onion="onion"
           :me="me"
           @update:scene="onSceneUpdate"
           @ops="onCanvasOps"
           @pointer-move="sendCursor"
           @select-change="(ids) => (selection = ids)"
           @comment-open="onCommentOpen"
+          @pick-color="(hex) => (color = hex)"
+          @request-tool="(key) => (tool = key)"
         />
 
         <CommentPopup
@@ -470,24 +634,72 @@ watch(title, () => {
           @close="activeComment = null"
         />
 
+        <!-- Панели правого края: слои постоянные, свойства приходят с
+             выделением. Каждая — самостоятельная колонка, поэтому открытая
+             панель слоёв просто сдвигается левее, а не делит место. -->
         <LayersPanel
           v-if="layersOpen"
           class="be-layers"
+          :class="{ 'has-props': showProps }"
           :scene="scene"
           :active-layer="activeLayer"
+          :selection="selection"
           :read-only="!canEdit"
           @update:layers="onLayersUpdate"
+          @update:objects="onObjectsUpdate"
           @update:active-layer="(id) => (activeLayer = id)"
+          @select="(ids) => canvasRef?.setSelection(ids)"
           @close="layersOpen = false"
         />
 
-        <div v-if="canEdit" class="be-toolbar">
+        <PropertiesPanel
+          v-if="showProps"
+          class="be-props"
+          :selection="selectedObjects"
+          :read-only="!canEdit"
+          @apply="(patch) => canvasRef?.applyStyle(patch)"
+          @align="(kind) => canvasRef?.alignSelection(kind)"
+          @bool="(op) => canvasRef?.booleanSelection(op)"
+          @bool-release="canvasRef?.releaseBoolean()"
+          @mask="canvasRef?.toggleMaskObject()"
+          @order="(front) => canvasRef?.reorderSelected(front)"
+          @to-vector="canvasRef?.convertToVector()"
+          @text-path="canvasRef?.attachTextToPath()"
+          @close="propsOpen = false"
+        />
+
+        <div v-if="framesOpen && frames.length" class="be-frames">
+          <FrameTimeline
+            :scene="scene"
+            :frame="currentFrame"
+            :onion-depth="onionDepth"
+            :read-only="!canEdit"
+            :exporting="exportingVideo"
+            @update:scene="onFramesUpdate"
+            @update:frame="(id) => (currentFrame = id)"
+            @update:onion-depth="(v) => (onionDepth = v)"
+            @update:playing="(v) => (playing = v)"
+            @export="openAnimationExport"
+            @close="toggleFrames"
+          />
+        </div>
+
+        <div
+          v-if="canEdit"
+          class="be-toolbar"
+          :class="{ 'has-frames': framesOpen && frames.length, 'has-side': showProps || layersOpen }"
+        >
           <BoardToolbar
             v-model:tool="tool"
             v-model:color="color"
             v-model:fill="fill"
             v-model:width="strokeWidth"
+            v-model:opacity="opacity"
             v-model:text-size="textSize"
+            v-model:eraser-size="eraserSize"
+            v-model:erase-mode="eraseMode"
+            v-model:polygon-sides="polygonSides"
+            v-model:polygon-star="polygonStar"
             :zoom="zoom"
             :has-selection="!!selection.length"
             @zoom-in="canvasRef?.zoomIn()"
@@ -518,6 +730,15 @@ watch(title, () => {
       :items="BOARD_EXPORT_ITEMS"
       @select="exportBoard"
       @close="exportMenu.visible = false"
+    />
+
+    <ExportAnimationDialog
+      v-model="exportOpen"
+      :frames="frames"
+      :fps="normalizeScene(scene).animation?.fps || 12"
+      :busy="exportingVideo"
+      :progress="exportProgress"
+      @export="exportAnimation"
     />
 
     <ShareDialog v-if="board" v-model="shareOpen" subject-type="board" :subject-id="board.id" />
@@ -608,13 +829,42 @@ watch(title, () => {
   display: flex;
   align-items: center;
   justify-content: center;
+  /* Панели редактора считают своё место по ширине ОКНА раздела. */
+  container-type: inline-size;
 }
 
+.be-props,
 .be-layers {
   position: absolute;
   top: 12px;
+  bottom: 12px;
   right: 12px;
-  max-height: calc(100% - 24px);
+}
+
+/* Свойства всегда у самого края; слои уступают им место, когда те открыты. */
+.be-layers.has-props { right: 292px; }
+
+/* Узкое окно: обе панели рядом не помещаются — слои уходят под свойства и
+   прокручиваются вместе с ними. Считаем по ширине ОКНА (@container), а не
+   экрана: доска живёт в окне рабочего стола. */
+@container (max-width: 780px) {
+  .be-layers.has-props {
+    right: 12px;
+    bottom: auto;
+    max-height: 40%;
+  }
+
+  .be-props { top: auto; height: 55%; }
+  /* В узком окне панель занимает низ целиком — двигать инструменты некуда. */
+  .be-toolbar.has-side { padding-right: 12px; }
+}
+
+.be-frames {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  pointer-events: none;
 }
 
 .be-toolbar {
@@ -631,6 +881,11 @@ watch(title, () => {
   pointer-events: none;
 }
 
+/* Лента кадров занимает низ, панели — правый край: инструменты уступают им
+   место, иначе панель накрывала бы половину ряда кнопок. */
+.be-toolbar.has-frames { bottom: 168px; }
+.be-toolbar.has-side { padding-right: 300px; }
+
 .be-loader { margin: auto; }
 
 @media (max-width: 768px) {
@@ -641,5 +896,6 @@ watch(title, () => {
   .be-title { min-width: 80px; }
   /* Соавторов и статус в узкой шапке не показываем — они есть в самой доске. */
   .be-peers, .be-state { display: none; }
+  .be-toolbar.has-frames { bottom: 156px; }
 }
 </style>

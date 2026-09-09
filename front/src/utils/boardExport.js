@@ -9,9 +9,8 @@
    где темы приложения нет: белый лист и фиксированная палитра (та же, что в
    SVG сервера). МИНИАТЮРА — снимок холста: фон и цвета берутся из темы, иначе
    доска, нарисованная в тёмной теме, показывалась в списке белым листом. */
-import {
-  EXPORT_COLORS, normalizeScene, renderScene, sceneBounds, orderedObjects,
-} from '@/utils/boardScene.js'
+import { EXPORT_COLORS, normalizeScene, orderedObjects, sceneBounds } from '@/utils/boardScene.js'
+import { renderScene } from '@/utils/boardRender.js'
 import { canvasToJpegBytes, jpegPagesToPdf } from '@/utils/pdf.js'
 
 export { saveBlob } from '@/utils/download.js'
@@ -39,10 +38,13 @@ export async function loadSceneImages(scene) {
 }
 
 /** Отрисовать сцену в offscreen-canvas по её содержимому.
-    paper=true — белый лист и палитра файлов; иначе фон холста и тема. */
-async function renderToCanvas(scene, { scale = 2, paper = true } = {}) {
+    paper=true — белый лист и палитра файлов; иначе фон холста и тема.
+    frame — кадр анимации (по умолчанию первый: в файл уходит именно то, что
+    видно на холсте, а не все кадры разом). */
+async function renderToCanvas(scene, { scale = 2, paper = true, frame, transparent = false } = {}) {
   const s = normalizeScene(scene)
-  const objects = orderedObjects(s)
+  const shot = frame ?? s.animation?.frames?.[0]?.id ?? null
+  const objects = orderedObjects(s, { frame: shot })
   if (!objects.length) return null
 
   const box = sceneBounds(objects)
@@ -55,8 +57,9 @@ async function renderToCanvas(scene, { scale = 2, paper = true } = {}) {
   const ctx = canvas.getContext('2d')
   if (!ctx) return null
 
-  // JPEG и PDF не знают прозрачности — подкладываем белый лист.
-  if (paper) {
+  // JPEG и PDF не знают прозрачности — подкладываем белый лист. Прозрачный
+  // фон просят намеренно (картинка ляжет на чужой макет), и тогда листа нет.
+  if (paper && !transparent) {
     ctx.fillStyle = '#ffffff'
     ctx.fillRect(0, 0, canvas.width, canvas.height)
   }
@@ -69,13 +72,15 @@ async function renderToCanvas(scene, { scale = 2, paper = true } = {}) {
     images,
     // Фон-сетку в файл не тащим: она мешает читать рисунок. В миниатюре фон
     // холста, наоборот, нужен — плитка обязана выглядеть как сама доска.
-    background: !paper,
+    background: !paper && !transparent,
     colors: paper ? EXPORT_COLORS : undefined,
+    frame: shot,
   })
   return canvas
 }
 
-/** PNG (с белым фоном) — Blob или null, если рисовать нечего. */
+/** PNG — Blob или null, если рисовать нечего. transparent — без листа под
+    рисунком (PNG прозрачность умеет, JPEG и PDF — нет). */
 export async function sceneToPng(scene, opts = {}) {
   const canvas = await renderToCanvas(scene, opts)
   if (!canvas) return null

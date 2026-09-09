@@ -154,6 +154,7 @@ export const APPS = [
     min: [560, 460],
     available: always,
     titleFor: (route) => (/^\/boards\/\d+$/.test(route.path) ? 'Доска' : null),
+    about: { version: '2.1.0', date: '2026-09-09' },
   },
   {
     id: 'reminders',

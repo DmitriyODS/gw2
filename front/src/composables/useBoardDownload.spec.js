@@ -17,9 +17,15 @@ vi.mock('@/utils/boardExport.js', () => ({
   sceneToPdf: vi.fn(() => Promise.resolve(null)),
 }))
 
+vi.mock('@/utils/boardVideo.js', () => ({
+  sceneToVideo: vi.fn(() => Promise.resolve({ blob: new Blob(['mp4']), ext: 'mp4' })),
+  sceneToGif: vi.fn(() => Promise.resolve({ blob: new Blob(['gif']), ext: 'gif' })),
+}))
+
 import * as api from '@/api/boards.js'
 import { saveBlob } from '@/utils/download.js'
 import { sceneToPng } from '@/utils/boardExport.js'
+import { sceneToGif, sceneToVideo } from '@/utils/boardVideo.js'
 import { BOARD_EXPORT_ITEMS, boardExportFormat, useBoardDownload } from './useBoardDownload.js'
 
 const board = { id: 7, title: 'Схема' }
@@ -30,9 +36,9 @@ describe('выгрузка доски', () => {
     vi.clearAllMocks()
   })
 
-  it('меню одинаково для редактора и списка — пять форматов', () => {
+  it('меню одинаково для редактора и списка', () => {
     expect(BOARD_EXPORT_ITEMS.filter((i) => i.action).map((i) => boardExportFormat(i.action)))
-      .toEqual(['png', 'jpg', 'pdf', 'svg', 'json'])
+      .toEqual(['png', 'png-alpha', 'jpg', 'pdf', 'svg', 'json', 'animation'])
     expect(boardExportFormat('delete')).toBeNull()
   })
 
@@ -60,6 +66,40 @@ describe('выгрузка доски', () => {
 
     expect(api.getBoard).not.toHaveBeenCalled()
     expect(sceneToPng).toHaveBeenCalledWith(scene)
+  })
+
+  it('анимацию собирает браузер, расширение приходит с файлом', async () => {
+    const { downloadBoard } = useBoardDownload()
+    const scene = { animation: { fps: 12, frames: [{ id: 'f1' }] }, objects: [] }
+    await downloadBoard(board, 'mp4', scene, { from: 0, to: 0 })
+
+    expect(sceneToVideo).toHaveBeenCalledWith(scene, { from: 0, to: 0 })
+    expect(saveBlob).toHaveBeenCalledWith(expect.any(Blob), 'Схема.mp4')
+  })
+
+  it('гифку собирает свой кодировщик, а не видеомуксер', async () => {
+    const { downloadBoard } = useBoardDownload()
+    const scene = { animation: { fps: 12, frames: [{ id: 'f1' }] }, objects: [] }
+    await downloadBoard(board, 'gif', scene, { loop: 0, transparent: true })
+
+    expect(sceneToGif).toHaveBeenCalledWith(scene, { loop: 0, transparent: true })
+    expect(sceneToVideo).not.toHaveBeenCalled()
+    expect(saveBlob).toHaveBeenCalledWith(expect.any(Blob), 'Схема.gif')
+  })
+
+  it('PNG без фона сохраняется с обычным расширением', async () => {
+    const { downloadBoard } = useBoardDownload()
+    await downloadBoard(board, 'png-alpha', { objects: [{ type: 'rect' }] })
+
+    expect(saveBlob).toHaveBeenCalledWith(expect.any(Blob), 'Схема.png')
+  })
+
+  it('доска без кадров видео не даёт', async () => {
+    sceneToVideo.mockResolvedValueOnce(null)
+    const { downloadBoard } = useBoardDownload()
+    await downloadBoard(board, 'mp4', { objects: [] })
+
+    expect(saveBlob).not.toHaveBeenCalled()
   })
 
   it('на пустой доске файл не сохраняется', async () => {

@@ -8,6 +8,7 @@ import BrandLoader from '@/components/common/BrandLoader.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import BoardCanvas from '@/components/boards/BoardCanvas.vue'
 import BoardToolbar from '@/components/boards/BoardToolbar.vue'
+import FrameTimeline from '@/components/boards/FrameTimeline.vue'
 import { getSharedBoard, updateSharedBoard } from '@/api/boards.js'
 import { emptyScene, normalizeScene } from '@/utils/boardScene.js'
 
@@ -21,18 +22,26 @@ const failed = ref(false)
 const saving = ref(false)
 
 const canvasRef = ref(null)
-const tool = ref('pen')
+const tool = ref('pencil')
 const color = ref('ink')
 const fill = ref('')
 const strokeWidth = ref(4)
+const opacity = ref(1)
 const textSize = ref(18)
+const eraserSize = ref(32)
+const eraseMode = ref('pixel')
+const polygonSides = ref(5)
+const polygonStar = ref(false)
 const selection = ref([])
+// Анимированную доску гость смотрит покадрово — с проигрыванием и без правок.
+const currentFrame = ref('')
 
 let saveTimer = null
 let dirty = false
 
 const canEdit = computed(() => board.value?.my_access === 'edit')
 const zoom = computed(() => canvasRef.value?.camera?.scale || 1)
+const frames = computed(() => normalizeScene(scene.value).animation?.frames || [])
 
 async function load() {
   loading.value = true
@@ -40,6 +49,7 @@ async function load() {
     const data = await getSharedBoard(code.value)
     board.value = data
     scene.value = normalizeScene(data.scene)
+    if (frames.value.length) currentFrame.value = frames.value[0].id
   } catch {
     failed.value = true
   } finally {
@@ -105,18 +115,43 @@ onBeforeUnmount(() => {
           :color="color"
           :fill="fill"
           :width="strokeWidth"
+          :opacity="opacity"
           :text-size="textSize"
+          :eraser-size="eraserSize"
+          :erase-mode="eraseMode"
+          :polygon-sides="polygonSides"
+          :polygon-star="polygonStar"
+          :frame="currentFrame"
           :read-only="!canEdit"
           @update:scene="onSceneUpdate"
           @select-change="(ids) => (selection = ids)"
+          @pick-color="(hex) => (color = hex)"
+          @request-tool="(key) => (tool = key)"
         />
-        <div v-if="canEdit" class="sb-toolbar">
+
+        <div v-if="frames.length" class="sb-frames">
+          <FrameTimeline
+            :scene="scene"
+            :frame="currentFrame"
+            :onion-depth="0"
+            read-only
+            @update:scene="onSceneUpdate"
+            @update:frame="(id) => (currentFrame = id)"
+            @close="currentFrame = frames[0].id"
+          />
+        </div>
+        <div v-if="canEdit" class="sb-toolbar" :class="{ 'has-frames': frames.length }">
           <BoardToolbar
             v-model:tool="tool"
             v-model:color="color"
             v-model:fill="fill"
             v-model:width="strokeWidth"
+            v-model:opacity="opacity"
             v-model:text-size="textSize"
+            v-model:eraser-size="eraserSize"
+            v-model:erase-mode="eraseMode"
+            v-model:polygon-sides="polygonSides"
+            v-model:polygon-star="polygonStar"
             :zoom="zoom"
             :has-selection="!!selection.length"
             @zoom-in="canvasRef?.zoomIn()"
@@ -162,6 +197,14 @@ onBeforeUnmount(() => {
   justify-content: center;
 }
 
+.sb-frames {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  pointer-events: none;
+}
+
 .sb-toolbar {
   /* Центрируем флексом, БЕЗ transform: трансформированный предок образует
      backdrop root, и размытие панели перестало бы захватывать холст. */
@@ -175,4 +218,7 @@ onBeforeUnmount(() => {
   /* Клики мимо панели должны доходить до холста. */
   pointer-events: none;
 }
+
+/* Лента кадров занимает низ — панель инструментов уступает ей место. */
+.sb-toolbar.has-frames { bottom: 168px; }
 </style>

@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
-  OBJ, editableLayerIds, hitTest, moveObject, normalizeScene, objectBounds,
-  orderedObjects, scaleObject, sceneBounds, sceneText,
+  OBJ, boolMembers, editableLayerIds, hitTest, isHexColor, isObjectEditable, moveObject,
+  normalizeScene, objectAABB, objectBounds, objectLabel, objectsForFrame, orderedObjects,
+  pointInPolygon, resolveColor, rotateObject, scaleObject, sceneBounds, sceneText,
 } from './boardScene.js'
 
 describe('normalizeScene', () => {
@@ -143,5 +144,186 @@ describe('sceneText', () => {
       ],
     })
     expect(text).toBe('План\nСозвон')
+  })
+})
+
+describe('произвольный цвет', () => {
+  it('узнаёт #rrggbb и #rgb, ключи палитры цветом не считает', () => {
+    expect(isHexColor('#a1b2c3')).toBe(true)
+    expect(isHexColor('#ABC')).toBe(true)
+    expect(isHexColor('red')).toBe(false)
+    expect(isHexColor('#zzz')).toBe(false)
+  })
+
+  it('отдаёт значение как есть — теме оно не следует', () => {
+    expect(resolveColor('#A1B2C3')).toBe('#A1B2C3')
+    // Белый задан значением: им рисуют и в тёмной теме.
+    expect(resolveColor('white')).toBe('#ffffff')
+  })
+})
+
+describe('слои', () => {
+  it('достраивает свойства слоёв прежних сцен', () => {
+    const scene = normalizeScene({ layers: [{ id: 'l1', name: 'Низ' }], objects: [] })
+    expect(scene.layers[0]).toMatchObject({ opacity: 1, blend: 'normal', clip: false, mask: null })
+  })
+
+  it('снимает обтравку с нижнего слоя — ей не по чему работать', () => {
+    const scene = normalizeScene({ layers: [{ id: 'l1', clip: true }], objects: [] })
+    expect(scene.layers[0].clip).toBe(false)
+  })
+
+  it('выбрасывает выдуманный режим наложения и куцую маску', () => {
+    const scene = normalizeScene({
+      layers: [{ id: 'l1' }, { id: 'l2', blend: 'радуга', mask: { points: [0, 0] } }],
+      objects: [],
+    })
+    expect(scene.layers[1].blend).toBe('normal')
+    expect(scene.layers[1].mask).toBeNull()
+  })
+})
+
+describe('кадры анимации', () => {
+  const scene = {
+    animation: { fps: 12, frames: [{ id: 'f1' }, { id: 'f2' }] },
+    layers: [{ id: 'l1' }],
+    objects: [
+      { id: 'a', type: OBJ.rect, layer: 'l1', frame: 'f1' },
+      { id: 'b', type: OBJ.rect, layer: 'l1', frame: 'f2' },
+      { id: 'c', type: OBJ.rect, layer: 'l1' },
+    ],
+  }
+
+  it('в кадре видны его объекты и общие', () => {
+    expect(orderedObjects(scene, { frame: 'f1' }).map((o) => o.id)).toEqual(['a', 'c'])
+    expect(objectsForFrame(scene, 'f2').map((o) => o.id)).toEqual(['b', 'c'])
+  })
+
+  it('без кадров анимации нет вовсе', () => {
+    expect(normalizeScene({ animation: { fps: 12, frames: [] }, objects: [] }).animation).toBeNull()
+  })
+
+  it('объект удалённого кадра становится общим, а не пропадает', () => {
+    const fixed = normalizeScene({
+      animation: { fps: 12, frames: [{ id: 'f1' }] },
+      objects: [{ id: 'a', type: OBJ.rect, frame: 'нет-такого' }],
+    })
+    expect(fixed.objects).toHaveLength(1)
+    expect(fixed.objects[0].frame).toBeUndefined()
+  })
+
+  it('частота держится в разумных границах', () => {
+    const fast = normalizeScene({ animation: { fps: 999, frames: [{ id: 'f1' }] }, objects: [] })
+    expect(fast.animation.fps).toBe(60)
+  })
+})
+
+describe('поворот', () => {
+  const rect = { type: OBJ.rect, x: 0, y: 0, w: 100, h: 20, angle: 90 }
+
+  it('габарит считается по повёрнутым углам', () => {
+    const b = objectAABB(rect)
+    expect(Math.round(b.w)).toBe(20)
+    expect(Math.round(b.h)).toBe(100)
+  })
+
+  it('клик попадает по объекту в его повёрнутом виде', () => {
+    // После поворота на 90° полоса стоит вертикально: точка ниже центра — в ней.
+    expect(hitTest(rect, 50, 50)).toBe(true)
+    expect(hitTest(rect, 95, 10)).toBe(false)
+  })
+
+  it('поворот группы крутит объекты вокруг общего центра', () => {
+    const moved = rotateObject({ type: OBJ.rect, x: 100, y: 0, w: 10, h: 10 }, 180, { x: 0, y: 0 })
+    expect(Math.round(moved.x)).toBe(-110)
+    expect(moved.angle).toBe(180)
+  })
+})
+
+describe('лассо', () => {
+  it('точка внутри и снаружи контура', () => {
+    const square = [0, 0, 100, 0, 100, 100, 0, 100]
+    expect(pointInPolygon(square, 50, 50)).toBe(true)
+    expect(pointInPolygon(square, 150, 50)).toBe(false)
+  })
+})
+
+describe('дерево слоёв', () => {
+  it('скрытые объекты не идут в отрисовку, но остаются в сцене', () => {
+    const scene = {
+      layers: [{ id: 'l1' }],
+      objects: [
+        { id: 'a', type: OBJ.rect, layer: 'l1' },
+        { id: 'b', type: OBJ.rect, layer: 'l1', hidden: true },
+      ],
+    }
+    expect(orderedObjects(scene).map((o) => o.id)).toEqual(['a'])
+    expect(normalizeScene(scene).objects).toHaveLength(2)
+  })
+
+  it('запертый и скрытый объект не редактируется', () => {
+    const layers = new Set(['l1'])
+    expect(isObjectEditable({ layer: 'l1' }, layers)).toBe(true)
+    expect(isObjectEditable({ layer: 'l1', locked: true }, layers)).toBe(false)
+    expect(isObjectEditable({ layer: 'l1', hidden: true }, layers)).toBe(false)
+    expect(isObjectEditable({ layer: 'нет' }, layers)).toBe(false)
+  })
+
+  it('подпись строки — свой текст, иначе название типа', () => {
+    expect(objectLabel({ type: OBJ.text, text: 'План\nвторая строка' })).toBe('План')
+    expect(objectLabel({ type: OBJ.ellipse })).toBe('Овал')
+    expect(objectLabel({ type: OBJ.polygon, star: true })).toBe('Звезда')
+    expect(objectLabel({ type: OBJ.path, erase: true })).toBe('Ластик')
+  })
+})
+
+describe('булевы группы', () => {
+  it('группа из одного участника распадается', () => {
+    const scene = normalizeScene({
+      objects: [{ id: 'a', type: OBJ.rect, bool: 'g1', boolOp: 'subtract' }],
+    })
+    expect(scene.objects[0].bool).toBeUndefined()
+    expect(scene.objects[0].boolOp).toBeUndefined()
+  })
+
+  it('выдуманная операция становится объединением', () => {
+    const scene = normalizeScene({
+      objects: [
+        { id: 'a', type: OBJ.rect, bool: 'g1', boolOp: 'union' },
+        { id: 'b', type: OBJ.rect, bool: 'g1', boolOp: 'вычесть-как-нибудь' },
+      ],
+    })
+    expect(scene.objects[1].boolOp).toBe('union')
+  })
+
+  it('участники группы собираются в порядке отрисовки', () => {
+    const objects = [
+      { id: 'a', type: OBJ.rect, bool: 'g1' },
+      { id: 'x', type: OBJ.rect },
+      { id: 'b', type: OBJ.rect, bool: 'g1' },
+    ]
+    expect(boolMembers(objects, 'g1').map((o) => o.id)).toEqual(['a', 'b'])
+  })
+})
+
+describe('градиент и эффекты в сцене', () => {
+  it('битый градиент и пустые эффекты не сохраняются', () => {
+    const scene = normalizeScene({
+      objects: [{ id: 'a', type: OBJ.rect, gradient: { stops: [] }, effects: { blur: 0 } }],
+    })
+    expect(scene.objects[0].gradient).toBeUndefined()
+    expect(scene.objects[0].effects).toBeUndefined()
+  })
+
+  it('годный градиент остаётся с отсортированными точками', () => {
+    const scene = normalizeScene({
+      objects: [{
+        id: 'a',
+        type: OBJ.rect,
+        gradient: { type: 'radial', stops: [{ color: 'red', at: 1 }, { color: 'blue', at: 0 }] },
+      }],
+    })
+    expect(scene.objects[0].gradient.type).toBe('radial')
+    expect(scene.objects[0].gradient.stops[0].color).toBe('blue')
   })
 })
