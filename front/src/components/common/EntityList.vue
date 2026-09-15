@@ -119,11 +119,15 @@
                 @click="$emit('select', item[idKey])"
                 @contextmenu.prevent="openItemMenu(item, $event)"
               >
-                <template v-if="slots.hint" #hint><slot name="hint" :item="item" /></template>
+                <!-- Чипы — под названием, а не справа: панель списка узкая, и
+                     колонка чипов, не умея сжиматься, съедала название целиком. -->
+                <template v-if="slots.hint || slots.chips" #hint>
+                  <slot name="hint" :item="item">{{ hint ? hint(item) : '' }}</slot>
+                  <span v-if="slots.chips" class="el-chips"><slot name="chips" :item="item" /></span>
+                </template>
                 <!-- Управление отдаём строке, только когда есть что показать:
                      пустой слот всё равно занял бы отступ справа. -->
-                <template v-if="slots.chips || isPinned(item)" #default>
-                  <slot name="chips" :item="item" />
+                <template v-if="isPinned(item)" #default>
                   <span
                     v-if="isPinned(item)"
                     class="material-symbols-outlined el-pin"
@@ -675,6 +679,8 @@ watch(() => props.scope, () => { filter.value = '' })
 .el-item.drop-after::after { bottom: -4px; }
 
 .el-pin { font-size: 17px; color: var(--color-primary); }
+
+.el-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
 
 .el-drop-hint {
   margin: 2px 4px;
