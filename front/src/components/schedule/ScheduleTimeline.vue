@@ -234,7 +234,7 @@ const scaleStyle = computed(() => ({
   border-radius: var(--radius-md);
   /* Колонка — подложка, а не карточка: сплошная плашка спорила с блоками
      занятий, поэтому фон едва заметный, а форму держит рамка. */
-  background: color-mix(in oklch, var(--color-surface-low) 55%, transparent);
+  background: var(--panel-tint-bg);
   border: 1px solid var(--color-outline-dim);
 }
 .st-col.today {

@@ -1308,7 +1308,7 @@ async function handleSetColor(color) {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  background: color-mix(in oklch, var(--color-surface-low) 55%, transparent);
+  background: var(--panel-tint-bg);
   padding: 20px;
   gap: 14px;
   overflow: hidden;

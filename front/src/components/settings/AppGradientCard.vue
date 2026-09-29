@@ -24,17 +24,24 @@
       </div>
     </Transition>
 
-    <!-- Про железо, а не про вкус: плотные панели разгружают видеокарту. -->
+    <!-- Про железо, а не про вкус: стекло — самая дорогая часть интерфейса
+         для видеокарты и батареи. Без прозрачности размытие теряет смысл,
+         поэтому его переключатель тогда неактивен. -->
     <AppSwitchRow
-      :model-value="reduceTransparency"
-      title="Меньше прозрачности"
-      :hint="transparencyChoice
-        ? 'Плотные панели вместо размытого стекла — легче для видеокарты и батареи.'
-        : 'Плотные панели вместо размытого стекла — легче для видеокарты и батареи. Сейчас — как в системе.'"
-      @update:model-value="setReduceTransparency"
+      :model-value="transparencyEnabled"
+      title="Прозрачность"
+      hint="Выключено — окна и панели плотные, обои под ними не видны."
+      @update:model-value="setTransparency"
     />
-    <div v-if="transparencyChoice" class="ag-actions">
-      <AppButton variant="text" icon="settings_suggest" label="Как в системе" @click="setReduceTransparency(null)" />
+    <AppSwitchRow
+      :model-value="blurEnabled"
+      :disabled="!transparencyEnabled"
+      title="Размытие"
+      hint="Выключено — панели остаются полупрозрачными, но без размытия. Легче для видеокарты и батареи."
+      @update:model-value="setBlur"
+    />
+    <div v-if="transparencyChoice || blurChoice" class="ag-actions">
+      <AppButton variant="text" icon="settings_suggest" label="Как в системе" @click="resetGlass" />
     </div>
   </AppCard>
 </template>
@@ -44,9 +51,16 @@ import AppCard from '@/components/ui/AppCard.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppSwitchRow from '@/components/ui/AppSwitchRow.vue'
 import { useThemeStore } from '@/stores/theme.js'
-import { reduceTransparency, setReduceTransparency, transparencyChoice } from '@/utils/transparency.js'
+import {
+  blurChoice, blurEnabled, setBlur, setTransparency, transparencyChoice, transparencyEnabled,
+} from '@/utils/transparency.js'
 
 const themeStore = useThemeStore()
+
+function resetGlass() {
+  setTransparency(null)
+  setBlur(null)
+}
 </script>
 
 <style scoped>

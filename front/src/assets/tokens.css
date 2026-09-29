@@ -306,6 +306,15 @@
      Blur — плавающим элементам и крупным панелям-каркасам (.rail, .split-*). */
   --acrylic-card-bg:   var(--acrylic-bg);
 
+  /* Полупрозрачные поверхности вне акрила: окно стола и его шапка, боковая
+     панель карточки задачи, колонки расписания, пузыри сообщений. Токенами —
+     чтобы «Меньше прозрачности» делал их непрозрачными (блок в конце файла). */
+  --window-bg:          color-mix(in oklch, var(--color-surface) 88%, transparent);
+  --window-bar-bg:      color-mix(in oklch, var(--color-surface-low) 45%, transparent);
+  --panel-tint-bg:      color-mix(in oklch, var(--color-surface-low) 55%, transparent);
+  --bubble-bg:          color-mix(in oklch, var(--color-surface-high) 90%, transparent);
+  --bubble-mine-bg:     color-mix(in oklch, var(--color-primary-container) 92%, transparent);
+
   /* ── Матовое стекло ПОВЕРХ акрила («иней») ────────────────────
      Настоящий backdrop-filter внутри акриловой панели бесполезен:
      панель сама с backdrop-filter и потому — backdrop root, за
@@ -547,6 +556,12 @@
     --acrylic-bg-strong: rgba(255, 255, 255, 0.86);
     --acrylic-border:    rgba(202, 196, 208, 0.55);
     --acrylic-card-bg:   rgba(255, 255, 255, 0.62);
+    /* Поверхности вне акрила — плотные: без color-mix полупрозрачность не выразить. */
+    --window-bg:         var(--color-surface);
+    --window-bar-bg:     var(--color-surface-low);
+    --panel-tint-bg:     var(--color-surface-low);
+    --bubble-bg:         var(--color-surface-high);
+    --bubble-mine-bg:    var(--color-primary-container);
     --glass-bg:          linear-gradient(155deg, rgba(255, 255, 255, 0.78), rgba(255, 255, 255, 0.48) 45%, rgba(255, 255, 255, 0.65));
     --glass-edge:        inset 0 1px 0 rgba(255, 255, 255, 0.8);
     --glass-hover-bg:    linear-gradient(155deg, rgba(27, 27, 31, 0.07), rgba(27, 27, 31, 0.03) 55%, rgba(27, 27, 31, 0.05));
@@ -621,6 +636,12 @@
     --acrylic-bg-strong: rgba(24, 29, 36, 0.9);
     --acrylic-border:    rgba(69, 80, 93, 0.55);
     --acrylic-card-bg:   rgba(24, 29, 36, 0.74);
+    /* Поверхности вне акрила — плотные: без color-mix полупрозрачность не выразить. */
+    --window-bg:         var(--color-surface);
+    --window-bar-bg:     var(--color-surface-low);
+    --panel-tint-bg:     var(--color-surface-low);
+    --bubble-bg:         var(--color-surface-high);
+    --bubble-mine-bg:    var(--color-primary-container);
     --glass-bg:          linear-gradient(155deg, rgba(227, 226, 230, 0.12), rgba(227, 226, 230, 0.04) 45%, rgba(227, 226, 230, 0.08));
     --glass-edge:        inset 0 1px 0 rgba(227, 226, 230, 0.16);
     --glass-hover-bg:    linear-gradient(155deg, rgba(227, 226, 230, 0.12), rgba(227, 226, 230, 0.04) 45%, rgba(227, 226, 230, 0.08));
@@ -652,23 +673,42 @@
   }
 }
 
-/* ── «Меньше прозрачности» (utils/transparency.js) ────────────────
-   Плотные подложки вместо стекла: акрил становится непрозрачным, размытие
-   снимается со ВСЕХ элементов, включая заданные в компонентах числом
-   (маски диалогов, плашки). Блок стоит последним, чтобы перекрыть и тёмную
-   тему, и hex-фолбэк старых iOS. */
-:root[data-reduce-transparency] {
-  --acrylic-bg:          var(--color-surface);
-  --acrylic-bg-strong:   var(--color-surface);
-  --acrylic-card-bg:     var(--color-surface);
+/* ── Стекло: «Размытие» и «Прозрачность» (utils/transparency.js) ─────
+   Блоки стоят последними, чтобы перекрыть и тёмную тему, и hex-фолбэк.
+   Тёмная тема объявляет свои значения не только на <html>, но и на
+   .app-layout (App.vue ставит ей data-dark), и объявление на вложенном
+   элементе побеждает наследование с :root — поэтому селекторы режимов
+   дублируются на [data-dark] внутри.
+
+   data-no-blur — без размытия: backdrop-filter снимается со ВСЕХ элементов,
+   включая заданные в компонентах числом (маски диалогов, плашки); панели
+   остаются полупрозрачными. */
+:root[data-no-blur],
+:root[data-no-blur] [data-dark] {
   --acrylic-blur:        none;
   --acrylic-blur-strong: none;
   --bubble-blur:         none;
 }
 
-:root[data-reduce-transparency] *,
-:root[data-reduce-transparency] *::before,
-:root[data-reduce-transparency] *::after {
+:root[data-no-blur] *,
+:root[data-no-blur] *::before,
+:root[data-no-blur] *::after {
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
+}
+
+/* data-opaque — без прозрачности (вместе с ним всегда стоит data-no-blur):
+   плотными становятся акрил и поверхности вне акрила. «Иней» --glass-bg
+   остаётся — это оттенок поверх подложки и единственная заливка кнопок. */
+:root[data-opaque],
+:root[data-opaque] [data-dark] {
+  --acrylic-bg:          var(--color-surface);
+  --acrylic-bg-strong:   var(--color-surface);
+  --acrylic-card-bg:     var(--color-surface);
+  --acrylic-border:      var(--color-outline-dim);
+  --window-bg:           var(--color-surface);
+  --window-bar-bg:       var(--color-surface-low);
+  --panel-tint-bg:       var(--color-surface-low);
+  --bubble-bg:           var(--color-surface-high);
+  --bubble-mine-bg:      var(--color-primary-container);
 }

@@ -1,26 +1,36 @@
 /**
- * «Меньше прозрачности»: плотные подложки вместо размытого стекла.
+ * Стекло интерфейса — две независимые настройки устройства:
  *
- * Каждое стекло — это backdrop-filter, который GPU пересчитывает при любом
- * изменении под ним; на слабой видеокарте и от батареи это заметно. Режим
- * ставит на <html> атрибут `data-reduce-transparency` — по нему tokens.css
- * делает акрил непрозрачным и снимает размытие со всех элементов.
+ * - «Размытие» (`data-no-blur` на <html>): снимает backdrop-filter со всех
+ *   элементов, панели остаются полупрозрачными. Размытие — самая дорогая
+ *   часть стекла: GPU пересчитывает его при любом изменении под панелью.
+ * - «Прозрачность» (`data-opaque`): окна, панели и прочие поверхности
+ *   становятся плотными, обои под ними не видны. Размытие под плотной панелью
+ *   бессмысленно, поэтому снимается вместе с ней.
  *
- * По умолчанию следует системной настройке (`prefers-reduced-transparency`),
- * явный выбор человека хранится на УСТРОЙСТВЕ (localStorage): это про железо,
- * а не про вкус, как и раскладка каркаса.
+ * Обе по умолчанию следуют системной `prefers-reduced-transparency`; явный
+ * выбор хранится на УСТРОЙСТВЕ (localStorage) — это про железо, а не про вкус.
+ * Значения токенов — в конце tokens.css.
  */
 import { ref } from 'vue'
 
-const KEY = 'gw_reduce_transparency'
+const BLUR_KEY = 'gw_glass_blur'
+const OPACITY_KEY = 'gw_glass_transparency'
 
-function readChoice() {
+function readChoice(key) {
   try {
-    const v = localStorage.getItem(KEY)
+    const v = localStorage.getItem(key)
     return v === 'on' || v === 'off' ? v : null
   } catch {
     return null
   }
+}
+
+function writeChoice(key, value) {
+  try {
+    if (value) localStorage.setItem(key, value)
+    else localStorage.removeItem(key)
+  } catch { /* приватный режим — выбор живёт до перезагрузки */ }
 }
 
 const mq = typeof window !== 'undefined' && typeof window.matchMedia === 'function'
@@ -28,16 +38,23 @@ const mq = typeof window !== 'undefined' && typeof window.matchMedia === 'functi
   : null
 
 /** Явный выбор: 'on' | 'off' | null (как в системе). */
-export const transparencyChoice = ref(readChoice())
-/** Действует ли режим сейчас. */
-export const reduceTransparency = ref(false)
+export const blurChoice = ref(readChoice(BLUR_KEY))
+export const transparencyChoice = ref(readChoice(OPACITY_KEY))
+/** Действующие значения. */
+export const blurEnabled = ref(true)
+export const transparencyEnabled = ref(true)
+
+function effective(choice) {
+  return choice ? choice === 'on' : !mq?.matches
+}
 
 function apply() {
-  const on = transparencyChoice.value ? transparencyChoice.value === 'on' : !!mq?.matches
-  reduceTransparency.value = on
-  if (typeof document !== 'undefined') {
-    document.documentElement.toggleAttribute('data-reduce-transparency', on)
-  }
+  transparencyEnabled.value = effective(transparencyChoice.value)
+  blurEnabled.value = transparencyEnabled.value && effective(blurChoice.value)
+  if (typeof document === 'undefined') return
+  const root = document.documentElement
+  root.toggleAttribute('data-opaque', !transparencyEnabled.value)
+  root.toggleAttribute('data-no-blur', !blurEnabled.value)
 }
 
 let installed = false
@@ -50,12 +67,16 @@ export function initTransparency() {
   mq.addEventListener?.('change', apply)
 }
 
-/** Явно включить/выключить; null — вернуть «как в системе». */
-export function setReduceTransparency(value) {
+/** Размытие: true/false — явно, null — как в системе. */
+export function setBlur(value) {
+  blurChoice.value = value === null ? null : (value ? 'on' : 'off')
+  writeChoice(BLUR_KEY, blurChoice.value)
+  apply()
+}
+
+/** Прозрачность: true/false — явно, null — как в системе. */
+export function setTransparency(value) {
   transparencyChoice.value = value === null ? null : (value ? 'on' : 'off')
-  try {
-    if (transparencyChoice.value) localStorage.setItem(KEY, transparencyChoice.value)
-    else localStorage.removeItem(KEY)
-  } catch { /* приватный режим — выбор живёт до перезагрузки */ }
+  writeChoice(OPACITY_KEY, transparencyChoice.value)
   apply()
 }

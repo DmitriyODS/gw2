@@ -1,124 +1,133 @@
 <template>
-  <div class="calc">
-    <!-- Табло: набранное выражение и живой результат под ним. -->
-    <div class="calc-screen">
-      <div class="calc-flags">
-        <span v-if="memory !== 0" class="calc-flag">M</span>
-        <button
-          v-if="scientific"
-          class="calc-flag as-btn"
-          type="button"
-          :title="angle === 'deg' ? 'Градусы — переключить на радианы' : 'Радианы — переключить на градусы'"
-          @click="toggleAngle"
-        >{{ angle === 'deg' ? 'DEG' : 'RAD' }}</button>
+  <!-- Своей подложки у калькулятора нет — её даёт панель AppPage, как у
+     остальных разделов: иначе в «Виджетах» и на планшете (там раздел живёт
+     экраном, а не окном) он был прозрачным всегда и мимо настроек стекла. -->
+  <AppPage headless flush :scroll="false">
+    <div class="calc">
+      <!-- Табло: набранное выражение и живой результат под ним. -->
+      <div class="calc-screen">
+        <div class="calc-flags">
+          <span v-if="memory !== 0" class="calc-flag">M</span>
+          <button
+            v-if="scientific"
+            class="calc-flag as-btn"
+            type="button"
+            :title="angle === 'deg' ? 'Градусы — переключить на радианы' : 'Радианы — переключить на градусы'"
+            @click="toggleAngle"
+          >{{ angle === 'deg' ? 'DEG' : 'RAD' }}</button>
+        </div>
+        <!-- inputmode="none": у калькулятора свои клавиши, а фокус поля (клавиши
+             ставят в него курсор) поднимал на телефоне экранную клавиатуру.
+             Физическая клавиатура и курсор работают как прежде. -->
+        <input
+          ref="exprEl"
+          v-model="expr"
+          class="calc-expr"
+          type="text"
+          inputmode="none"
+          spellcheck="false"
+          placeholder="0"
+          aria-label="Выражение"
+          @keydown.enter.prevent="equals"
+        />
+        <div class="calc-preview" :class="{ error: expr.trim() && preview === null }">
+          {{ previewText }}
+        </div>
       </div>
-      <input
-        ref="exprEl"
-        v-model="expr"
-        class="calc-expr"
-        type="text"
-        spellcheck="false"
-        placeholder="0"
-        aria-label="Выражение"
-        @keydown.enter.prevent="equals"
-      />
-      <div class="calc-preview" :class="{ error: expr.trim() && preview === null }">
-        {{ previewText }}
+
+      <div class="calc-tools">
+        <AppTabs v-model="mode" variant="tint" :tabs="MODES" dense />
+        <button
+          class="calc-hist-toggle"
+          type="button"
+          :class="{ active: historyOpen }"
+          :title="historyOpen ? 'Скрыть историю' : 'История вычислений'"
+          aria-label="История вычислений"
+          @click="historyOpen = !historyOpen"
+        >
+          <span class="material-symbols-outlined">history</span>
+        </button>
+      </div>
+
+      <!-- Клавиатура делит остаток высоты: ряды тянутся, поэтому калькулятор
+           никогда не прокручивается и не обрезается — только меняет масштаб. -->
+      <div class="calc-pads">
+        <!-- Инженерные функции требуют скобку, поэтому вставляются сразу с ней —
+             курсор оказывается внутри. -->
+        <div v-if="scientific" class="calc-fnpad">
+          <button
+            v-for="k in SCI_KEYS"
+            :key="k.label"
+            class="calc-key fn"
+            type="button"
+            @click="press(k)"
+          >{{ k.label }}</button>
+        </div>
+
+        <div class="calc-keys">
+          <button
+            v-for="k in MEM_KEYS"
+            :key="k.label"
+            class="calc-key mem"
+            type="button"
+            @click="press(k)"
+          >{{ k.label }}</button>
+
+          <button
+            v-for="k in KEYS"
+            :key="k.label"
+            class="calc-key"
+            :class="k.kind"
+            type="button"
+            @click="press(k)"
+          >{{ k.label }}</button>
+        </div>
+
+        <!-- История — слой поверх клавиатуры: в маленьком окне ей негде стоять
+             рядом, а прокрутка уместна только внутри неё самой. -->
+        <transition name="calc-hist">
+          <aside v-if="historyOpen" class="calc-history">
+            <header class="calc-history-head">
+              <h3 class="calc-history-title">История</h3>
+              <button
+                v-if="history.length"
+                class="calc-history-icon"
+                type="button"
+                title="Очистить историю"
+                aria-label="Очистить историю"
+                @click="clearHistory"
+              >
+                <span class="material-symbols-outlined">delete_sweep</span>
+              </button>
+              <button
+                class="calc-history-icon"
+                type="button"
+                title="Закрыть"
+                aria-label="Закрыть историю"
+                @click="historyOpen = false"
+              >
+                <span class="material-symbols-outlined">close</span>
+              </button>
+            </header>
+            <div class="calc-history-list">
+              <p v-if="!history.length" class="calc-history-empty">Здесь появятся вычисления</p>
+              <button
+                v-for="(row, i) in history"
+                :key="`${row.expr}-${i}`"
+                class="calc-history-row"
+                type="button"
+                title="Подставить в табло"
+                @click="expr = row.expr"
+              >
+                <span class="calc-history-expr">{{ row.expr }}</span>
+                <span class="calc-history-value">= {{ row.value }}</span>
+              </button>
+            </div>
+          </aside>
+        </transition>
       </div>
     </div>
-
-    <div class="calc-tools">
-      <AppTabs v-model="mode" variant="tint" :tabs="MODES" dense />
-      <button
-        class="calc-hist-toggle"
-        type="button"
-        :class="{ active: historyOpen }"
-        :title="historyOpen ? 'Скрыть историю' : 'История вычислений'"
-        aria-label="История вычислений"
-        @click="historyOpen = !historyOpen"
-      >
-        <span class="material-symbols-outlined">history</span>
-      </button>
-    </div>
-
-    <!-- Клавиатура делит остаток высоты: ряды тянутся, поэтому калькулятор
-         никогда не прокручивается и не обрезается — только меняет масштаб. -->
-    <div class="calc-pads">
-      <!-- Инженерные функции требуют скобку, поэтому вставляются сразу с ней —
-           курсор оказывается внутри. -->
-      <div v-if="scientific" class="calc-fnpad">
-        <button
-          v-for="k in SCI_KEYS"
-          :key="k.label"
-          class="calc-key fn"
-          type="button"
-          @click="press(k)"
-        >{{ k.label }}</button>
-      </div>
-
-      <div class="calc-keys">
-        <button
-          v-for="k in MEM_KEYS"
-          :key="k.label"
-          class="calc-key mem"
-          type="button"
-          @click="press(k)"
-        >{{ k.label }}</button>
-
-        <button
-          v-for="k in KEYS"
-          :key="k.label"
-          class="calc-key"
-          :class="k.kind"
-          type="button"
-          @click="press(k)"
-        >{{ k.label }}</button>
-      </div>
-
-      <!-- История — слой поверх клавиатуры: в маленьком окне ей негде стоять
-           рядом, а прокрутка уместна только внутри неё самой. -->
-      <transition name="calc-hist">
-        <aside v-if="historyOpen" class="calc-history">
-          <header class="calc-history-head">
-            <h3 class="calc-history-title">История</h3>
-            <button
-              v-if="history.length"
-              class="calc-history-icon"
-              type="button"
-              title="Очистить историю"
-              aria-label="Очистить историю"
-              @click="clearHistory"
-            >
-              <span class="material-symbols-outlined">delete_sweep</span>
-            </button>
-            <button
-              class="calc-history-icon"
-              type="button"
-              title="Закрыть"
-              aria-label="Закрыть историю"
-              @click="historyOpen = false"
-            >
-              <span class="material-symbols-outlined">close</span>
-            </button>
-          </header>
-          <div class="calc-history-list">
-            <p v-if="!history.length" class="calc-history-empty">Здесь появятся вычисления</p>
-            <button
-              v-for="(row, i) in history"
-              :key="`${row.expr}-${i}`"
-              class="calc-history-row"
-              type="button"
-              title="Подставить в табло"
-              @click="expr = row.expr"
-            >
-              <span class="calc-history-expr">{{ row.expr }}</span>
-              <span class="calc-history-value">= {{ row.value }}</span>
-            </button>
-          </div>
-        </aside>
-      </transition>
-    </div>
-  </div>
+  </AppPage>
 </template>
 
 <script setup>
@@ -134,6 +143,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { evaluate, formatResult } from '@/utils/calc.js'
 import { storageGet, storageSet, storageGetJSON, storageSetJSON } from '@/utils/storage.js'
 import AppTabs from '@/components/ui/AppTabs.vue'
+import AppPage from '@/components/ui/AppPage.vue'
 
 const MODE_KEY = 'gw_calc_mode'
 const ANGLE_KEY = 'gw_calc_angle'
@@ -329,6 +339,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
   container-type: size;
   display: flex;
   flex-direction: column;
+  flex: 1;
   height: 100%;
   min-height: 0;
   padding: 12px;

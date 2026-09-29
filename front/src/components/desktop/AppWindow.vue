@@ -281,7 +281,7 @@ function onResizeDown(dir, e) {
   overflow: hidden;
   border: 1px solid var(--acrylic-border);
   border-radius: var(--radius-xl);
-  background: color-mix(in oklch, var(--color-surface) 88%, transparent);
+  background: var(--window-bg);
   -webkit-backdrop-filter: var(--acrylic-blur);
   backdrop-filter: var(--acrylic-blur);
   /* Тень окна нейтральная и мягкая: общие --shadow-* тонированы primary и на
@@ -334,7 +334,7 @@ function onResizeDown(dir, e) {
   cursor: grab;
   touch-action: none;
   border-bottom: 1px solid color-mix(in oklch, var(--acrylic-border) 60%, transparent);
-  background: color-mix(in oklch, var(--color-surface-low) 45%, transparent);
+  background: var(--window-bar-bg);
 }
 
 .win.busy .win-bar { cursor: grabbing; }

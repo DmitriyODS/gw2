@@ -571,7 +571,7 @@ const joinLabel = computed(() => props.isMine ? 'Вернуться' : 'Прис
 .msg-bubble {
   max-width: 70%;
   background: var(--color-surface-high);
-  background: color-mix(in oklch, var(--color-surface-high) 90%, transparent);
+  background: var(--bubble-bg);
   border: 1px solid var(--acrylic-border);
   box-shadow: var(--glass-edge);
   color: var(--color-text);
@@ -583,7 +583,7 @@ const joinLabel = computed(() => props.isMine ? 'Вернуться' : 'Прис
 
 .msg-row.outgoing .msg-bubble {
   background: var(--color-primary-container);
-  background: color-mix(in oklch, var(--color-primary-container) 92%, transparent);
+  background: var(--bubble-mine-bg);
   color: var(--color-on-primary-container);
   border-top-left-radius: 20px;
   border-top-right-radius: 6px;
