@@ -108,7 +108,7 @@
           <MobileStatList v-if="isMobile && responsiblesData.length" :items="responsiblesData">
             <template #default="{ row: r }">
               <div class="m-row-main">
-                <img class="m-avatar" :src="avatarOf(r)" :alt="r.fio" />
+                <img loading="lazy" decoding="async" class="m-avatar" :src="avatarOf(r)" :alt="r.fio" />
                 <div class="m-row-text">
                   <span class="m-row-title">{{ r.fio }}</span>
                   <span v-if="r.post" class="m-row-sub">{{ r.post }}</span>
@@ -125,7 +125,7 @@
               <Column field="fio" header="Сотрудник">
                 <template #body="{ data }">
                   <div class="resp-cell">
-                    <img class="resp-ava" :src="avatarOf(data)" :alt="data.fio" />
+                    <img loading="lazy" decoding="async" class="resp-ava" :src="avatarOf(data)" :alt="data.fio" />
                     <div class="resp-info">
                       <div class="resp-fio">{{ data.fio }}</div>
                       <div v-if="data.post" class="resp-post">{{ data.post }}</div>

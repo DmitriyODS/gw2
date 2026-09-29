@@ -13,7 +13,7 @@
     </div>
     <ul v-else class="rb-list">
       <li v-for="u in readers" :key="u.id" class="rb-item">
-        <img class="rb-ava" :src="avatarOf(u)" :alt="u.fio" />
+        <img loading="lazy" decoding="async" class="rb-ava" :src="avatarOf(u)" :alt="u.fio" />
         <span class="rb-name">{{ u.fio }}</span>
       </li>
     </ul>

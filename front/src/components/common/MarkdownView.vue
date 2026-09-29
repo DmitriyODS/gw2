@@ -31,7 +31,10 @@ const ATTRS = new Set([
 const URL_ATTRS = new Set(['href', 'src'])
 const UNSAFE_URL = /^\s*(javascript|vbscript|data):/i
 
-function toVNodes(parent) {
+/* Разбор строки в «описание» дерева: строки — текст, объекты — {tag, attrs,
+   children}. Именно описание, а не VNode, кэшируется: VNode Vue помечает при
+   монтировании и повторно в другом месте их не вставить. */
+function describe(parent) {
   const out = []
   for (const node of parent.childNodes) {
     if (node.nodeType === Node.TEXT_NODE) {
@@ -40,7 +43,7 @@ function toVNodes(parent) {
     }
     if (node.nodeType !== Node.ELEMENT_NODE) continue
     const tag = node.localName
-    const children = toVNodes(node)
+    const children = describe(node)
     if (!TAGS.has(tag)) {
       out.push(...children) // незнакомая обёртка — текст сохраняем, тег нет
       continue
@@ -51,16 +54,40 @@ function toVNodes(parent) {
       if (URL_ATTRS.has(name) && UNSAFE_URL.test(value)) continue
       attrs[name] = name === 'disabled' || name === 'checked' ? true : value
     }
-    out.push(h(tag, attrs, children.length ? children : undefined))
+    out.push({ tag, attrs, children })
   }
   return out
 }
 
-const tree = computed(() => {
-  const tpl = document.createElement('template')
-  tpl.innerHTML = renderMarkdown(props.source, { mentions: props.mentions, mentionNames: props.mentionNames })
-  return toVNodes(tpl.content)
-})
+function toVNodes(desc) {
+  return desc.map((d) => (typeof d === 'string'
+    ? d
+    : h(d.tag, d.attrs, d.children.length ? toVNodes(d.children) : undefined)))
+}
+
+/* Кэш разбора по тексту: лента чата и портала монтирует одни и те же тексты
+   снова и снова (прокрутка, переключение чатов), а парсер плюс разбор HTML —
+   самая дорогая часть пузыря. Карта ограничена: давние записи вытесняются. */
+const CACHE_LIMIT = 400
+const cache = new Map()
+
+function parse(source, mentions, mentionNames) {
+  const key = (mentions ? JSON.stringify(mentionNames) : '') + '\u0000' + source
+  let desc = cache.get(key)
+  if (desc) {
+    // Повторное обращение поднимает запись — вытесняются самые давние.
+    cache.delete(key)
+  } else {
+    const tpl = document.createElement('template')
+    tpl.innerHTML = renderMarkdown(source, { mentions, mentionNames })
+    desc = describe(tpl.content)
+    if (cache.size >= CACHE_LIMIT) cache.delete(cache.keys().next().value)
+  }
+  cache.set(key, desc)
+  return desc
+}
+
+const tree = computed(() => toVNodes(parse(props.source, props.mentions, props.mentionNames)))
 
 const Content = () => tree.value
 

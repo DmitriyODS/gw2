@@ -10,9 +10,9 @@
         :aria-label="`Открыть профиль: ${author.fio}`"
         @click="openAuthorProfile(post.author_id)"
       >
-        <img class="post-avatar" :src="author.avatarUrl" :alt="author.fio" />
+        <img loading="lazy" decoding="async" class="post-avatar" :src="author.avatarUrl" :alt="author.fio" />
       </button>
-      <img v-else class="post-avatar" :src="author.avatarUrl" :alt="author.fio" />
+      <img v-else loading="lazy" decoding="async" class="post-avatar" :src="author.avatarUrl" :alt="author.fio" />
       <div class="post-head-info">
         <div class="post-head-top">
           <button
@@ -105,7 +105,7 @@
         :aria-label="`Открыть изображение: ${a.name}`"
         @click="openLightbox(a)"
       >
-        <img :src="a.thumb_url || a.url" :alt="a.name" loading="lazy" />
+        <img decoding="async" :src="a.thumb_url || a.url" :alt="a.name" loading="lazy" />
         <span v-if="hiddenImagesCount && i === visibleImages.length - 1" class="post-image-more">
           +{{ hiddenImagesCount }}
         </span>

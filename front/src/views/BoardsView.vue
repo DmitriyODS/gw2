@@ -453,7 +453,7 @@ async function onImportPick(e) {
           @contextmenu.prevent.stop="openBoardMenu(b, $event)"
         >
           <div class="bv-thumb">
-            <img v-if="b.preview_url" :src="b.preview_url" :alt="b.title || 'Доска'" loading="lazy" />
+            <img v-if="b.preview_url" decoding="async" :src="b.preview_url" :alt="b.title || 'Доска'" loading="lazy" />
             <span v-else class="material-symbols-outlined bv-thumb-ph">gesture</span>
           </div>
           <div class="bv-card-body">

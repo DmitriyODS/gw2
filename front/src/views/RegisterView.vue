@@ -6,7 +6,7 @@
              подтверждения почты (до неё сессии нет). -->
         <div class="rg-photo">
           <button type="button" class="rg-photo-tile" @click="cropping = true">
-            <img v-if="avatarPreview" :src="avatarPreview" alt="" class="rg-photo-img" />
+            <img v-if="avatarPreview" loading="lazy" decoding="async" :src="avatarPreview" alt="" class="rg-photo-img" />
             <template v-else>
               <span class="material-symbols-outlined">person</span>
               <span class="rg-photo-hint">нажмите, чтобы выбрать фото</span>

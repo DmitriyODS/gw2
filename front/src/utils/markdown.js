@@ -6,6 +6,7 @@
 // XSS невозможен; url картинок/ссылок — только http(s)/mailto/tel или
 // относительные пути (/uploads/…).
 
+import { safeHref } from './safeHref.js'
 import { linkifyParts } from './linkify.js'
 
 const ESCAPE_MAP = {
@@ -36,11 +37,6 @@ function escapeAttr(str) {
   return escapeHtml(str).replace(/`/g, '&#96;')
 }
 
-function safeUrl(url) {
-  if (/^(https?:|mailto:|tel:)/i.test(url)) return url
-  if (url.startsWith('/')) return url
-  return 'https://' + url
-}
 
 // Заменяет URL'ы вне ссылок и инлайн-кода на <a>.
 function autoLink(text) {
@@ -70,14 +66,14 @@ function parseInline(text) {
   let s = text.replaceAll(SLOT, '').replace(/`([^`\n]+)`/g, (_, code) => stash(`<code class="md-code">${code}</code>`))
 
   s = s.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (_, alt, url) =>
-    stash(`<img class="md-img" src="${escapeAttr(safeUrl(url))}" alt="${escapeAttr(alt)}" loading="lazy">`))
+    stash(`<img class="md-img" src="${escapeAttr(safeHref(url))}" alt="${escapeAttr(alt)}" loading="lazy">`))
 
   s = s.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
   s = s.replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>')
   s = s.replace(/~~([^~\n]+)~~/g, '<s>$1</s>')
 
   s = s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_, label, url) =>
-    stash(`<a href="${escapeAttr(safeUrl(url))}" target="_blank" rel="noopener noreferrer" class="md-link">${label}</a>`))
+    stash(`<a href="${escapeAttr(safeHref(url))}" target="_blank" rel="noopener noreferrer" class="md-link">${label}</a>`))
 
   // Хештеги #тег (как в соцсетях) → кликабельный чип. Сташим готовый HTML,
   // чтобы автолинк и остальные правила его не трогали. Зеркалит серверный

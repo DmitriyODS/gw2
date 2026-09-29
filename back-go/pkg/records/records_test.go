@@ -187,3 +187,18 @@ func TestDataWithoutFiles_DropsThumbToo(t *testing.T) {
 		t.Fatalf("удаление по ключу миниатюры: changed=%v removed=%v", changed, removed)
 	}
 }
+
+func TestSafeLink(t *testing.T) {
+	ok := []string{"", "site.ru", "site.ru:8080/x", "https://a.ru/?q=1", "HTTP://A.RU", "mailto:a@b.ru", "tel:+7900", "/local/path"}
+	bad := []string{"javascript:alert(1)", " JavaScript:alert(1)", "java\tscript:alert(1)", "data:text/html,x", "vbscript:x", "file:///etc/passwd"}
+	for _, s := range ok {
+		if !SafeLink(s) {
+			t.Errorf("SafeLink(%q) = false, want true", s)
+		}
+	}
+	for _, s := range bad {
+		if SafeLink(s) {
+			t.Errorf("SafeLink(%q) = true, want false", s)
+		}
+	}
+}

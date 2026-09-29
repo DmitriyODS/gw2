@@ -32,7 +32,7 @@
           class="sendtask-item"
           @click="pickUser(u)"
         >
-          <img class="sendtask-avatar" :src="avatarOf(u)" :alt="u.fio" />
+          <img loading="lazy" decoding="async" class="sendtask-avatar" :src="avatarOf(u)" :alt="u.fio" />
           <div class="sendtask-info">
             <div class="sendtask-name">{{ u.fio }}</div>
             <div class="sendtask-meta">@{{ u.login }} · {{ u.post || u.role?.name }}</div>
@@ -44,7 +44,7 @@
     <!-- Шаг 2: подпись -->
     <template v-else>
       <div class="picked-row">
-        <img class="sendtask-avatar small" :src="avatarOf(picked)" :alt="picked.fio" />
+        <img loading="lazy" decoding="async" class="sendtask-avatar small" :src="avatarOf(picked)" :alt="picked.fio" />
         <div class="sendtask-info">
           <div class="sendtask-name">{{ picked.fio }}</div>
           <div class="sendtask-meta">@{{ picked.login }}</div>

@@ -29,7 +29,7 @@
     </button>
 
     <span class="item-icon" :data-kind="kindOf">
-      <img v-if="thumb" :src="thumb" class="item-thumb" alt="" loading="lazy">
+      <img v-if="thumb" decoding="async" :src="thumb" class="item-thumb" alt="" loading="lazy">
       <span v-else class="material-symbols-outlined">{{ icon }}</span>
     </span>
 

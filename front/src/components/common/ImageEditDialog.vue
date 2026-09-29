@@ -56,7 +56,7 @@
 // Лёгкий canvas-редактор картинки перед загрузкой: обрезка (рамка с
 // угловыми ручками), повороты на 90°, отражение. Повороты/отражения
 // «запекаются» в offscreen-канву сразу, обрезка применяется на «Применить».
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import AppDialog from '@/components/ui/AppDialog.vue'
 
 const props = defineProps({
@@ -222,6 +222,12 @@ function endDrag() {
   drag = null
   window.removeEventListener('pointermove', onDrag)
 }
+
+// Закрыли посреди перетаскивания — слушатель окна не должен пережить компонент.
+onBeforeUnmount(() => {
+  window.removeEventListener('pointerup', endDrag)
+  endDrag()
+})
 
 async function apply() {
   if (!base) return

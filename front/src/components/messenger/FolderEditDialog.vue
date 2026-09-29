@@ -85,7 +85,7 @@
           @click="toggleChat(c.id)"
         >
           <div class="fe-chat-ava" :class="{ group: c.is_group, dev: c.is_dev_chat }">
-            <img v-if="chatAvatar(c)" :src="chatAvatar(c)" :alt="chatName(c)" />
+            <img v-if="chatAvatar(c)" loading="lazy" decoding="async" :src="chatAvatar(c)" :alt="chatName(c)" />
             <span v-else class="material-symbols-outlined">{{ c.is_group ? 'groups' : 'support_agent' }}</span>
           </div>
           <span class="fe-chat-name">{{ chatName(c) }}</span>

@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import { createKeyLru } from '@/utils/keyLru.js'
 import { ref, reactive, watch, computed } from 'vue'
 import * as tasksApi from '@/api/tasks.js'
 import { useAuthStore } from '@/stores/auth.js'
@@ -56,6 +57,12 @@ export const useTasksStore = defineStore('tasks', () => {
   const newCommentsByTask = reactive({})
   // Карта контрибьюторов: task_id → массив { id, fio, avatar_path }.
   const contributorsByTask = reactive({})
+  // Комментарии и участники держатся для последних открытых задач: карточку
+  // перечитывают при открытии, а давние списки только занимали память.
+  const taskDetailsLru = createKeyLru(30, (taskId) => {
+    delete commentsByTask[taskId]
+    delete contributorsByTask[taskId]
+  })
   let fetchSeq = 0
   let fetchCtrl = null
 
@@ -264,6 +271,7 @@ export const useTasksStore = defineStore('tasks', () => {
 
   async function loadComments(taskId) {
     const data = await tasksApi.listTaskComments(taskId)
+    taskDetailsLru.touch(taskId)
     commentsByTask[taskId] = data.items || []
     newCommentsByTask[taskId] = data.new_count || 0
     return commentsByTask[taskId]
@@ -361,6 +369,7 @@ export const useTasksStore = defineStore('tasks', () => {
 
   async function loadContributors(taskId) {
     const data = await tasksApi.getTaskContributors(taskId)
+    taskDetailsLru.touch(taskId)
     contributorsByTask[taskId] = data.items || []
     return contributorsByTask[taskId]
   }

@@ -17,6 +17,20 @@ function freshStore() {
 describe('оконный менеджер', () => {
   beforeEach(() => { localStorage.clear() })
 
+  it('сверх предела закрывается самое давнее окно, сперва из свёрнутых', () => {
+    const desktop = freshStore()
+    desktop.limit = 3
+    const tasks = desktop.open('/tasks')
+    const notes = desktop.open('/notes')
+    desktop.minimize(notes.id)
+    desktop.open('/boards')
+    desktop.open('/drive')
+    const paths = desktop.windows.map((w) => w.path)
+    // Свёрнутые «Заметки» ушли, хотя «Задачи» открыты раньше: их видно на столе.
+    expect(paths).toEqual(['/tasks', '/boards', '/drive'])
+    expect(desktop.windows[0].id).toBe(tasks.id)
+  })
+
   it('повторное открытие раздела поднимает уже открытое окно', () => {
     const desktop = freshStore()
     const first = desktop.open('/tasks')

@@ -4,6 +4,8 @@
        font-size родителя (как текстовый эмодзи). -->
   <img
     v-if="src"
+    loading="lazy"
+    decoding="async"
     class="emoji-glyph"
     :src="src"
     :alt="char"

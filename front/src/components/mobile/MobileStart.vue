@@ -18,7 +18,7 @@
       </header>
 
       <button class="mst-rail-user" type="button" @click="open('/settings?section=account')">
-        <img class="mst-rail-avatar" :src="avatarSrc" :alt="auth.user?.fio || 'Аккаунт'" />
+        <img loading="lazy" decoding="async" class="mst-rail-avatar" :src="avatarSrc" :alt="auth.user?.fio || 'Аккаунт'" />
         <span class="mst-rail-who">
           <span class="mst-rail-name">{{ shortFio(auth.user?.fio) || 'Аккаунт' }}</span>
           <span v-if="auth.user?.post" class="mst-rail-post">{{ auth.user.post }}</span>
@@ -158,7 +158,7 @@ import { useCompanySettings } from '@/composables/useCompanySettings.js'
 import { useLongPress } from '@/composables/useLongPress.js'
 import { menuGroups } from '@/desktop/apps.js'
 import { tileFaces } from '@/desktop/liveTiles.js'
-import { avatarUrl } from '@/utils/pets.js'
+import { avatarUrl } from '@/utils/avatar.js'
 import { shortFio } from '@/utils/people.js'
 import { canPinShortcut, pinAppShortcut } from '@/utils/nativeApp.js'
 import { renderShortcutIcon } from '@/utils/shortcutIcon.js'

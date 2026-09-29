@@ -12,7 +12,7 @@
     @update:model-value="(v) => !v && $emit('close')"
   >
     <div class="preview" :data-kind="kind">
-      <img v-if="kind === 'image'" :src="src" :alt="file.name" class="media">
+      <img v-if="kind === 'image'" loading="lazy" decoding="async" :src="src" :alt="file.name" class="media">
 
       <video v-else-if="kind === 'video'" :src="src" class="media" controls preload="metadata" />
 

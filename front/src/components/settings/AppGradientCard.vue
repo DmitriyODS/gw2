@@ -23,6 +23,19 @@
         <AppButton icon="restart_alt" label="Стандартная" @click="themeStore.resetBgGradient()" />
       </div>
     </Transition>
+
+    <!-- Про железо, а не про вкус: плотные панели разгружают видеокарту. -->
+    <AppSwitchRow
+      :model-value="reduceTransparency"
+      title="Меньше прозрачности"
+      :hint="transparencyChoice
+        ? 'Плотные панели вместо размытого стекла — легче для видеокарты и батареи.'
+        : 'Плотные панели вместо размытого стекла — легче для видеокарты и батареи. Сейчас — как в системе.'"
+      @update:model-value="setReduceTransparency"
+    />
+    <div v-if="transparencyChoice" class="ag-actions">
+      <AppButton variant="text" icon="settings_suggest" label="Как в системе" @click="setReduceTransparency(null)" />
+    </div>
   </AppCard>
 </template>
 
@@ -31,6 +44,7 @@ import AppCard from '@/components/ui/AppCard.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppSwitchRow from '@/components/ui/AppSwitchRow.vue'
 import { useThemeStore } from '@/stores/theme.js'
+import { reduceTransparency, setReduceTransparency, transparencyChoice } from '@/utils/transparency.js'
 
 const themeStore = useThemeStore()
 </script>

@@ -11,7 +11,7 @@
           </div>
 
           <div class="incoming-avatar-wrap">
-            <img v-if="primaryAvatar" :src="primaryAvatar" class="incoming-avatar" :alt="primaryName" />
+            <img v-if="primaryAvatar" loading="lazy" decoding="async" :src="primaryAvatar" class="incoming-avatar" :alt="primaryName" />
             <div v-else class="incoming-avatar avatar-fallback">
               <span class="material-symbols-outlined">person</span>
             </div>

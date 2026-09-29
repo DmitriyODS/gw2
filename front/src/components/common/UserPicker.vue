@@ -110,7 +110,7 @@ watch(() => props.modelValue, syncSelected)
   <div ref="root" class="user-picker">
     <button type="button" class="picker-control" @click="toggle">
       <template v-if="selected">
-        <img :src="avatarOf(selected)" class="ava" alt="" />
+        <img loading="lazy" decoding="async" :src="avatarOf(selected)" class="ava" alt="" />
         <span class="picker-name">{{ selected.fio }}</span>
       </template>
       <template v-else>
@@ -142,7 +142,7 @@ watch(() => props.modelValue, syncSelected)
             :class="{ active: u.id === modelValue }"
             @click="pick(u)"
           >
-            <img :src="avatarOf(u)" class="ava-sm" alt="" />
+            <img loading="lazy" decoding="async" :src="avatarOf(u)" class="ava-sm" alt="" />
             <span class="item-main">
               <span class="item-fio">{{ u.fio }}</span>
               <span class="item-sub">

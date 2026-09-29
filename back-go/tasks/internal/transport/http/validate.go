@@ -2,6 +2,7 @@ package http
 
 import (
 	"encoding/json"
+	"github.com/DmitriyODS/gw2/back-go/pkg/records"
 	"strconv"
 	"time"
 	"unicode/utf8"
@@ -113,6 +114,8 @@ func parseTaskCreate(body []byte) (dto.TaskCreate, map[string]any) {
 				details[field] = []string{marshform.MsgNotString}
 			case utf8.RuneCountInString(s) > 2000:
 				details[field] = []string{marshform.LengthMax(2000)}
+			case !records.SafeLink(s):
+				details[field] = []string{"Ссылка должна вести на сайт (http или https)"}
 			default:
 				req.LinkYougile = &s
 			}
@@ -181,6 +184,9 @@ func parseTaskUpdate(body []byte) (dto.TaskUpdate, map[string]any) {
 			case utf8.RuneCountInString(s) > 2000:
 				req.LinkYougileSet = false
 				details[field] = []string{marshform.LengthMax(2000)}
+			case !records.SafeLink(s):
+				req.LinkYougileSet = false
+				details[field] = []string{"Ссылка должна вести на сайт (http или https)"}
 			default:
 				req.LinkYougile = &s
 			}

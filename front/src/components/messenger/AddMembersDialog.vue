@@ -14,7 +14,7 @@
   >
     <div v-if="selected.length" class="am-chips">
       <span v-for="u in selected" :key="u.id" class="member-chip">
-        <img class="member-chip-ava" :src="avatarOf(u)" :alt="u.fio" />
+        <img loading="lazy" decoding="async" class="member-chip-ava" :src="avatarOf(u)" :alt="u.fio" />
         <span class="member-chip-name">{{ u.fio }}</span>
         <button type="button" class="member-chip-x" :aria-label="`Убрать ${u.fio}`" @click="toggle(u)">
           <span class="material-symbols-outlined">close</span>
@@ -34,7 +34,7 @@
         :class="{ picked: isPicked(u) }"
         @click="toggle(u)"
       >
-        <img class="am-ava" :src="avatarOf(u)" :alt="u.fio" />
+        <img loading="lazy" decoding="async" class="am-ava" :src="avatarOf(u)" :alt="u.fio" />
         <div class="am-info">
           <div class="am-name">{{ u.fio }}</div>
           <div class="am-meta">@{{ u.login }}</div>

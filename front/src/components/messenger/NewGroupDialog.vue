@@ -15,7 +15,7 @@
   >
     <div class="ng-head">
       <button class="ng-avatar" type="button" :title="avatarPreview ? 'Сменить аватар' : 'Загрузить аватар'" @click="cropperOpen = true">
-        <img v-if="avatarPreview" :src="avatarPreview" alt="" />
+        <img v-if="avatarPreview" loading="lazy" decoding="async" :src="avatarPreview" alt="" />
         <span v-else class="material-symbols-outlined">add_a_photo</span>
       </button>
       <input
@@ -29,7 +29,7 @@
 
     <div v-if="selected.length" class="ng-chips">
       <span v-for="u in selected" :key="u.id" class="member-chip">
-        <img class="member-chip-ava" :src="avatarOf(u)" :alt="u.fio" />
+        <img loading="lazy" decoding="async" class="member-chip-ava" :src="avatarOf(u)" :alt="u.fio" />
         <span class="member-chip-name">{{ u.fio }}</span>
         <button type="button" class="member-chip-x" :aria-label="`Убрать ${u.fio}`" @click="toggle(u)">
           <span class="material-symbols-outlined">close</span>
@@ -53,7 +53,7 @@
         :class="{ picked: isPicked(u) }"
         @click="toggle(u)"
       >
-        <img class="ng-item-ava" :src="avatarOf(u)" :alt="u.fio" />
+        <img loading="lazy" decoding="async" class="ng-item-ava" :src="avatarOf(u)" :alt="u.fio" />
         <div class="ng-item-info">
           <div class="ng-item-name">{{ u.fio }}</div>
           <div class="ng-item-meta">@{{ u.login }}</div>

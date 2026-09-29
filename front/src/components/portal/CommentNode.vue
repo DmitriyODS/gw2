@@ -9,9 +9,9 @@
         :aria-label="`Открыть профиль: ${author.fio}`"
         @click="emit('open-profile', comment.author_id)"
       >
-        <img class="cn-avatar" :src="author.avatarUrl" :alt="author.fio" />
+        <img loading="lazy" decoding="async" class="cn-avatar" :src="author.avatarUrl" :alt="author.fio" />
       </button>
-      <img v-else class="cn-avatar" :src="author.avatarUrl" :alt="author.fio" />
+      <img v-else loading="lazy" decoding="async" class="cn-avatar" :src="author.avatarUrl" :alt="author.fio" />
 
       <div class="cn-body">
         <div class="cn-head">

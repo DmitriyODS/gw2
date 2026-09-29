@@ -5,7 +5,7 @@
 
       <template v-else-if="preview">
         <div class="jg-avatar">
-          <img v-if="preview.avatar_path" :src="`/uploads/${preview.avatar_path}`" alt="" />
+          <img v-if="preview.avatar_path" loading="lazy" decoding="async" :src="`/uploads/${preview.avatar_path}`" alt="" />
           <span v-else class="material-symbols-outlined">groups</span>
         </div>
         <AppButton variant="filled" class="jg-wide" :disabled="joining" @click="join">{{ joining ? 'вступаем…' : 'вступить в группу' }}</AppButton>

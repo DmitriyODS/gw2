@@ -7,7 +7,7 @@
 
     <div v-if="entries.length" class="live-list">
       <div v-for="entry in entries" :key="entry.unit_id" class="live-item">
-        <img class="live-avatar" :src="avatarUrl(entry.user)" :alt="entry.user?.fio || ''" />
+        <img loading="lazy" decoding="async" class="live-avatar" :src="avatarUrl(entry.user)" :alt="entry.user?.fio || ''" />
         <div class="live-info">
           <span class="live-name">{{ firstName(entry.user?.fio) }}</span>
           <span class="live-unit" :title="entry.unit_name">{{ entry.unit_name }} · {{ elapsed(entry) }}</span>
@@ -22,7 +22,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { usePetsStore } from '@/stores/pets.js'
-import { avatarUrl } from '@/utils/pets.js'
+import { avatarUrl } from '@/utils/avatar.js'
 
 const pets = usePetsStore()
 

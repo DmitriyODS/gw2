@@ -3,7 +3,7 @@
     <!-- Кто я: аватар, имя, контакты-чипы и правка одной кнопкой. -->
     <AppCard class="acc-id" :gap="20">
       <button type="button" class="acc-avatar" title="Открыть фото" @click="lightboxOpen = true">
-        <img :src="avatarSrc" :alt="user?.fio" />
+        <img loading="lazy" decoding="async" :src="avatarSrc" :alt="user?.fio" />
         <span class="acc-avatar-zoom" aria-hidden="true">
           <span class="material-symbols-outlined">zoom_in</span>
         </span>
@@ -173,7 +173,7 @@
    поэтому здесь только карточки и действия над сеансами. */
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { avatarUrl } from '@/utils/pets.js'
+import { avatarUrl } from '@/utils/avatar.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { useBillingStore } from '@/stores/billing.js'

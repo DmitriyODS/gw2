@@ -13,7 +13,7 @@
         :style="{ '--row-delay': i * 80 + 'ms' }"
       >
         <span class="tv-resp-rank">{{ i + 1 }}</span>
-        <img class="tv-resp-avatar" :src="avatarSrc(r)" alt="" />
+        <img loading="lazy" decoding="async" class="tv-resp-avatar" :src="avatarSrc(r)" alt="" />
         <span class="tv-resp-names">
           <span class="tv-resp-fio">{{ r.fio }}</span>
           <span v-if="r.post" class="tv-resp-post">{{ r.post }}</span>

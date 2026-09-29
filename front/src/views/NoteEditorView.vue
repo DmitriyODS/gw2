@@ -33,7 +33,7 @@
 
         <!-- Чужая заметка: владелец -->
         <span v-if="!isOwner && ownerName" class="np-owner" :title="`Владелец: ${ownerName}`">
-          <img class="np-owner-avatar" :src="ownerAvatarUrl" :alt="ownerName" />
+          <img loading="lazy" decoding="async" class="np-owner-avatar" :src="ownerAvatarUrl" :alt="ownerName" />
           {{ ownerName }}
         </span>
 
@@ -324,9 +324,13 @@ const saveIcon = computed(() => ({
   saved: 'cloud_done', dirty: 'edit', saving: 'progress_activity', error: 'cloud_off',
 })[saveState.value])
 
+let unmounted = false
+
 onMounted(async () => {
   try {
     const n = await api.getNote(noteId.value)
+    // Закрыли, пока шло ожидание: снятие уже отработало, навешивать некому снимать.
+    if (unmounted) return
     title.value = n.title
     doc.value = n.doc && Object.keys(n.doc).length ? n.doc : null
     tagIds.value = n.tag_ids ?? []
@@ -342,6 +346,7 @@ onMounted(async () => {
   } finally {
     loading.value = false
   }
+  if (unmounted) return
   window.addEventListener('beforeunload', flush)
   window.addEventListener('keydown', onKeydown)
   document.addEventListener('mousedown', onDocPointerDown, true)
@@ -349,6 +354,7 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  unmounted = true
   window.removeEventListener('beforeunload', flush)
   window.removeEventListener('keydown', onKeydown)
   document.removeEventListener('mousedown', onDocPointerDown, true)

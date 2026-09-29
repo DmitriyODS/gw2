@@ -4,6 +4,7 @@
     title="Портал"
     :commands="commands"
     flush
+    :scroll="false"
     @command="onCommand"
   >
     <!-- Свои обои ленты: слой уходит под содержимое панели раздела. -->
@@ -22,6 +23,9 @@
       />
     </template>
 
+    <!-- Прокрутка своя, а не тела страницы: по ней виртуальная лента считает,
+         какие посты у экрана. -->
+    <div ref="scrollEl" class="portal-scroll" @scroll="postsList.onScroll">
       <!-- Единая строка фильтров: разделы + популярные хештеги (тренды, как в
            соцсетях) в одном горизонтальном скролле — на мобильных не отъедает
            вторую строку. Разделитель отделяет теги от разделов. -->
@@ -108,15 +112,17 @@
             title="Пока пусто"
             subtitle="Станьте первым, кто поделится новостью в компании"
           />
-          <div v-else-if="store.posts.length" class="portal-posts">
-            <PostCard
-              v-for="p in store.posts"
-              :key="p.id"
-              :post="p"
-              @edit="openComposer"
-              @delete="confirmDelete"
-              @forward="openForward"
-            />
+          <!-- Лента виртуальная (useVirtualList): «Показать ещё» копит посты
+               без предела, а в DOM остаются только те, что у экрана. -->
+          <div
+            v-else-if="store.posts.length"
+            ref="postsEl"
+            class="portal-posts-virtual"
+            :style="{ paddingTop: `${postsTop}px`, paddingBottom: `${postsBottom}px` }"
+          >
+            <div v-for="p in visiblePosts" :key="p.id" :ref="postsList.measureRef(p.id)" class="portal-vrow">
+              <PostCard :post="p" @edit="openComposer" @delete="confirmDelete" @forward="openForward" />
+            </div>
           </div>
           <AppButton
             v-if="store.nextCursor"
@@ -128,6 +134,7 @@
         </section>
       </template>
       </div>
+    </div>
 
     <PostComposer v-model="composerOpen" :post="editingPost" @saved="onSaved" />
     <ForwardPostDialog v-model="forwardOpen" :post="forwardingPost" @confirm="onForwardConfirm" />
@@ -167,6 +174,7 @@ import TopicManageDialog from '@/components/portal/TopicManageDialog.vue'
 import PortalBackgroundDialog from '@/components/portal/PortalBackgroundDialog.vue'
 import ChatBackgroundLayer from '@/components/common/ChatBackgroundLayer.vue'
 import { isBlankRecipe } from '@/utils/chatBackgrounds.js'
+import { useVirtualList } from '@/composables/useVirtualList.js'
 
 const store = usePortalStore()
 const { isAdmin } = usePermission()
@@ -208,6 +216,17 @@ function chipStyle(t, active = false) {
 
 // Лента с серверной keyset-пагинацией: «Показать ещё» — store.fetchMore()
 // по курсору, кнопка видна пока сервер отдаёт next_cursor.
+const scrollEl = ref(null)
+const postsEl = ref(null)
+const postsList = useVirtualList({
+  container: scrollEl,
+  list: postsEl,
+  keys: computed(() => store.posts.map((p) => p.id)),
+  estimate: () => 360,
+})
+const visiblePosts = computed(() => store.posts.slice(postsList.start.value, postsList.end.value))
+const postsTop = computed(() => postsList.offsetOf(postsList.start.value))
+const postsBottom = computed(() => postsList.total.value - postsList.offsetOf(postsList.end.value))
 
 // ── Композер (создание/редактирование) ──
 const composerOpen = ref(false)
@@ -434,6 +453,22 @@ watch(() => useAuthStore().companyId, (id, prev) => {
   display: flex;
   flex-direction: column;
   gap: 14px;
+}
+
+/* Своя прокрутка ленты (AppPage :scroll="false" — содержимое скроллится само).
+   Замер строк держит позицию сам, браузерная поправка сложилась бы дважды. */
+.portal-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-anchor: none;
+}
+
+/* Промежуток между постами — отступом строки, а не gap: он должен попасть в
+   замер высоты, иначе распорки ленты расходятся с реальной раскладкой. */
+.portal-vrow {
+  display: flow-root;
+  padding-bottom: 14px;
 }
 
 @media (max-width: 640px) {

@@ -39,7 +39,11 @@ func (s *Service) Collab(ctx context.Context, userID, noteID int64, kind string,
 		payload["cursor"] = cursor
 	}
 	if doc != nil {
-		payload["doc"] = doc
+		clean, err := domain.SanitizeDoc(doc)
+		if err != nil {
+			return domain.ErrBadDoc
+		}
+		payload["doc"] = clean
 	}
 	// Название — часть live-правки (kind=doc, то же право): редактор шлёт его
 	// вместе с документом, чтобы у соавторов заголовок менялся в реальном

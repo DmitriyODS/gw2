@@ -30,7 +30,7 @@
         class="newchat-item"
         @click="pick(u)"
       >
-        <img class="newchat-avatar" :src="avatarOf(u)" :alt="u.fio" />
+        <img loading="lazy" decoding="async" class="newchat-avatar" :src="avatarOf(u)" :alt="u.fio" />
         <div class="newchat-info">
           <div class="newchat-name">{{ u.fio }}</div>
           <div class="newchat-meta">@{{ u.login }} · {{ u.post || u.role?.name }}</div>

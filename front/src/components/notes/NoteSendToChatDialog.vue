@@ -39,7 +39,7 @@
         :class="{ selected: selectedIds.has(u.id) }"
         @click="toggle(u.id)"
       >
-        <img class="nsc-avatar" :src="avatarOf(u)" :alt="u.fio" />
+        <img loading="lazy" decoding="async" class="nsc-avatar" :src="avatarOf(u)" :alt="u.fio" />
         <div class="nsc-info">
           <div class="nsc-name">{{ u.fio }}</div>
           <div class="nsc-meta">@{{ u.login }}</div>

@@ -3,7 +3,7 @@
     <!-- Картинка -->
     <template v-if="field.type === 'image'">
       <button v-if="src" class="fv-image" @click="lightbox = true">
-        <img :src="src" :alt="value?.name || ''" />
+        <img loading="lazy" decoding="async" :src="src" :alt="value?.name || ''" />
       </button>
       <span v-else class="fv-empty">—</span>
       <ImageLightbox v-if="src" v-model="lightbox" :src="src" :caption="value?.name || ''" />
@@ -45,7 +45,7 @@
     <!-- Ссылка -->
     <template v-else-if="field.type === 'link'">
       <div v-if="value" class="fv-link">
-        <a :href="value" target="_blank" rel="noopener" class="fv-link-text">{{ value }}</a>
+        <a :href="linkHref" target="_blank" rel="noopener noreferrer" class="fv-link-text">{{ value }}</a>
         <button class="fv-link-btn" title="Открыть" @click="openLink"><span class="material-symbols-outlined">open_in_new</span></button>
         <button class="fv-link-btn" title="Копировать" @click="copyLink"><span class="material-symbols-outlined">content_copy</span></button>
       </div>
@@ -92,6 +92,7 @@ import AppDialog from '@/components/ui/AppDialog.vue'
 import QrImage from '@/components/common/QrImage.vue'
 import { formatDateTime, hasQr, qrValue, stockText } from '@/utils/registryFields.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
+import { safeHref } from '@/utils/safeHref.js'
 
 const props = defineProps({
   field: { type: Object, required: true },
@@ -102,13 +103,14 @@ const lightbox = ref(false)
 const qrOpen = ref(false)
 const qrCode = computed(() => (hasQr(props.field) ? qrValue(props.value) : ''))
 const src = computed(() => (props.value?.path ? `/uploads/${props.value.path}` : ''))
+const linkHref = computed(() => (props.field.type === 'link' ? safeHref(props.value) : ''))
 const selectChips = computed(() => {
   const v = props.value
   if (Array.isArray(v)) return v
   return v ? [v] : []
 })
 
-function openLink() { window.open(props.value, '_blank', 'noopener') }
+function openLink() { if (linkHref.value) window.open(linkHref.value, '_blank', 'noopener') }
 async function copyLink() {
   try {
     await navigator.clipboard.writeText(props.value)

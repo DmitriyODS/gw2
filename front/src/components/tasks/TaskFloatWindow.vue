@@ -56,7 +56,7 @@
               <div class="field-label">Ответственный</div>
               <div class="field-value responsible-value">
                 <template v-if="task?.responsible">
-                  <img :src="avatarOf(task.responsible)" class="responsible-avatar" alt="" />
+                  <img loading="lazy" decoding="async" :src="avatarOf(task.responsible)" class="responsible-avatar" alt="" />
                   <span class="responsible-name">{{ task.responsible.fio }}</span>
                 </template>
                 <span v-else class="text-dim">Не назначен</span>

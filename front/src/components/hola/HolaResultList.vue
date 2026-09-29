@@ -11,7 +11,7 @@
         @click="$emit('pick', item)"
         @mouseenter="$emit('hover', item)"
       >
-        <img v-if="item.avatar" class="hr-avatar" :src="item.avatar" :alt="item.title" />
+        <img v-if="item.avatar" loading="lazy" decoding="async" class="hr-avatar" :src="item.avatar" :alt="item.title" />
         <span v-else class="hr-icon material-symbols-outlined">{{ item.icon }}</span>
         <span class="hr-text">
           <span class="hr-item-title">{{ item.title }}</span>

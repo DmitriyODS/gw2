@@ -183,22 +183,17 @@
 // документ — TipTap JSON (не markdown: highlight-цвета и таблицы в md не
 // выражаются). Переиспользуется страницей заметки и публичной ссылкой
 // (view — editable:false без панели; edit по ссылке — без загрузки картинок).
+import { safeDoc } from '@/utils/safeDoc.js'
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { EditorContent, useEditor } from '@tiptap/vue-3'
-import StarterKit from '@tiptap/starter-kit'
-import Underline from '@tiptap/extension-underline'
-import Link from '@tiptap/extension-link'
+import { StarterKit } from '@tiptap/starter-kit'
 import { clipboardLink } from '@/utils/pasteLink.js'
 import { ResizableImage } from './ResizableImage.js'
 import { LineGutter } from './LineGutter.js'
 import { LineNumbers } from './LineNumbers.js'
-import Table from '@tiptap/extension-table'
-import TableRow from '@tiptap/extension-table-row'
-import TableCell from '@tiptap/extension-table-cell'
-import TableHeader from '@tiptap/extension-table-header'
-import Highlight from '@tiptap/extension-highlight'
-import TaskList from '@tiptap/extension-task-list'
-import TaskItem from '@tiptap/extension-task-item'
+import { Table, TableCell, TableHeader, TableRow } from '@tiptap/extension-table'
+import { Highlight } from '@tiptap/extension-highlight'
+import { TaskItem, TaskList } from '@tiptap/extension-list'
 import { TASK_COLORS } from '@/utils/taskColors.js'
 import { proofread as apiProofread, transformText } from '@/api/ai.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
@@ -233,12 +228,17 @@ const aiBusy = ref(false)
 const aiCfgOpen = ref(false)
 
 const editor = useEditor({
-  content: props.doc && Object.keys(props.doc).length ? props.doc : null,
+  content: props.doc && Object.keys(props.doc).length ? safeDoc(props.doc) : null,
   editable: props.editable,
   extensions: [
-    StarterKit.configure({ heading: { levels: [1, 2, 3] } }),
-    Underline,
-    Link.configure({ openOnClick: !props.editable, autolink: true }),
+    /* Подчёркивание и ссылки в TipTap 3 входят в StarterKit. Хвостовой пустой
+       абзац (trailingNode) выключен: он дописывался бы в каждый документ при
+       открытии и менял заметку, которую никто не правил. */
+    StarterKit.configure({
+      heading: { levels: [1, 2, 3] },
+      link: { openOnClick: !props.editable, autolink: true },
+      trailingNode: false,
+    }),
     ResizableImage,
     Table.configure({ resizable: false }),
     TableRow,
@@ -283,7 +283,7 @@ watch(() => props.editable, (v) => editor.value?.setEditable(v))
 watch(() => props.doc, (doc) => {
   const ed = editor.value
   if (!ed || ed.isFocused || !doc) return
-  ed.commands.setContent(doc, false)
+  ed.commands.setContent(safeDoc(doc), { emitUpdate: false })
 })
 
 onBeforeUnmount(() => editor.value?.destroy())
@@ -388,7 +388,7 @@ async function runProofread() {
     const { segments: fixed } = await apiProofread(segments)
     if (!Array.isArray(fixed) || fixed.length !== segments.length) throw new Error('ИИ вернул некорректный результат')
     nodes.forEach((n, i) => { if (fixed[i]) n.text = fixed[i] }) // пустую строку не пишем (невалидный узел)
-    ed.commands.setContent(json, true)
+    ed.commands.setContent(json, { emitUpdate: true })
     notif.success('Орфография и пунктуация проверены')
   } catch (e) {
     notif.error(e?.message || 'Не удалось проверить орфографию')

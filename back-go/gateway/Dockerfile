@@ -5,7 +5,7 @@
 # replace ../pkg в go.mod). Стадия сборки бежит на платформе билдера
 # ($BUILDPLATFORM): при сборке amd64-образа на Apple Silicon компилятор Go
 # работает нативно (кросс через GOOS/GOARCH), а не под эмуляцией.
-FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS build
+FROM --platform=$BUILDPLATFORM golang:1.26.8-alpine AS build
 ARG TARGETOS
 ARG TARGETARCH
 WORKDIR /src
@@ -17,7 +17,7 @@ COPY pkg/ /src/pkg/
 COPY gateway/ /src/gateway/
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -ldflags="-s -w" -o /out/gatewaysvc ./cmd/gatewaysvc
 
-FROM alpine:3.21
+FROM alpine:3.24
 RUN apk add --no-cache ca-certificates && adduser -D gatewaysvc
 COPY --from=build /out/gatewaysvc /usr/local/bin/gatewaysvc
 USER gatewaysvc

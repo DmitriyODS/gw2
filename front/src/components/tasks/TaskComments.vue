@@ -379,7 +379,7 @@ onBeforeUnmount(() => {
         @pointercancel="onCommentPointerUp"
         @contextmenu.prevent="onCommentContextMenu($event, c)"
       >
-        <img :src="avatarOf(c.author)" class="comment-ava" :alt="c.author?.fio || ''" />
+        <img loading="lazy" decoding="async" :src="avatarOf(c.author)" class="comment-ava" :alt="c.author?.fio || ''" />
         <div class="comment-body">
           <div class="comment-head">
             <span class="comment-author">{{ c.author?.fio || 'Сотрудник' }}</span>
@@ -476,7 +476,7 @@ onBeforeUnmount(() => {
             @mousedown.prevent="selectMention(u)"
             @mouseenter="mentionIndex = i"
           >
-            <img :src="avatarUrl(u)" class="mention-ava" :alt="u.fio || ''" />
+            <img loading="lazy" decoding="async" :src="avatarUrl(u)" class="mention-ava" :alt="u.fio || ''" />
             <span class="mention-info">
               <span class="mention-fio">{{ u.fio || 'Сотрудник' }}</span>
               <span class="mention-login">@{{ u.login }}</span>

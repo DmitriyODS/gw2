@@ -11,7 +11,7 @@
   </div>
   <div v-else class="tv-brand-stage">
     <div class="tv-brand-glow"></div>
-    <img class="tv-brand-big-logo" src="/logo.svg" alt="" />
+    <img loading="lazy" decoding="async" class="tv-brand-big-logo" src="/logo.svg" alt="" />
     <div class="tv-brand-big-name">Groove Work</div>
     <div class="tv-brand-quote">«{{ quote }}»</div>
     <div class="tv-brand-date">{{ dateLabel }}</div>

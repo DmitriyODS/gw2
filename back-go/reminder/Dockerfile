@@ -4,7 +4,7 @@
 # подключается через replace ../pkg в go.mod). Стадия сборки бежит на платформе
 # билдера ($BUILDPLATFORM): при сборке amd64-образа на Apple Silicon компилятор
 # Go работает нативно (кросс через GOOS/GOARCH), а не под эмуляцией.
-FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS build
+FROM --platform=$BUILDPLATFORM golang:1.26.8-alpine AS build
 ARG TARGETOS
 ARG TARGETARCH
 WORKDIR /src
@@ -16,7 +16,7 @@ COPY pkg/ /src/pkg/
 COPY reminder/ /src/reminder/
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -ldflags="-s -w" -o /out/remindersvc ./cmd/remindersvc
 
-FROM alpine:3.21
+FROM alpine:3.24
 # tzdata — повторы считаются в зоне пользователя (time.LoadLocation).
 RUN apk add --no-cache ca-certificates tzdata && adduser -D remindersvc
 COPY --from=build /out/remindersvc /usr/local/bin/remindersvc

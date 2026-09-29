@@ -83,8 +83,12 @@ function onDocPointerDown(e) {
   if (root.value && !root.value.contains(e.target)) cancel()
 }
 
+let unmounted = false
+
 onMounted(async () => {
   await nextTick()
+  // Закрыли, пока шло ожидание: снятие уже отработало, навешивать некому снимать.
+  if (unmounted) return
   const el = input.value?.$el || input.value
   el?.focus?.()
   el?.select?.()
@@ -95,6 +99,7 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  unmounted = true
   document.removeEventListener('pointerdown', onDocPointerDown, true)
 })
 </script>

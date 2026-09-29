@@ -32,6 +32,7 @@ export class GatewaySocket {
 
     this._ws = null
     this._listeners = new Map()
+    this._any = new Set()
     this._queue = []
     this._attempt = 0
     this._reconnectTimer = null
@@ -40,6 +41,7 @@ export class GatewaySocket {
     this._refreshAuth = refreshAuth || null
     this._waitingOnline = false
     this._sleeping = false
+    this._held = null
 
     this._onOnline = () => {
       if (!this._waitingOnline || this._sleeping) return
@@ -70,6 +72,11 @@ export class GatewaySocket {
     this._listeners.get(event)?.delete(handler)
   }
 
+  /** Слушатель всех событий шлюза (служебные connect/disconnect сюда не идут). */
+  onAny(handler) {
+    this._any.add(handler)
+  }
+
   emit(event, data) {
     const frame = JSON.stringify({ event, data: data ?? null })
     if (this.connected && this._ws?.readyState === WebSocket.OPEN) {
@@ -78,6 +85,20 @@ export class GatewaySocket {
       this._queue.push(frame)
       if (this._queue.length > QUEUE_LIMIT) this._queue.shift()
     }
+  }
+
+  /** Придержать события до готовности обработчиков: часть из них грузится
+      отдельным чанком уже после открытия соединения, и кадры, пришедшие в
+      этот промежуток, иначе ушли бы в пустоту. Служебные connect/disconnect
+      идут как обычно. */
+  holdEvents(ready) {
+    const held = []
+    this._held = held
+    const flush = () => {
+      if (this._held === held) this._held = null
+      for (const [event, data] of held) this._dispatchEvent(event, data)
+    }
+    Promise.resolve(ready).then(flush, flush)
   }
 
   /** Сменить токен: следующая авторизация пойдёт с ним, а живое соединение
@@ -123,6 +144,13 @@ export class GatewaySocket {
     }
   }
 
+  _dispatchEvent(event, data) {
+    this._dispatch(event, data)
+    for (const handler of this._any) {
+      try { handler(event, data) } catch (e) { console.error('socket handler error:', e) }
+    }
+  }
+
   _open() {
     if (this._manualClose || this._sleeping) return
     let ws
@@ -162,7 +190,8 @@ export class GatewaySocket {
         this._dispatch('connect_error', new Error(code))
         return
       }
-      this._dispatch(frame.event, frame.data)
+      if (this._held) this._held.push([frame.event, frame.data])
+      else this._dispatchEvent(frame.event, frame.data)
     }
 
     ws.onclose = () => {

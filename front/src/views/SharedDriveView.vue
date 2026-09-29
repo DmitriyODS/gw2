@@ -28,7 +28,7 @@
           <AppButton label="Скачать" icon="download" variant="filled" @click="download" />
         </div>
 
-        <img v-if="isImage" :src="downloadHref" :alt="file.name" class="preview">
+        <img v-if="isImage" loading="lazy" decoding="async" :src="downloadHref" :alt="file.name" class="preview">
       </AppCard>
 
       <!-- Папка: перечисляем содержимое; вложенные папки открываются той же

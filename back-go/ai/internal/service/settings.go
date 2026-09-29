@@ -99,7 +99,6 @@ func (s *Service) UpdateSettings(ctx context.Context, actor *domain.User, compan
 	if err := s.repo.UpdateCompanyAI(ctx, company); err != nil {
 		return nil, err
 	}
-	s.invalidateClient(company.ID)
 	return s.dumpSettings(ctx, company), nil
 }
 

@@ -324,7 +324,7 @@
                 </div>
                 <footer class="na-card-foot">
                   <template v-if="isShared(n)">
-                    <img class="na-card-owner-av" :src="ownerAvatar(n)" :alt="n.owner_name || ''" />
+                    <img loading="lazy" decoding="async" class="na-card-owner-av" :src="ownerAvatar(n)" :alt="n.owner_name || ''" />
                     <span class="na-card-owner">{{ n.owner_name || 'Владелец' }}</span>
                     <span class="na-card-access" :class="n.my_access">{{ n.my_access === 'edit' ? 'правка' : 'просмотр' }}</span>
                   </template>

@@ -12,7 +12,7 @@
       <div class="lock-card">
         <BrandWordmark class="lock-brand" />
 
-        <img :src="avatar" class="lock-avatar" :alt="user?.fio">
+        <img loading="lazy" decoding="async" :src="avatar" class="lock-avatar" :alt="user?.fio">
         <h1 class="lock-name">{{ user?.fio || 'Заблокировано' }}</h1>
         <p class="lock-hint">Введите пин-код, чтобы продолжить</p>
 
@@ -68,7 +68,7 @@ import { useAuthStore } from '@/stores/auth.js'
 import ChatBackgroundLayer from '@/components/common/ChatBackgroundLayer.vue'
 import { useScreenLock } from '@/composables/useScreenLock.js'
 import { useDesktopPrefsStore } from '@/stores/desktopPrefs.js'
-import { avatarUrl } from '@/utils/pets.js'
+import { avatarUrl } from '@/utils/avatar.js'
 
 const auth = useAuthStore()
 const lock = useScreenLock()

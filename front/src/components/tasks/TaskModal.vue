@@ -192,7 +192,7 @@
             <button class="action-btn-round" title="Скопировать ссылку" @click="copyLink">
               <span class="material-symbols-outlined">content_copy</span>
             </button>
-            <a :href="task.link_yougile" target="_blank" rel="noopener noreferrer" class="action-btn-round" title="Открыть в новой вкладке">
+            <a :href="safeHref(task.link_yougile)" target="_blank" rel="noopener noreferrer" class="action-btn-round" title="Открыть в новой вкладке">
               <span class="material-symbols-outlined">open_in_new</span>
             </a>
             <button
@@ -216,7 +216,7 @@ v-if="yougileAvailable" class="action-btn-round danger"
           <div class="field-label">Ответственный</div>
           <div class="field-value responsible-value">
             <template v-if="responsibleDisplay">
-              <img :src="responsibleAvatar" class="responsible-avatar" alt="" />
+              <img loading="lazy" decoding="async" :src="responsibleAvatar" class="responsible-avatar" alt="" />
               <span class="responsible-name">{{ responsibleDisplay.fio }}</span>
             </template>
             <template v-else>
@@ -442,6 +442,7 @@ v-if="yougileAvailable" class="action-btn-round danger"
 </template>
 
 <script setup>
+import { safeHref } from '@/utils/safeHref.js'
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import Dialog from 'primevue/dialog'
 import AppDialog from '@/components/ui/AppDialog.vue'

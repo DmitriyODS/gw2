@@ -1,7 +1,7 @@
 # Микросервис рассылки писем (mailsvc): gRPC :9098 — Send(шаблон),
 # HTTP :8098 — /healthz. Stateless, доставка по SMTP.
 # Контекст сборки — back-go/ (общий модуль pkg через replace ../pkg).
-FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS build
+FROM --platform=$BUILDPLATFORM golang:1.26.8-alpine AS build
 ARG TARGETOS
 ARG TARGETARCH
 WORKDIR /src
@@ -13,7 +13,7 @@ COPY pkg/ /src/pkg/
 COPY mail/ /src/mail/
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -ldflags="-s -w" -o /out/mailsvc ./cmd/mailsvc
 
-FROM alpine:3.21
+FROM alpine:3.24
 RUN apk add --no-cache ca-certificates && adduser -D mailsvc
 COPY --from=build /out/mailsvc /usr/local/bin/mailsvc
 USER mailsvc

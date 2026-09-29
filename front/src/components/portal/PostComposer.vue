@@ -29,7 +29,7 @@
 
       <!-- Шапка как в композерах соцсетей: автор + выбор раздела -->
       <div class="composer-author">
-        <img class="composer-avatar" :src="me.avatarUrl" :alt="me.fio" />
+        <img loading="lazy" decoding="async" class="composer-avatar" :src="me.avatarUrl" :alt="me.fio" />
         <div class="composer-author-info">
           <span class="composer-author-name">{{ me.fio }}</span>
           <Select
@@ -89,7 +89,7 @@
       <!-- Медиа-сетка: превью картинок с удалением (как в соцсетях) -->
       <div v-if="mediaItems.length" class="composer-media" :class="`cols-${Math.min(mediaItems.length, 3)}`">
         <div v-for="m in mediaItems" :key="m.key" class="composer-media-item">
-          <img :src="m.url" :alt="m.name" />
+          <img loading="lazy" decoding="async" :src="m.url" :alt="m.name" />
           <button
             type="button"
             class="composer-media-remove composer-media-edit"

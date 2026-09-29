@@ -14,9 +14,8 @@ import (
 )
 
 const (
-	// cacheTTL — кэш AI-настроек компании (_CACHE_TTL_SEC во Flask): после
-	// сохранения настроек worst-case минута до подхвата — приемлемо;
-	// PUT ai-settings инвалидирует сразу.
+	// cacheTTL — кэш платформенных настроек ИИ и каталога моделей: их читает
+	// каждый запрос к модели, а меняются они редко.
 	cacheTTL = 60 * time.Second
 
 	// requestTimeout — дефолтный таймаут upstream-запроса (_REQUEST_TIMEOUT).
@@ -137,8 +136,6 @@ type Service struct {
 	// Кэши: платформенные настройки и каталог моделей читает каждый запрос к
 	// модели, а меняются они редко.
 	mu         sync.Mutex
-	cache      map[int64]cacheEntry
-	userCache  map[int64]cacheEntry
 	platform   *domain.PlatformAI
 	platformAt time.Time
 	models     *domain.ModelCatalog
@@ -149,11 +146,6 @@ type Service struct {
 
 	// семафор фоновых переиндексаций одной задачи.
 	reindexSem chan struct{}
-}
-
-type cacheEntry struct {
-	client  *aiClient
-	expires time.Time
 }
 
 // aiClient — расшифрованные настройки компании, готовые к вызовам upstream
@@ -189,8 +181,6 @@ func New(repo domain.Repository, llmClient domain.LLMClient, cipher domain.Secre
 		appBaseURL: appBaseURL,
 		support:    support,
 		log:        log,
-		cache:      map[int64]cacheEntry{},
-		userCache:  map[int64]cacheEntry{},
 		reindexSem: make(chan struct{}, reindexWorkers),
 	}
 }
@@ -219,23 +209,3 @@ func errAiDisabled(status int) *domain.Error {
 	return domain.NewError("AI_DISABLED", "AI выключен или ключ не задан", status)
 }
 
-// ── Клиент компании с кэшем (get_ai_client) ──────────────────────
-
-// clientFor — nil без ошибки, если AI выключен / ключа нет / ключ
-// нерасшифровываемый. Положительный результат кэшируется на cacheTTL,
-// отрицательный затирает кэш (чтобы выключение подхватилось сразу).
-// invalidateClient — вызывать сразу после изменения AI-настроек компании.
-func (s *Service) invalidateClient(companyID int64) {
-	s.mu.Lock()
-	delete(s.cache, companyID)
-	s.mu.Unlock()
-}
-
-// ── Личный клиент пользователя (ИИ-ассистент) ────────────────────
-
-// invalidateUserClient — вызывать сразу после изменения личных настроек.
-func (s *Service) invalidateUserClient(userID int64) {
-	s.mu.Lock()
-	delete(s.userCache, userID)
-	s.mu.Unlock()
-}

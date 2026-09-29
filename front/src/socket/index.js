@@ -5,23 +5,30 @@ import { isNativeApp } from '@/utils/nativeApp.js'
 import { useUnitsStore } from '@/stores/units.js'
 import { useMessengerStore } from '@/stores/messenger.js'
 import { useCallStore } from '@/stores/call.js'
-import { registerTaskSocketHandlers } from '@/socket/tasks.js'
+import { useLiveTilesStore } from '@/stores/liveTiles.js'
 import { registerMessengerSocketHandlers } from '@/socket/messenger.js'
 import { registerCallSocketHandlers } from '@/socket/calls.js'
 import { registerPetsSocketHandlers } from '@/socket/pets.js'
-import { registerRegistrySocketHandlers } from '@/socket/registry.js'
-import { registerFormsSocketHandlers } from '@/socket/forms.js'
-import { registerCalendarSocketHandlers } from '@/socket/calendar.js'
-import { registerDiarySocketHandlers } from '@/socket/diary.js'
-import { registerScheduleSocketHandlers } from '@/socket/schedule.js'
-import { registerNotesSocketHandlers } from '@/socket/notes.js'
-import { registerBoardsSocketHandlers } from '@/socket/boards.js'
-import { registerDriveSocketHandlers } from '@/socket/drive.js'
-import { registerRemindersSocketHandlers } from '@/socket/reminders.js'
 import { registerPortalSocketHandlers } from '@/socket/portal.js'
-import { registerBillingSocketHandlers } from '@/socket/billing.js'
 
 let socket = null
+
+/* Префикс события → раздел, чью сводку живой плитки оно меняет. Плитки
+   перезапрашивают сводку по событию, а не опросом раз в минуту. */
+const TILE_BY_EVENT_PREFIX = {
+  note: 'notes', note_member: 'notes',
+  board: 'boards', board_member: 'boards',
+  drive: 'drive', drive_file: 'drive', drive_folder: 'drive',
+  form: 'forms', response: 'forms',
+  registry: 'registries', record: 'registries',
+  post: 'portal',
+  task: 'tasks',
+  reminder: 'reminders',
+  diary: 'diaries', diary_entry: 'diaries',
+  calendar: 'calendars', entry: 'calendars',
+  schedule: 'schedule', schedule_item: 'schedule',
+  unit: 'stats',
+}
 let visibilityHookInstalled = false
 let heartbeatTimer = null
 let resyncPromise = null
@@ -228,21 +235,20 @@ export function connectSocket() {
 
   socket.on('disconnect', () => { stopHeartbeat() })
 
-  registerTaskSocketHandlers(socket)
+  socket.onAny((event) => {
+    const app = TILE_BY_EVENT_PREFIX[event.slice(0, event.indexOf(':'))]
+    if (app) useLiveTilesStore().invalidate(app)
+  })
   registerMessengerSocketHandlers(socket)
   registerCallSocketHandlers(socket)
   registerPetsSocketHandlers(socket)
-  registerRegistrySocketHandlers(socket)
-  registerFormsSocketHandlers(socket)
-  registerCalendarSocketHandlers(socket)
-  registerDiarySocketHandlers(socket)
-  registerScheduleSocketHandlers(socket)
-  registerNotesSocketHandlers(socket)
-  registerBoardsSocketHandlers(socket)
-  registerDriveSocketHandlers(socket)
-  registerRemindersSocketHandlers(socket)
   registerPortalSocketHandlers(socket)
-  registerBillingSocketHandlers(socket)
+  // Остальные разделы — отдельным чанком: их сторы первому кадру не нужны.
+  const own = socket
+  socket.holdEvents(import('@/socket/sections.js').then(({ registerSectionSocketHandlers }) => {
+    if (socket === own) registerSectionSocketHandlers(own)
+  }))
+  return socket
 }
 
 export function disconnectSocket() {

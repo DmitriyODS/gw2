@@ -304,6 +304,8 @@
                 <img
                   v-for="d in f.top_donors"
                   :key="d.user?.id"
+                  loading="lazy"
+                  decoding="async"
                   class="kb-fund-donor"
                   :src="avatarUrl(d.user)"
                   :alt="d.user?.fio"
@@ -382,7 +384,7 @@
           <ul v-else class="kb-generous">
             <li v-for="(g, i) in bank.top_generous" :key="g.user?.id ?? i" class="kb-generous-row">
               <span class="kb-generous-place">{{ ['🥇', '🥈', '🥉'][i] || '·' }}</span>
-              <img class="kb-generous-avatar" :src="avatarUrl(g.user)" :alt="g.user?.fio" />
+              <img loading="lazy" decoding="async" class="kb-generous-avatar" :src="avatarUrl(g.user)" :alt="g.user?.fio" />
               <span class="kb-generous-name">{{ g.user?.fio }}</span>
               <span class="kb-generous-sent">{{ g.sent }} <KudosCoin /></span>
               <button
@@ -479,7 +481,7 @@ import { ledgerIcon, ledgerText, ledgerGroup, kindTitle } from '@/components/pet
 import { usePetsStore } from '@/stores/pets.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { usePermission } from '@/composables/usePermission.js'
-import { avatarUrl } from '@/utils/pets.js'
+import { avatarUrl } from '@/utils/avatar.js'
 
 const TIER_EMOJI = { start: '🌱', bronze: '🥉', silver: '🥈', gold: '🥇', platinum: '💎' }
 const RATING_EMOJI = { none: '🆕', known: '🤝', trusted: '✅', prime: '🌟', premium: '👑' }

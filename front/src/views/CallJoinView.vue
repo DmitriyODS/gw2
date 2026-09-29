@@ -2,7 +2,7 @@
   <div class="join-page">
     <!-- Лендинг-карточка (пока не вошли в звонок) -->
     <div v-if="callStore.phase === 'idle'" class="join-card">
-      <img src="/logo.svg" alt="Groove Work" class="join-logo" />
+      <img loading="lazy" decoding="async" src="/logo.svg" alt="Groove Work" class="join-logo" />
 
       <template v-if="loading">
         <div class="join-spin">

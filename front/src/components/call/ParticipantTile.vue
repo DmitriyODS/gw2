@@ -22,7 +22,7 @@
 
     <div v-show="!hasVideo" class="tile-placeholder">
       <div class="tile-avatar">
-        <img v-if="avatar" :src="avatar" :alt="name" />
+        <img v-if="avatar" loading="lazy" decoding="async" :src="avatar" :alt="name" />
         <span v-else class="material-symbols-outlined">person</span>
       </div>
       <div v-if="pending" class="tile-status">

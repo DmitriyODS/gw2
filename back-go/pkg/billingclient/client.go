@@ -32,6 +32,9 @@ const Unlimited = -1
 // тарифа приемлемы, лишний gRPC на каждое действие — нет.
 const cacheTTL = 30 * time.Second
 
+// cacheSweepAt — размер кэша, с которого запись новой пары вычищает протухшие.
+const cacheSweepAt = 1024
+
 // callTimeout — биллинг рядом, ждать его долго незачем.
 const callTimeout = 2 * time.Second
 
@@ -131,6 +134,15 @@ func (c *Client) Entitlements(ctx context.Context, userID, companyID int64) *Ent
 		StorageUsed: res.GetStorageUsed(), TokensLeft: res.GetTokensLeft(), OwnerID: res.GetOwnerId(),
 	}
 	c.mu.Lock()
+	// Протухшие записи вычищаем, когда карта разрослась: ключ живёт на пару
+	// «пользователь:компания», а процесс — неделями.
+	if len(c.cache) >= cacheSweepAt {
+		for k, e := range c.cache {
+			if time.Since(e.at) >= cacheTTL {
+				delete(c.cache, k)
+			}
+		}
+	}
 	c.cache[key] = cacheEntry{ent: ent, at: time.Now()}
 	c.mu.Unlock()
 	return ent

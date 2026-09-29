@@ -29,4 +29,15 @@ describe('MarkdownView', () => {
     await w.find('.md-tag').trigger('click')
     expect(w.emitted('tag')).toEqual([['релиз']])
   })
+
+  it('один и тот же текст в нескольких местах рисуется целиком (кэш разбора)', async () => {
+    const source = '**общий** текст с [ссылкой](https://a.ru)'
+    const a = mount(MarkdownView, { props: { source } })
+    const b = mount(MarkdownView, { props: { source } })
+    expect(a.html()).toBe(b.html())
+    expect(b.find('strong').text()).toBe('общий')
+    await a.setProps({ source: 'другой' })
+    expect(a.text()).toBe('другой')
+    expect(b.find('a').attributes('href')).toBe('https://a.ru')
+  })
 })

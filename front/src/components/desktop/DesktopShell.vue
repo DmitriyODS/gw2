@@ -92,6 +92,11 @@ const prefs = useDesktopPrefsStore()
 
 /* Права на разделы, обои, живые плитки и синхронизация адреса — общие с
    мобильным каркасом (см. shellCore); здесь остаётся только раскладка. */
+/* Мягкий предел окон: каждое открытое окно держит смонтированный раздел со
+   всеми данными, а десктоп в трее живёт днями. Сверх предела закрывается самое
+   давнее — сперва из свёрнутых. */
+const WINDOW_LIMIT = 12
+
 const { wallpaper, boot } = useShellCore({
   activePath: () => {
     const win = desktop.focused
@@ -99,6 +104,7 @@ const { wallpaper, boot } = useShellCore({
   },
   barHeight: TASKBAR_HEIGHT,
   tilesVisible: () => desktop.startOpen,
+  limit: WINDOW_LIMIT,
 })
 
 // Мобильная обёртка и старые браузеры без Fullscreen API кнопку не показывают.

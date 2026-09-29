@@ -29,7 +29,7 @@
       <div class="profile-hero">
         <button class="profile-avatar-btn" aria-label="Открыть фото" @click="lightboxOpen = true">
           <span class="avatar avatar-xl" :class="presenceClass(user)">
-            <img :src="avatarOf(user)" :alt="user.fio" />
+            <img loading="lazy" decoding="async" :src="avatarOf(user)" :alt="user.fio" />
           </span>
         </button>
         <h2 class="profile-name">

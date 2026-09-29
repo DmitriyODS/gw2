@@ -25,7 +25,7 @@
             v-for="u in results" :key="u.id" class="ds-result" :disabled="busyUser === u.id"
             @click="add(u)"
           >
-            <img :src="avatarOf(u)" class="ds-ava" alt="" />
+            <img loading="lazy" decoding="async" :src="avatarOf(u)" class="ds-ava" alt="" />
             <span class="ds-rname">{{ u.fio }}</span>
             <span class="material-symbols-outlined">add</span>
           </button>
@@ -33,7 +33,7 @@
 
         <ul v-if="members.length" class="ds-members">
           <li v-for="m in members" :key="m.user_id" class="ds-member">
-            <img :src="avatarOf({ id: m.user_id, avatar_path: m.avatar_path })" class="ds-ava" alt="" />
+            <img loading="lazy" decoding="async" :src="avatarOf({ id: m.user_id, avatar_path: m.avatar_path })" class="ds-ava" alt="" />
             <span class="ds-mname">{{ m.fio }}</span>
             <label class="ds-check" :title="m.can_check ? 'Может отмечать записи выполненными' : 'Только просмотр'">
               <input type="checkbox" :checked="m.can_check" :disabled="busyUser === m.user_id" @change="setCanCheck(m, $event.target.checked)" />

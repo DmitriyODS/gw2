@@ -34,6 +34,11 @@ func New(cfg Config) *fiber.App {
 	fc := fiber.Config{
 		AppName:               cfg.AppName,
 		DisableStartupMessage: true,
+		// Простаивающее keep-alive соединение закрываем: у fasthttp по
+		// умолчанию оно живёт вечно и держит буферы. ReadTimeout намеренно не
+		// ставим — потоковая загрузка большого файла на медленном канале
+		// длится минутами.
+		IdleTimeout: 2 * time.Minute,
 	}
 	if cfg.BodyLimit > 0 {
 		fc.BodyLimit = cfg.BodyLimit

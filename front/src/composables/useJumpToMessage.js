@@ -10,9 +10,10 @@ const MAX_PAGES = 40
  * не подгружено — догружает историю страницами, пока оно не появится.
  *
  * container — ref на scroll-контейнер с [data-msg-id] внутри;
- * getMessages/hasMore/loadOlder — доступ к стору активного диалога.
+ * getMessages/hasMore/loadOlder — доступ к стору активного диалога;
+ * reveal(id) — дорисовать строку виртуальной ленты, если её нет в DOM.
  */
-export function useJumpToMessage({ container, getMessages, hasMore, loadOlder }) {
+export function useJumpToMessage({ container, getMessages, hasMore, loadOlder, reveal }) {
   const jumping = ref(false)
 
   function findRow(id) {
@@ -39,6 +40,7 @@ export function useJumpToMessage({ container, getMessages, hasMore, loadOlder })
       }
       if (!inStore()) return false
       await nextTick()
+      await reveal?.(id)
       const row = findRow(id)
       if (!row) return false
       row.scrollIntoView({ behavior: 'smooth', block: 'center' })

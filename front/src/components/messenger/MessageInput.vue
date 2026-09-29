@@ -114,7 +114,7 @@
           :class="{ active: i === mention.index }"
           @mousedown.prevent="pickMention(m)"
         >
-          <img class="mention-ava" :src="mentionAvatar(m.user)" :alt="m.user?.fio" />
+          <img loading="lazy" decoding="async" class="mention-ava" :src="mentionAvatar(m.user)" :alt="m.user?.fio" />
           <span class="mention-name">{{ m.user?.fio }}</span>
           <span class="mention-login">@{{ m.user?.login }}</span>
         </button>

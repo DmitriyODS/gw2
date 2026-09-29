@@ -21,7 +21,7 @@
         <ul v-if="userQuery && userResults.length" class="ns-user-results">
           <li v-for="u in userResults" :key="u.id">
             <button class="ns-user-row" type="button" @click="addUser(u)">
-              <img class="ns-avatar" :src="avatarOf(u)" :alt="u.fio" />
+              <img loading="lazy" decoding="async" class="ns-avatar" :src="avatarOf(u)" :alt="u.fio" />
               <span class="ns-user-fio">{{ u.fio }}</span>
               <span class="ns-user-login">@{{ u.login }}</span>
               <span class="material-symbols-outlined ns-user-add">person_add</span>
@@ -32,7 +32,7 @@
 
         <ul v-if="userMembers.length" class="ns-members">
           <li v-for="m in userMembers" :key="'u' + m.user_id" class="ns-member">
-            <img class="ns-avatar" :src="avatarOf({ id: m.user_id, avatar_path: m.avatar_path })" :alt="m.fio" />
+            <img loading="lazy" decoding="async" class="ns-avatar" :src="avatarOf({ id: m.user_id, avatar_path: m.avatar_path })" :alt="m.fio" />
             <span class="ns-user-fio">{{ m.fio }}</span>
             <button
 class="chip-tint ns-access" :class="m.can_edit ? 'chip-tint--warning' : 'chip-tint--primary'"

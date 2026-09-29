@@ -25,7 +25,7 @@
         <!-- Примерка: пока значок в черновике, показываем его самого, а не
              сохранённый аватар — иначе выбор было бы не видно до сохранения. -->
         <span v-if="form.avatarEmoji" class="pe-avatar pe-avatar-emoji">{{ form.avatarEmoji }}</span>
-        <img v-else :src="avatarSrc" class="pe-avatar" :alt="auth.user?.fio" />
+        <img v-else loading="lazy" decoding="async" :src="avatarSrc" class="pe-avatar" :alt="auth.user?.fio" />
         <div class="pe-avatar-actions">
           <AppButton icon="photo_camera" label="Загрузить фото" @click="cropping = true" />
           <!-- Значок вместо фотографии: выбор эмодзи снимает загруженный файл —
@@ -119,7 +119,7 @@ import ChangePasswordDialog from '@/components/profile/ChangePasswordDialog.vue'
 import PhoneInput from '@/components/common/PhoneInput.vue'
 import EmojiPicker from '@/components/common/EmojiPicker.vue'
 import InputText from 'primevue/inputtext'
-import { avatarUrl } from '@/utils/pets.js'
+import { avatarUrl } from '@/utils/avatar.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'

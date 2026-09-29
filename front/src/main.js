@@ -1,13 +1,47 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import PrimeVue from 'primevue/config'
-import ConfirmationService from 'primevue/confirmationservice'
 import { definePreset } from '@primeuix/themes'
-import Aura from '@primeuix/themes/aura'
+/* Aura собирается из частей: полный пресет несёт токены всех ~90 компонентов
+   PrimeVue и лежит в первом кадре каждого захода, а в приложении их около
+   двадцати (с теми, что подтягивают сами компоненты: Button у Dialog, Paginator
+   у DataTable, Chip у MultiSelect). Новый компонент PrimeVue — добавить его
+   токены сюда, иначе он останется без оформления. */
+import auraBase from '@primeuix/themes/aura/base'
+import auraCss from '@primeuix/themes/aura/css'
+import badge from '@primeuix/themes/aura/badge'
+import button from '@primeuix/themes/aura/button'
+import checkbox from '@primeuix/themes/aura/checkbox'
+import chip from '@primeuix/themes/aura/chip'
+import datatable from '@primeuix/themes/aura/datatable'
+import datepicker from '@primeuix/themes/aura/datepicker'
+import dialog from '@primeuix/themes/aura/dialog'
+import iconfield from '@primeuix/themes/aura/iconfield'
+import inputnumber from '@primeuix/themes/aura/inputnumber'
+import inputtext from '@primeuix/themes/aura/inputtext'
+import multiselect from '@primeuix/themes/aura/multiselect'
+import paginator from '@primeuix/themes/aura/paginator'
+import progressspinner from '@primeuix/themes/aura/progressspinner'
+import radiobutton from '@primeuix/themes/aura/radiobutton'
+import ripple from '@primeuix/themes/aura/ripple'
+import select from '@primeuix/themes/aura/select'
+import slider from '@primeuix/themes/aura/slider'
+import textarea from '@primeuix/themes/aura/textarea'
+import toggleswitch from '@primeuix/themes/aura/toggleswitch'
+import virtualscroller from '@primeuix/themes/aura/virtualscroller'
 
 import App from './App.vue'
 import router from './router/index.js'
 import './assets/main.css'
+import { initTransparency } from './utils/transparency.js'
+
+const Aura = {
+  ...auraBase,
+  components: {
+    badge, button, checkbox, chip, datatable, datepicker, dialog, iconfield, inputnumber, inputtext, multiselect, paginator, progressspinner, radiobutton, ripple, select, slider, textarea, toggleswitch, virtualscroller,
+  },
+  css: auraCss,
+}
 
 const GroovePreset = definePreset(Aura, {
   semantic: {
@@ -57,6 +91,9 @@ const GroovePreset = definePreset(Aura, {
   }
 })
 
+// До монтирования: иначе первый кадр мелькнул бы стеклом.
+initTransparency()
+
 const app = createApp(App)
 
 /* Ошибки компонентов иначе теряются: Vue снимает поддерево, экран белеет, а в
@@ -92,7 +129,6 @@ app.use(PrimeVue, {
     weekHeader: 'Нед',
   }
 })
-app.use(ConfirmationService)
 
 app.mount('#app')
 // Сигнал бут-watchdog'у в index.html: приложение реально стартовало.

@@ -196,7 +196,7 @@
           :title="shortFio(auth.user?.fio) || 'Аккаунт'"
           @click="launchPath('/settings?section=account')"
         >
-          <img class="wp-avatar" :src="avatarSrc" :alt="auth.user?.fio || 'Аккаунт'" />
+          <img loading="lazy" decoding="async" class="wp-avatar" :src="avatarSrc" :alt="auth.user?.fio || 'Аккаунт'" />
         </button>
         <CompanySelect compact />
         <button class="wp-icon-btn" type="button" title="Настройки" @click="launchPath('/settings')">
@@ -273,7 +273,7 @@ import { usePermission } from '@/composables/usePermission.js'
 import { useCompanySettings } from '@/composables/useCompanySettings.js'
 import { menuGroups } from '@/desktop/apps.js'
 import { tileFaces } from '@/desktop/liveTiles.js'
-import { avatarUrl } from '@/utils/pets.js'
+import { avatarUrl } from '@/utils/avatar.js'
 import { shortFio } from '@/utils/people.js'
 import BrandLogo from '@/components/common/BrandLogo.vue'
 import HolaIcon from '@/components/common/HolaIcon.vue'

@@ -38,7 +38,7 @@
         :tone="toneOf(p)"
       >
         <template #lead>
-          <img class="fa-avatar" :src="avatarUrl(p)" :alt="p.name" />
+          <img loading="lazy" decoding="async" class="fa-avatar" :src="avatarUrl(p)" :alt="p.name" />
         </template>
         <AppChip
           size="sm"

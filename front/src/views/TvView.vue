@@ -8,7 +8,7 @@
     <!-- ═══ HEADER ═══════════════════════════════════════════════════════ -->
     <header class="tv-head">
       <div class="tv-brand">
-        <img class="tv-brand-logo" src="/logo.svg" alt="Groove Work" />
+        <img loading="lazy" decoding="async" class="tv-brand-logo" src="/logo.svg" alt="Groove Work" />
         <div class="tv-brand-text">
           <div class="tv-brand-name">Groove Work</div>
           <!-- Честный индикатор: LIVE только пока данные реально свежие -->
@@ -422,6 +422,8 @@ function tickClock() {
   longDateLabel.value = d.toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
 }
 
+let unmounted = false
+
 onMounted(async () => {
   themeStore.init()
   tickClock()
@@ -433,6 +435,8 @@ onMounted(async () => {
   loadGroove()
   loadResponsibles()
   await loadPeriod('day')
+  // Закрыли, пока шло ожидание: снятие уже отработало, навешивать некому снимать.
+  if (unmounted) return
   loadPeriod('week', { silent: true })
   loadPeriod('month', { silent: true })
 
@@ -452,6 +456,7 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  unmounted = true
   clearTimeout(slideTimer)
   clearInterval(refreshTimer)
   clearInterval(clockTimer)

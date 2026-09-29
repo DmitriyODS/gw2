@@ -77,18 +77,18 @@
                support_agent (иконка дублировала бы вкладку). У владельца —
                всегда иконка техподдержки. -->
           <div v-if="tab === 'support' && c.owner_user" class="conv-avatar-wrap">
-            <img class="conv-avatar" :src="avatarOf(c.owner_user)" :alt="c.owner_user?.fio" />
+            <img loading="lazy" decoding="async" class="conv-avatar" :src="avatarOf(c.owner_user)" :alt="c.owner_user?.fio" />
             <span v-if="messenger.isOnline(c.owner_user?.id)" class="online-dot" title="В сети"></span>
           </div>
           <div v-else-if="c.is_dev_chat" class="conv-avatar-wrap dev">
             <span class="material-symbols-outlined">support_agent</span>
           </div>
           <div v-else-if="c.is_group" class="conv-avatar-wrap group">
-            <img v-if="c.avatar_path" class="conv-avatar" :src="`/uploads/${c.avatar_path}`" :alt="c.title" />
+            <img v-if="c.avatar_path" loading="lazy" decoding="async" class="conv-avatar" :src="`/uploads/${c.avatar_path}`" :alt="c.title" />
             <span v-else class="material-symbols-outlined">groups</span>
           </div>
           <div v-else class="conv-avatar-wrap">
-            <img class="conv-avatar" :src="avatarOf(c.other_user)" :alt="c.other_user?.fio" />
+            <img loading="lazy" decoding="async" class="conv-avatar" :src="avatarOf(c.other_user)" :alt="c.other_user?.fio" />
             <span v-if="messenger.isOnline(c.other_user?.id)" class="online-dot" title="В сети"></span>
           </div>
           <div class="conv-body">

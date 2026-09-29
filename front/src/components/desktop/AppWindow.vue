@@ -65,8 +65,10 @@
       </div>
     </header>
 
+    <!-- Монтируется при первом открытии: диалог — ленивый чанк, иначе PrimeVue
+         Dialog попадал в первый кадр каждого захода. -->
     <SectionAboutDialog
-      v-if="app?.about"
+      v-if="app?.about && aboutMounted"
       v-model="aboutOpen"
       :name="app.title"
       :version="app.about.version"
@@ -100,14 +102,13 @@
 </template>
 
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, ref, watch } from 'vue'
 import router from '@/router/index.js'
 import { useDesktopStore } from '@/stores/desktop.js'
 import { appById, windowTitle } from '@/desktop/apps.js'
 import { snapZoneAt } from '@/desktop/geometry.js'
 import { provideWindowHost } from '@/desktop/windowHost.js'
 import WindowContent from './WindowContent.vue'
-import SectionAboutDialog from '@/components/common/SectionAboutDialog.vue'
 
 const props = defineProps({
   win: { type: Object, required: true },
@@ -121,7 +122,10 @@ const desktop = useDesktopStore()
 
 // Восстановленное свёрнутым окно поднимает раздел при первом разворачивании.
 watch(() => props.win.minimized, (min) => { if (!min) desktop.wake(props.win.id) }, { immediate: true })
+const SectionAboutDialog = defineAsyncComponent(() => import('@/components/common/SectionAboutDialog.vue'))
 const aboutOpen = ref(false)
+const aboutMounted = ref(false)
+watch(aboutOpen, (v) => { if (v) aboutMounted.value = true })
 
 const app = computed(() => appById(props.win.appId))
 const title = computed(() => windowTitle(app.value, router.resolve(props.win.path)))
@@ -257,6 +261,14 @@ function onResizeDown(dir, e) {
 </script>
 
 <style scoped>
+/* Окно — backdrop root: панель раздела внутри него размывала бы лишь ровный
+   фон самого окна. Результат не виден, а GPU пересчитывал слой на каждом
+   кадре прокрутки. */
+.win-body :deep(.page-panel) {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
 /* Окно — акриловая панель с собственной тенью. Позиция через transform
    (композит-слой: перетаскивание не вызывает layout), размер — width/height. */
 .win {

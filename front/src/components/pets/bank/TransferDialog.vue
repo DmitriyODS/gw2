@@ -18,7 +18,7 @@
           type="button"
           @click="recipientId = p.user_id"
         >
-          <img class="td-recipient-avatar" :src="avatarUrl(p.user)" :alt="p.user?.fio" />
+          <img loading="lazy" decoding="async" class="td-recipient-avatar" :src="avatarUrl(p.user)" :alt="p.user?.fio" />
           <span class="td-recipient-name">{{ firstName(p.user?.fio) }}</span>
           <span class="td-recipient-radio" :class="{ checked: recipientId === p.user_id }">
             <span v-if="recipientId === p.user_id" class="material-symbols-outlined">check</span>
@@ -90,7 +90,7 @@ import KudosCoin from '@/components/pets/KudosCoin.vue'
 import AmountInput from '@/components/pets/bank/AmountInput.vue'
 import { usePetsStore } from '@/stores/pets.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
-import { avatarUrl } from '@/utils/pets.js'
+import { avatarUrl } from '@/utils/avatar.js'
 import { playKudosSent } from '@/utils/kudosSound.js'
 
 const props = defineProps({

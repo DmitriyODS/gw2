@@ -21,7 +21,7 @@
           <a
             v-if="task.yougile_task_id && task.link_yougile"
             class="card-action-btn"
-            :href="task.link_yougile"
+            :href="safeHref(task.link_yougile)"
             target="_blank"
             rel="noopener"
             title="Открыть карточку в YouGile"
@@ -87,6 +87,8 @@
             :title="user.fio"
           >
             <img
+              loading="lazy"
+              decoding="async"
               :src="user.avatar_path ? `/uploads/${user.avatar_path}` : `/api/users/${user.id}/identicon`"
               :alt="user.fio"
             />
@@ -101,6 +103,7 @@
 </template>
 
 <script setup>
+import { safeHref } from '@/utils/safeHref.js'
 import { computed } from 'vue'
 import { cardColorStyle } from '@/utils/taskColors.js'
 import { useUnitsStore } from '@/stores/units.js'

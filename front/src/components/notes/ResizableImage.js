@@ -4,7 +4,7 @@
 // слайдером ширины (удобно на тач) и кнопками выравнивания. Атрибуты
 // сериализуются в HTML (style width + data-align) — картинка сохраняет
 // размер и положение и в режиме чтения (публичная ссылка), и при экспорте.
-import Image from '@tiptap/extension-image'
+import { Image } from '@tiptap/extension-image'
 import { VueNodeViewRenderer } from '@tiptap/vue-3'
 import ImageNodeView from './ImageNodeView.vue'
 

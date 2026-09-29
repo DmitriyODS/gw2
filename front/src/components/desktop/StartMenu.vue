@@ -113,7 +113,7 @@
             :title="shortFio(auth.user?.fio) || 'Аккаунт'"
             @click="launchPath('/settings?section=account')"
           >
-            <img class="sm-avatar" :src="avatarSrc" :alt="auth.user?.fio || 'Аккаунт'" />
+            <img loading="lazy" decoding="async" class="sm-avatar" :src="avatarSrc" :alt="auth.user?.fio || 'Аккаунт'" />
           </button>
           <div class="sm-company">
             <CompanySelect />
@@ -176,7 +176,7 @@
 </template>
 
 <script setup>
-import { avatarUrl } from '@/utils/pets.js'
+import { avatarUrl } from '@/utils/avatar.js'
 import { shortFio } from '@/utils/people.js'
 import { useScreenLock } from '@/composables/useScreenLock.js'
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'

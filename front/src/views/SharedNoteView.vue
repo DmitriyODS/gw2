@@ -96,6 +96,8 @@ const saveLabel = computed(() => ({
   saved: '· сохранено', dirty: '· изменено…', saving: '· сохраняю…', error: '· ошибка',
 })[saveState.value])
 
+let unmounted = false
+
 onMounted(async () => {
   try {
     const data = await getSharedNote(code)
@@ -107,10 +109,13 @@ onMounted(async () => {
   } catch {
     notFound.value = true
   }
+  // Закрыли, пока шло ожидание: снятие уже отработало, навешивать некому снимать.
+  if (unmounted) return
   window.addEventListener('beforeunload', flush)
 })
 
 onBeforeUnmount(() => {
+  unmounted = true
   window.removeEventListener('beforeunload', flush)
   flush()
 })

@@ -1,9 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import {
-  PET_STAGES, PET_SPECIES, NATURAL_SPECIES, PERSONALITIES, RARITY_TAG,
-  petEmoji, shopItemTitle, shopItemEmoji, activityText, activityIcon,
-  formatMinutes, avatarUrl,
-} from './pets.js'
+import { PET_STAGES, PET_SPECIES, NATURAL_SPECIES, PERSONALITIES, RARITY_TAG, petEmoji, shopItemTitle, shopItemEmoji, activityText, activityIcon, formatMinutes } from './pets.js'
+import { avatarUrl } from '@/utils/avatar.js'
 
 describe('pets константы (паритет с petsvc)', () => {
   it('7 стадий питомца', () => {

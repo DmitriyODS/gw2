@@ -1,7 +1,7 @@
 # Микросервис пуш-уведомлений (pushsvc): HTTP/Fiber :8097 — регистрация
 # токенов устройств + рассылка FCM по событиям микросервисов.
 # Контекст сборки — back-go/ (общий модуль pkg через replace ../pkg).
-FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS build
+FROM --platform=$BUILDPLATFORM golang:1.26.8-alpine AS build
 ARG TARGETOS
 ARG TARGETARCH
 WORKDIR /src
@@ -13,7 +13,7 @@ COPY pkg/ /src/pkg/
 COPY push/ /src/push/
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -ldflags="-s -w" -o /out/pushsvc ./cmd/pushsvc
 
-FROM alpine:3.21
+FROM alpine:3.24
 RUN apk add --no-cache ca-certificates && adduser -D pushsvc
 COPY --from=build /out/pushsvc /usr/local/bin/pushsvc
 USER pushsvc

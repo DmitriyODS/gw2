@@ -651,3 +651,24 @@
     --acrylic-card-bg:   var(--color-surface);
   }
 }
+
+/* ── «Меньше прозрачности» (utils/transparency.js) ────────────────
+   Плотные подложки вместо стекла: акрил становится непрозрачным, размытие
+   снимается со ВСЕХ элементов, включая заданные в компонентах числом
+   (маски диалогов, плашки). Блок стоит последним, чтобы перекрыть и тёмную
+   тему, и hex-фолбэк старых iOS. */
+:root[data-reduce-transparency] {
+  --acrylic-bg:          var(--color-surface);
+  --acrylic-bg-strong:   var(--color-surface);
+  --acrylic-card-bg:     var(--color-surface);
+  --acrylic-blur:        none;
+  --acrylic-blur-strong: none;
+  --bubble-blur:         none;
+}
+
+:root[data-reduce-transparency] *,
+:root[data-reduce-transparency] *::before,
+:root[data-reduce-transparency] *::after {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}

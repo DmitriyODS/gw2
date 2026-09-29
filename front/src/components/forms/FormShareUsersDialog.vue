@@ -65,7 +65,7 @@
 
       <ul v-if="!company && candidates.length" class="fu-found">
         <li v-for="u in candidates" :key="u.id" class="fu-item">
-          <img class="fu-avatar" :src="avatarUrl(u)" :alt="u.fio" />
+          <img loading="lazy" decoding="async" class="fu-avatar" :src="avatarUrl(u)" :alt="u.fio" />
           <span class="fu-name">{{ u.fio }}</span>
           <span class="fu-spacer" />
           <AppButton size="sm" variant="glass" icon="add" label="Назначить" @click="addUser(u)" />

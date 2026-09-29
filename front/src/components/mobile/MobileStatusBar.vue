@@ -30,7 +30,7 @@
     </button>
 
     <button class="msb-user" type="button" :title="auth.user?.fio || 'Аккаунт'" @click="desktop.open('/settings?section=account')">
-      <img class="msb-avatar" :src="avatarSrc" :alt="auth.user?.fio || 'Аккаунт'" />
+      <img loading="lazy" decoding="async" class="msb-avatar" :src="avatarSrc" :alt="auth.user?.fio || 'Аккаунт'" />
     </button>
 
     <ContextMenu
@@ -45,7 +45,7 @@
 </template>
 
 <script setup>
-import { avatarUrl } from '@/utils/pets.js'
+import { avatarUrl } from '@/utils/avatar.js'
 import { computed, reactive } from 'vue'
 import { useAuthStore } from '@/stores/auth.js'
 import { useDesktopStore } from '@/stores/desktop.js'

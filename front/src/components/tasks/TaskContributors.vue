@@ -35,7 +35,7 @@ onMounted(load)
     <div v-else-if="!list.length" class="contributors-empty">Пока никто</div>
     <div v-else class="contributors-chips">
       <span v-for="u in list" :key="u.id" class="contributor-chip" :title="u.fio">
-        <img class="chip-avatar" :src="avatarOf(u)" :alt="u.fio" />
+        <img loading="lazy" decoding="async" class="chip-avatar" :src="avatarOf(u)" :alt="u.fio" />
         <span class="chip-name">{{ u.fio }}</span>
       </span>
     </div>

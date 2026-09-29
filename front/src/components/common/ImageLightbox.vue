@@ -35,6 +35,8 @@
         </button>
 
         <img
+          loading="lazy"
+          decoding="async"
           :src="currentSrc"
           :alt="currentCaption || 'Изображение'"
           class="ilb-img"

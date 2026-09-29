@@ -130,7 +130,6 @@ func (s *Service) UpdateMySettings(ctx context.Context, userID int64, upd dto.My
 	if err := s.repo.UpsertUserAI(ctx, settings); err != nil {
 		return nil, err
 	}
-	s.invalidateUserClient(userID)
 	return s.dumpMySettings(ctx, settings), nil
 }
 

@@ -39,7 +39,7 @@
         :class="{ selected: selectedIds.has(u.id) }"
         @click="toggle(u.id)"
       >
-        <img class="fwdp-avatar" :src="avatarOf(u)" :alt="u.fio" />
+        <img loading="lazy" decoding="async" class="fwdp-avatar" :src="avatarOf(u)" :alt="u.fio" />
         <div class="fwdp-info">
           <div class="fwdp-name">{{ u.fio }}</div>
           <div class="fwdp-meta">@{{ u.login }} · {{ u.post || u.role?.name }}</div>

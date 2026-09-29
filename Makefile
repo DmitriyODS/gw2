@@ -67,7 +67,7 @@ help:
 	@printf "\n\033[33mКонфигурация сервера:\033[0m cp .env.deploy.example .env.deploy\n\n"
 
 # ── Разработка ────────────────────────────────────────────────────
-.PHONY: dev-infra dev-migrate dev-front dev-calls dev-auth dev-messenger dev-ai dev-pets dev-tasks dev-gateway dev-push dev-mail dev-registry dev-forms dev-schedule dev-calendar dev-diary dev-portal dev-notes dev-board dev-drive dev-reminder dev-billing dev-alice dev-stop dev-stack dev-stack-stop gen-proto
+.PHONY: dev-infra dev-migrate dev-front dev-calls dev-auth dev-messenger dev-ai dev-pets dev-tasks dev-gateway dev-push dev-mail dev-registry dev-forms dev-schedule dev-calendar dev-diary dev-portal dev-notes dev-board dev-drive dev-reminder dev-billing dev-alice dev-stop dev-stack dev-stack-stop stand stand-stop gen-proto
 
 # Dev-ключи PASETO (синхронизированы с dev.sh и
 # deploy/docker-compose.override.yml): приватный — только у authsvc,
@@ -397,6 +397,32 @@ dev-stack:
 dev-stack-stop:
 	cd deploy && docker compose --profile full stop
 	@printf "\033[32m✓ Полный стек остановлен\033[0m\n"
+
+# Испытательный стенд: полный стек отдельным проектом без проброса БД/Redis
+# (см. deploy/docker-compose.stand.yml) — когда стандартные порты заняты.
+STAND = docker compose -p gw2stand -f deploy/docker-compose.yml -f deploy/docker-compose.override.yml -f deploy/docker-compose.stand.yml --profile full
+
+# Сборка по одному сервису и с повторами: два десятка параллельных Go-сборок
+# упираются в память Docker Desktop, а столько же одновременных запросов к
+# Docker Hub он рвёт (EOF). Базовые образы тянутся заранее.
+STAND_BASES = golang:1.26.8-alpine alpine:3.24 node:24-alpine nginx:alpine
+
+stand:
+	@printf "\033[1m▶ Испытательный стенд в Docker...\033[0m\n"
+	@for img in $(STAND_BASES); do \
+	  for i in 1 2 3 4 5; do docker pull -q $$img >/dev/null && break; sleep 3; done; \
+	done
+	@for svc in $$($(STAND) config --services); do \
+	  for i in 1 2 3; do $(STAND) build $$svc >/dev/null 2>&1 && break; \
+	    [ $$i = 3 ] && { printf "\033[31m✗ не собрался %s\033[0m\n" $$svc; $(STAND) build $$svc; exit 1; }; sleep 3; \
+	  done; printf "  ✓ %s\n" $$svc; \
+	done
+	$(STAND) up -d
+	@printf "\033[32m✓ Фронт http://localhost:18080  Почта http://localhost:8025\033[0m\n"
+
+stand-stop:
+	$(STAND) stop
+	@printf "\033[32m✓ Стенд остановлен\033[0m\n"
 
 # ── Деплой ───────────────────────────────────────────────────────
 .PHONY: push push-all deploy deploy-only apk deploy-apk desktop deploy-desktop release logs status restart shell release-branch

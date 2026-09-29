@@ -74,7 +74,7 @@
           aria-label="Открыть профиль пользователя"
           @click="profileOpen = true"
         >
-          <img class="chat-avatar" :src="avatarOf(devChatOwner)" :alt="devChatOwner.fio" />
+          <img loading="lazy" decoding="async" class="chat-avatar" :src="avatarOf(devChatOwner)" :alt="devChatOwner.fio" />
           <span v-if="messenger.isOnline(devChatOwner.id)" class="online-dot" title="В сети"></span>
         </button>
         <div v-else-if="active.is_dev_chat" class="chat-avatar-wrap dev">
@@ -86,7 +86,7 @@
           aria-label="О группе"
           @click="groupInfoOpen = true"
         >
-          <img v-if="active.avatar_path" class="chat-avatar" :src="`/uploads/${active.avatar_path}`" :alt="active.title" />
+          <img v-if="active.avatar_path" loading="lazy" decoding="async" class="chat-avatar" :src="`/uploads/${active.avatar_path}`" :alt="active.title" />
           <span v-else class="material-symbols-outlined">groups</span>
         </button>
         <button
@@ -95,7 +95,7 @@
           aria-label="Открыть профиль"
           @click="profileOpen = true"
         >
-          <img class="chat-avatar" :src="avatarOf(active.other_user)" :alt="active.other_user?.fio" />
+          <img loading="lazy" decoding="async" class="chat-avatar" :src="avatarOf(active.other_user)" :alt="active.other_user?.fio" />
           <span v-if="otherOnline" class="online-dot" title="В сети"></span>
         </button>
         <div
@@ -187,33 +187,43 @@
             <ProgressSpinner style="width:22px;height:22px" />
             <span>Загружаем историю…</span>
           </div>
-          <div v-for="g in messageGroups" :key="g.key" class="msg-day-group">
-            <MessageDateDivider :label="g.label" @jump="jumpToDay" />
-            <!-- Все обработчики — стабильные ссылки, без замыкания на `m`: инлайн-
-                 стрелка давала пузырю новый prop на каждом рендере раздела, и при
-                 ресайзе окна перерисовывалась вся лента. v-memo тут не помощник —
-                 во вложенном v-for у всех дневных групп один кэш. -->
-            <MessageBubble
-              v-for="m in g.items"
-              :key="m.id"
-              :message="m"
-              :is-mine="m.sender_id === authStore.user?.id"
-              :sender-name="senderNameFor(m)"
-              :me-id="authStore.user?.id"
-              :is-group="!!active?.is_group"
-              :read-count="groupReadCount(m)"
-              @delete="askDeleteMessage"
-              @reply="startReply"
-              @forward="startForward"
-              @pin="onTogglePinMessage"
-              @join-call="onJoinCall"
-              @open-task="openTask"
-              @open-post="openPost"
-              @context-menu="openContextMenu"
-              @quote-click="onQuoteClick"
-              @react="onReact"
-              @read-by="openReadBy"
-            />
+          <!-- Лента виртуальная (useVirtualList): в DOM только сообщения у экрана,
+               остальное — распорки по измеренным высотам. Дневные группы
+               сохранены, чтобы дата оставалась «липкой» внутри своего дня. -->
+          <div
+            ref="feedEl"
+            class="msg-feed"
+            :style="{ paddingTop: `${feedView.top}px`, paddingBottom: `${feedView.bottom}px` }"
+          >
+            <div v-for="g in feedView.groups" :key="g.key" class="msg-day-group">
+              <MessageDateDivider :ref="feed.measureRef(g.dividerKey)" :label="g.label" @jump="jumpToDay(g)" />
+              <div v-if="g.before" :style="{ height: `${g.before}px` }" />
+              <!-- Все обработчики — стабильные ссылки, без замыкания на `m`: инлайн-
+                   стрелка давала пузырю новый prop на каждом рендере раздела, и при
+                   ресайзе окна перерисовывалась вся лента. -->
+              <div v-for="m in g.items" :key="m.id" :ref="feed.measureRef(m.id)" class="msg-vrow">
+                <MessageBubble
+                  :message="m"
+                  :is-mine="m.sender_id === authStore.user?.id"
+                  :sender-name="senderNameFor(m)"
+                  :me-id="authStore.user?.id"
+                  :is-group="!!active?.is_group"
+                  :read-count="groupReadCount(m)"
+                  @delete="askDeleteMessage"
+                  @reply="startReply"
+                  @forward="startForward"
+                  @pin="onTogglePinMessage"
+                  @join-call="onJoinCall"
+                  @open-task="openTask"
+                  @open-post="openPost"
+                  @context-menu="openContextMenu"
+                  @quote-click="onQuoteClick"
+                  @react="onReact"
+                  @read-by="openReadBy"
+                />
+              </div>
+              <div v-if="g.after" :style="{ height: `${g.after}px` }" />
+            </div>
           </div>
         </template>
       </div>
@@ -322,6 +332,7 @@ import { useCallStore } from '@/stores/call.js'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
 import { useFileDrop } from '@/composables/useFileDrop.js'
 import { useJumpToMessage } from '@/composables/useJumpToMessage.js'
+import { useVirtualList } from '@/composables/useVirtualList.js'
 import {
   requestNotificationPermission, notificationsAllowed,
 } from '@/utils/systemNotify.js'
@@ -428,6 +439,69 @@ function onViewportChange() {
 
 const messageInputRef = ref(null)
 const messageGroups = computed(() => groupMessagesByDay(messenger.activeMessages))
+
+/* Виртуальная лента: строки — разделитель дня и сообщения каждой группы. */
+const feedEl = ref(null)
+const feedKeys = computed(() => {
+  const keys = []
+  for (const g of messageGroups.value) {
+    keys.push(`d:${g.key}`)
+    for (const m of g.items) keys.push(m.id)
+  }
+  return keys
+})
+// Разделитель дня — первая строка группы, остальные — сообщения.
+const dayStarts = computed(() => {
+  const set = new Set()
+  let i = 0
+  for (const g of messageGroups.value) {
+    set.add(i)
+    i += 1 + g.items.length
+  }
+  return set
+})
+const feed = useVirtualList({
+  container: messagesEl,
+  list: feedEl,
+  keys: feedKeys,
+  estimate: (i) => (dayStarts.value.has(i) ? 34 : 64),
+})
+
+/* Что рисовать: группы, задетые окном строк. У частично видимой группы
+   разделитель рисуется всегда (он липкий), а пропущенные сообщения
+   заменяются распорками внутри группы. */
+const feedView = computed(() => {
+  const s = feed.start.value
+  const e = feed.end.value
+  const groups = []
+  let top = null
+  let lastEnd = 0
+  let idx = 0
+  for (const g of messageGroups.value) {
+    const gStart = idx
+    const gEnd = idx + 1 + g.items.length
+    idx = gEnd
+    if (gEnd <= s || gStart >= e) continue
+    const from = Math.max(s, gStart + 1)
+    const to = Math.min(e, gEnd)
+    if (top === null) top = feed.offsetOf(gStart)
+    groups.push({
+      key: g.key,
+      label: g.label,
+      dividerKey: `d:${g.key}`,
+      firstId: g.items[0]?.id,
+      before: feed.offsetOf(from) - feed.offsetOf(gStart + 1),
+      items: g.items.slice(from - gStart - 1, Math.max(0, to - gStart - 1)),
+      after: feed.offsetOf(gEnd) - feed.offsetOf(Math.max(to, gStart + 1)),
+    })
+    lastEnd = gEnd
+  }
+  return {
+    groups,
+    top: top ?? 0,
+    bottom: groups.length ? feed.total.value - feed.offsetOf(lastEnd) : 0,
+  }
+})
 const replyTo = ref(null)
 const editing = ref(null)
 
@@ -752,6 +826,7 @@ async function onTogglePinMessage(message) {
 // Переход к сообщению с подсветкой и догрузкой истории.
 const { jumping, jumpToMessage } = useJumpToMessage({
   container: messagesEl,
+  reveal: (id) => feed.reveal(id),
   getMessages: () => messenger.activeMessages,
   hasMore: () => messenger.hasMoreHistory(activeId.value),
   loadOlder: (beforeId) => messenger.fetchMessages(activeId.value, beforeId),
@@ -952,25 +1027,18 @@ function goBack() {
 }
 
 function scrollToBottom() {
-  const el = messagesEl.value
-  if (!el) return
-  el.scrollTop = el.scrollHeight
+  feed.scrollToBottom()
 }
 
 function scrollToBottomSmooth() {
-  messagesEl.value?.scrollTo({ top: messagesEl.value.scrollHeight, behavior: 'smooth' })
+  feed.scrollToBottom({ behavior: 'smooth' })
 }
 
-// Клик по прилипшей плашке даты — прокрутка к началу этого дня (первому его
-// сообщению). Считаем по rect первого пузыря группы (сам разделитель sticky,
-// его позиция «прилипла» и для расчёта непригодна); оставляем ~44px сверху,
-// чтобы пилюля даты осталась видимой над первым сообщением.
-function jumpToDay(dividerEl) {
-  const el = messagesEl.value
-  const first = dividerEl?.nextElementSibling
-  if (!el || !first) return
-  const top = el.scrollTop + (first.getBoundingClientRect().top - el.getBoundingClientRect().top) - 44
-  el.scrollTo({ top: Math.max(0, top), behavior: 'smooth' })
+// Клик по прилипшей плашке даты — прокрутка к первому сообщению этого дня;
+// ~44px сверху оставляем, чтобы пилюля даты осталась видимой над ним.
+function jumpToDay(g) {
+  const i = feed.indexOfKey(g.firstId)
+  if (i !== undefined) feed.scrollToIndex(i, { offset: -44, behavior: 'smooth' })
 }
 
 // Гард, чтобы scroll-событие не запускало вторую подгрузку, пока первая ещё
@@ -1019,6 +1087,7 @@ watch([() => messageInputRef.value, () => active.value?.id], async (_, __, onCle
 async function onScroll() {
   const el = messagesEl.value
   if (!el) return
+  feed.onScroll()
   showJumpDown.value = el.scrollHeight - el.scrollTop - el.clientHeight > 320
   if (loadingOlder.value || jumping.value) return
   if (el.scrollTop > 80) return
@@ -1070,9 +1139,9 @@ onMounted(async () => {
     requestNotificationPermission()
   }
   await activateRouteConversation()
+  await nextTick()
   // Окно успели закрыть, пока шли загрузки: слушатели ниже уже некому снять.
   if (unmounted) return
-  await nextTick()
   scrollToBottom()
   window.addEventListener('messenger:open-conversation', handleExternalOpen)
   window.visualViewport?.addEventListener('resize', onViewportChange)
@@ -1391,6 +1460,15 @@ watch(() => route.params.conversationId, async (id) => {
   /* Фон даёт слой .chat-bg (градиент/узор) под лентой; сама лента прозрачна. */
   background: transparent;
   min-height: 0;
+  /* Позицию при замере строк держит useVirtualList сам — браузерная
+     поправка сложилась бы с ней дважды. */
+  overflow-anchor: none;
+}
+
+/* Строка ленты — свой блочный контекст: нижний отступ пузыря остаётся внутри
+   неё и попадает в замер высоты, а не схлопывается наружу. */
+.msg-vrow {
+  display: flow-root;
 }
 
 /* Плавающая кнопка «к последним сообщениям». */
@@ -1409,16 +1487,6 @@ watch(() => route.params.conversationId, async (id) => {
 
 .jump-down-enter-from,
 .jump-down-leave-to { opacity: 0; transform: translateY(8px); }
-
-/* Баннер закреплённых сообщений — между шапкой и лентой. */
-.messages-area {
-  flex: 1;
-  overflow-y: auto;
-  padding: 16px;
-  /* Фон даёт слой .chat-bg (градиент/узор) под лентой; сама лента прозрачна. */
-  background: transparent;
-  min-height: 0;
-}
 
 /* Плавающая кнопка «к последним сообщениям». */
 .jump-down-btn {

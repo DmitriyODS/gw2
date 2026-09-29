@@ -82,7 +82,7 @@
         class="post-pill"
         @click="$emit('open-post', message.post.id)"
       >
-        <img v-if="message.post.cover_url" class="post-pill-cover" :src="message.post.cover_url" alt="" />
+        <img v-if="message.post.cover_url" loading="lazy" decoding="async" class="post-pill-cover" :src="message.post.cover_url" alt="" />
         <span v-else class="material-symbols-outlined post-pill-icon">campaign</span>
         <div class="post-pill-body">
           <div class="post-pill-title">{{ message.post.title }}</div>

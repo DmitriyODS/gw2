@@ -14,7 +14,7 @@
         :title="canEditInfo ? 'Сменить аватар' : ''"
         @click="canEditInfo && (cropperOpen = true)"
       >
-        <img v-if="conv?.avatar_path" :src="`/uploads/${conv.avatar_path}`" alt="" />
+        <img v-if="conv?.avatar_path" loading="lazy" decoding="async" :src="`/uploads/${conv.avatar_path}`" alt="" />
         <span v-else class="material-symbols-outlined">groups</span>
       </button>
       <div class="gi-head-info">
@@ -63,7 +63,7 @@
     </div>
     <ul class="gi-members">
       <li v-for="m in members" :key="m.user?.id" class="gi-member">
-        <img class="gi-member-ava" :src="avatarOf(m.user)" :alt="m.user?.fio" />
+        <img loading="lazy" decoding="async" class="gi-member-ava" :src="avatarOf(m.user)" :alt="m.user?.fio" />
         <div class="gi-member-info">
           <div class="gi-member-name">{{ m.user?.fio }}<span v-if="m.user?.id === auth.userId" class="gi-you"> (вы)</span></div>
           <div class="gi-member-meta">@{{ m.user?.login }}</div>

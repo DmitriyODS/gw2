@@ -17,7 +17,7 @@
           <span v-if="i === 0" class="tv-fire material-symbols-outlined">local_fire_department</span>
           <span v-else>{{ i + 1 }}</span>
         </span>
-        <img class="tv-ranking-avatar" :src="avatarOf(e.user_id)" alt="" />
+        <img loading="lazy" decoding="async" class="tv-ranking-avatar" :src="avatarOf(e.user_id)" alt="" />
         <span class="tv-ranking-fio">{{ e.fio }}</span>
         <div class="tv-ranking-bar">
           <div

@@ -161,10 +161,11 @@ export const useDesktopStore = defineStore('desktop', () => {
     while (windows.value.length > limit.value) {
       // Порядок z — очерёдность последнего обращения: наименьший и уходит.
       // Видимые зоны неприкосновенны: закрыть раздел, на который человек прямо
-      // сейчас смотрит, — худшее, что может сделать предел.
+      // сейчас смотрит, — худшее, что может сделать предел. Первыми уходят
+      // свёрнутые окна: на столе остальные видны на экране.
       const victim = [...windows.value]
         .filter((w) => w.id !== keepId && w.id !== focusedId.value && w.id !== sideId.value)
-        .sort((a, b) => a.z - b.z)[0]
+        .sort((a, b) => (b.minimized - a.minimized) || (a.z - b.z))[0]
       if (!victim) return
       close(victim.id)
     }

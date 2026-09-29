@@ -34,7 +34,7 @@
             :class="{ off: !u.is_active }"
           >
             <div class="cmp-card-top">
-              <img :src="avatarOf(u)" :alt="u.fio" class="user-avatar" />
+              <img loading="lazy" decoding="async" :src="avatarOf(u)" :alt="u.fio" class="user-avatar" />
               <div class="cmp-card-text">
                 <div class="cmp-card-name">
                   {{ u.fio }}
@@ -96,7 +96,7 @@
         <Column header="Пользователь">
           <template #body="{ data }">
             <div class="cell-user">
-              <img :src="avatarOf(data)" :alt="data.fio" class="user-avatar" />
+              <img loading="lazy" decoding="async" :src="avatarOf(data)" :alt="data.fio" class="user-avatar" />
               <div class="cmp-name-text">
                 <div class="cmp-name-main" :class="{ off: !data.is_active }">
                   {{ data.fio }}

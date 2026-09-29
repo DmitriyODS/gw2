@@ -3,7 +3,7 @@
 # replace ../pkg в go.mod). Стадия сборки бежит на платформе билдера
 # ($BUILDPLATFORM): при сборке amd64-образа на Apple Silicon компилятор Go
 # работает нативно (кросс через GOOS/GOARCH), а не под эмуляцией.
-FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS build
+FROM --platform=$BUILDPLATFORM golang:1.26.8-alpine AS build
 ARG TARGETOS
 ARG TARGETARCH
 WORKDIR /src
@@ -15,7 +15,7 @@ COPY pkg/ /src/pkg/
 COPY messenger/ /src/messenger/
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -ldflags="-s -w" -o /out/msgsvc ./cmd/msgsvc
 
-FROM alpine:3.21
+FROM alpine:3.24
 # su-exec — сброс root→msgsvc в entrypoint после chown общего uploads-тома.
 RUN apk add --no-cache ca-certificates su-exec && adduser -D msgsvc
 COPY --from=build /out/msgsvc /usr/local/bin/msgsvc

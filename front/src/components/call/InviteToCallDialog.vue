@@ -36,7 +36,7 @@
         :class="{ selected: selectedIds.has(u.id) }"
         @click="toggle(u.id)"
       >
-        <img class="inv-avatar" :src="avatarOf(u)" :alt="u.fio" />
+        <img loading="lazy" decoding="async" class="inv-avatar" :src="avatarOf(u)" :alt="u.fio" />
         <div class="inv-info">
           <div class="inv-name">{{ u.fio }}</div>
           <div class="inv-meta">@{{ u.login }} · {{ u.post || u.role?.name }}</div>

@@ -4,7 +4,7 @@
 # сборки бежит на платформе билдера ($BUILDPLATFORM): при сборке amd64-образа на
 # Apple Silicon компилятор Go работает нативно (кросс через GOOS/GOARCH), а не
 # под эмуляцией.
-FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS build
+FROM --platform=$BUILDPLATFORM golang:1.26.8-alpine AS build
 ARG TARGETOS
 ARG TARGETARCH
 WORKDIR /src
@@ -16,7 +16,7 @@ COPY pkg/ /src/pkg/
 COPY schedule/ /src/schedule/
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -ldflags="-s -w" -o /out/schedulesvc ./cmd/schedulesvc
 
-FROM alpine:3.21
+FROM alpine:3.24
 # tzdata — у расписания своя зона (time.LoadLocation при проверке настроек).
 RUN apk add --no-cache ca-certificates tzdata && adduser -D schedulesvc
 COPY --from=build /out/schedulesvc /usr/local/bin/schedulesvc

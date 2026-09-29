@@ -98,9 +98,14 @@ export const useMessengerStore = defineStore('messenger', () => {
   const KEEP_CONVERSATIONS = 20
   const recentConversations = []
 
+  // Вместе с лентой уходят закрепы, участники группы и прочтения: setActive
+  // перечитывает их при следующем открытии чата.
   function dropMessages(conversationId) {
     delete messagesByConv.value[conversationId]
     delete hasMoreHistoryByConv.value[conversationId]
+    delete pinnedByConv.value[conversationId]
+    delete membersByConv.value[conversationId]
+    delete groupReadsByConv.value[conversationId]
     messagesSeqByConv.delete(conversationId)
   }
 

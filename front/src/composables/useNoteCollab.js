@@ -10,6 +10,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { Plugin, PluginKey } from '@tiptap/pm/state'
 import { Decoration, DecorationSet } from '@tiptap/pm/view'
 import { sendCollab } from '@/api/notes.js'
+import { safeDoc } from '@/utils/safeDoc.js'
 import { getSocket } from '@/socket/index.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { TASK_COLORS } from '@/utils/taskColors.js'
@@ -125,7 +126,7 @@ export function useNoteCollab({ noteId, editorRef, canEdit, isTyping, getTitle, 
     // Не затираем только живой набор (фокус + свежий ввод); победит последний.
     if (isTyping?.()) return
     const sel = ed.state.selection
-    ed.commands.setContent(p.doc, false) // без emitUpdate — не наш ввод
+    ed.commands.setContent(safeDoc(p.doc), { emitUpdate: false }) // не наш ввод
     const size = ed.state.doc.content.size
     ed.commands.setTextSelection({ from: Math.min(sel.from, size), to: Math.min(sel.to, size) })
   }

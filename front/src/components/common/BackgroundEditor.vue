@@ -175,7 +175,7 @@ function patternSwatchStyle(key) {
           :title="w.label"
           @click="pickWallpaper(w)"
         >
-          <img :src="theme.dark ? w.dark : w.light" alt="" />
+          <img loading="lazy" decoding="async" :src="theme.dark ? w.dark : w.light" alt="" />
           <span class="cbg-paper-label">{{ w.label }}</span>
         </button>
       </div>

@@ -4,8 +4,10 @@
  * Всё, что уже есть в сторах (непрочитанные чаты, портал, питомец, активный
  * юнит), плитки читают напрямую — сюда попадает только то, чего в памяти нет.
  * Сводки лёгкие (счётчики и по паре строк), тянутся ПАРАЛЛЕЛЬНО и лишь для
- * разделов, доступных пользователю, а результат живёт TTL секунд — открывать
- * «Пуск» подряд можно без единого запроса.
+ * разделов, доступных пользователю. Свежесть — ПО ИСТОЧНИКУ: сокет-событие
+ * раздела помечает его сводку устаревшей (`invalidate`), поэтому большинство
+ * сводок живёт долго и перезапрашивается по делу, а не раз в минуту. Короткий
+ * срок — только у тех, что меняются от хода времени (идущее занятие, часы).
  */
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
@@ -25,7 +27,12 @@ import { listMyCompanies, listCompanies } from '@/api/companies.js'
 import { getDirectorySummary, getUsersSummary } from '@/api/users.js'
 import { useAuthStore } from '@/stores/auth.js'
 
-const TTL = 60_000
+// Сводка, которую освежают сокет-события своего раздела.
+const TTL = 10 * 60_000
+// Сводки, меняющиеся от хода времени: «что идёт сейчас», ближайшие события,
+// часы за неделю при идущем юните.
+const TIME_TTL = 60_000
+const TIME_BOUND = new Set(['schedule', 'calendars', 'stats'])
 
 // Границы периодов считаем в зоне пользователя: сервер её не знает.
 function ymd(d) {
@@ -128,35 +135,43 @@ const SOURCES = {
 export const useLiveTilesStore = defineStore('liveTiles', () => {
   const data = ref({})
   const loading = ref(false)
-  let fetchedAt = 0
-  let fetchedKey = ''
+  // Прирастает при invalidate — каркас по нему освежает видимые плитки.
+  const staleTick = ref(0)
+  const fetchedAt = new Map()
   let inflight = null
 
+  function isFresh(id, now) {
+    const at = fetchedAt.get(id)
+    if (!at) return false
+    return now - at < (TIME_BOUND.has(id) ? TIME_TTL : TTL)
+  }
+
   /**
-   * Подтянуть сводки для перечисленных разделов.
-   * Свежие данные (моложе TTL и по тому же набору разделов) не перезапрашиваем;
-   * force — обход кэша (периодическое обновление, смена компании).
-   * Рабочий стол зовёт это заранее и по таймеру, поэтому к открытию меню
-   * «Пуск» плитки уже живые — ждать загрузки пользователю не приходится.
+   * Подтянуть сводки перечисленных разделов, которым пора: нет данных, истёк
+   * их срок или раздел прислал событие. force — все без разбора (смена
+   * компании). Рабочий стол зовёт это заранее, поэтому к открытию «Пуска»
+   * плитки уже живые.
    */
   function refresh(appIds = [], { force = false } = {}) {
-    const ids = appIds.filter((id) => SOURCES[id])
-    const key = ids.join(',')
-    if (!force && key === fetchedKey && Date.now() - fetchedAt < TTL) return Promise.resolve()
     // Запрос уже в пути — второй вызов ждёт его, а не шлёт свою пачку.
     if (inflight) return inflight
+    const now = Date.now()
+    const ids = appIds.filter((id) => SOURCES[id] && (force || !isFresh(id, now)))
+    if (!ids.length) return Promise.resolve()
 
     loading.value = true
     inflight = Promise.allSettled(ids.map((id) => SOURCES[id]())).then((results) => {
       const next = { ...data.value }
+      const at = Date.now()
       results.forEach((r, i) => {
         // Упавший источник не гасит остальные плитки: у раздела просто не
-        // появится живая грань (или останется прошлая).
-        if (r.status === 'fulfilled') next[ids[i]] = r.value
+        // появится живая грань (или останется прошлая), а попытка повторится.
+        if (r.status === 'fulfilled') {
+          next[ids[i]] = r.value
+          fetchedAt.set(ids[i], at)
+        }
       })
       data.value = next
-      fetchedAt = Date.now()
-      fetchedKey = key
     }).finally(() => {
       loading.value = false
       inflight = null
@@ -164,11 +179,17 @@ export const useLiveTilesStore = defineStore('liveTiles', () => {
     return inflight
   }
 
-  function reset() {
-    data.value = {}
-    fetchedAt = 0
-    fetchedKey = ''
+  /** Сводка раздела устарела (пришло его событие). */
+  function invalidate(appId) {
+    if (!fetchedAt.has(appId)) return
+    fetchedAt.delete(appId)
+    staleTick.value++
   }
 
-  return { data, loading, refresh, reset }
+  function reset() {
+    data.value = {}
+    fetchedAt.clear()
+  }
+
+  return { data, loading, staleTick, refresh, invalidate, reset }
 })

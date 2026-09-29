@@ -220,8 +220,12 @@ func (s *Service) applyUpdate(ctx context.Context, n *domain.Note, title *string
 		n.Title = *title
 	}
 	if doc != nil {
-		n.Doc = doc
-		n.TextContent = domain.DocText(doc)
+		clean, err := domain.SanitizeDoc(doc)
+		if err != nil {
+			return nil, domain.ErrBadDoc
+		}
+		n.Doc = clean
+		n.TextContent = domain.DocText(clean)
 	}
 	if err := s.repo.UpdateNote(ctx, n); err != nil {
 		return nil, err

@@ -1,9 +1,10 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onBeforeUnmount, onMounted } from 'vue'
 import { useTasksStore } from '@/stores/tasks.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { getStages } from '@/api/stages.js'
 import TaskCard from '@/components/tasks/TaskCard.vue'
+import TaskKanbanList from '@/components/tasks/TaskKanbanList.vue'
 
 const emit = defineEmits(['open-task', 'toggle-favorite', 'start-unit', 'stop-unit', 'context-menu'])
 
@@ -19,15 +20,27 @@ const columns = computed(() => {
   return [noStage, ...stages.value]
 })
 
+// Раскладка по колонкам — одним проходом, а не фильтром на каждую колонку и
+// каждое обращение шаблона.
+const byStage = computed(() => {
+  const map = new Map()
+  for (const t of tasks.tasks) {
+    const key = t.stage_id ?? null
+    if (!map.has(key)) map.set(key, [])
+    map.get(key).push(t)
+  }
+  return map
+})
+const NONE = []
 function tasksOf(stageId) {
-  return tasks.tasks.filter((t) => (t.stage_id ?? null) === (stageId ?? null))
+  return byStage.value.get(stageId ?? null) || NONE
 }
 
 function colHeaderStyle(stage) {
   if (!stage?.color || stage.id == null) {
     return {
       background: 'var(--color-surface-high)',
-      color: 'var(--color-on-surface-variant)',
+      color: 'var(--color-text-dim)',
     }
   }
   return {
@@ -36,7 +49,19 @@ function colHeaderStyle(stage) {
   }
 }
 
+/* Колонка виртуальная: карточка, которую тащат, может уйти из DOM при
+   прокрутке колонки, и тогда её dragend не придёт. Состояние сбрасывает
+   сброс на документе (всплытие — ПОСЛЕ обработчика колонки) либо первое
+   движение указателя: во время перетаскивания указательных событий нет. */
+function onDocDragEnd() {
+  document.removeEventListener('drop', onDocDragEnd)
+  document.removeEventListener('pointermove', onDocDragEnd)
+  onDragEnd()
+}
+
 function onDragStart(e, task) {
+  document.addEventListener('drop', onDocDragEnd)
+  document.addEventListener('pointermove', onDocDragEnd)
   draggingId.value = task.id
   // FF требует setData, иначе drag не активируется.
   try { e.dataTransfer.setData('text/plain', String(task.id)) } catch {}
@@ -64,7 +89,8 @@ function onDragLeave(stageId) {
 async function onDrop(e, stageId) {
   e.preventDefault()
   hoverStageId.value = undefined
-  const id = draggingId.value
+  // id дублируется в dataTransfer: состояние могло сброситься раньше сброса.
+  const id = draggingId.value ?? (Number(e.dataTransfer?.getData('text/plain')) || null)
   draggingId.value = null
   if (id == null) return
   const task = tasks.tasks.find((t) => t.id === id)
@@ -87,6 +113,10 @@ async function load() {
 }
 
 onMounted(load)
+onBeforeUnmount(() => {
+  document.removeEventListener('drop', onDocDragEnd)
+  document.removeEventListener('pointermove', onDocDragEnd)
+})
 </script>
 
 <template>
@@ -105,30 +135,27 @@ onMounted(load)
         <span class="kanban-col-name">{{ col.name }}</span>
         <span class="kanban-col-count">{{ tasksOf(col.id).length }}</span>
       </div>
-      <div class="kanban-col-body">
-        <div
-          v-for="t in tasksOf(col.id)"
-          :key="t.id"
-          class="kanban-card-wrap"
-          :class="{ dragging: draggingId === t.id }"
-          draggable="true"
-          @dragstart="onDragStart($event, t)"
-          @dragend="onDragEnd"
-        >
-          <TaskCard
-            :task="t"
-            view="grid"
-            @click="emit('open-task', t)"
-            @toggle-favorite="emit('toggle-favorite', $event)"
-            @start-unit="emit('start-unit', $event)"
-            @stop-unit="emit('stop-unit', $event)"
-            @context-menu="emit('context-menu', $event)"
-          />
-        </div>
-        <div v-if="!tasksOf(col.id).length" class="kanban-col-empty">
-          Пусто
-        </div>
-      </div>
+      <TaskKanbanList :items="tasksOf(col.id)">
+        <template #default="{ task: t }">
+          <div
+            class="kanban-card-wrap"
+            :class="{ dragging: draggingId === t.id }"
+            draggable="true"
+            @dragstart="onDragStart($event, t)"
+            @dragend="onDragEnd"
+          >
+            <TaskCard
+              :task="t"
+              view="grid"
+              @click="emit('open-task', t)"
+              @toggle-favorite="emit('toggle-favorite', $event)"
+              @start-unit="emit('start-unit', $event)"
+              @stop-unit="emit('stop-unit', $event)"
+              @context-menu="emit('context-menu', $event)"
+            />
+          </div>
+        </template>
+      </TaskKanbanList>
     </div>
   </div>
 </template>
@@ -179,26 +206,7 @@ onMounted(load)
   font-size: 12px;
 }
 
-.kanban-col-body {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 10px;
-  flex: 1;
-  min-height: 80px;
-  overflow-y: auto;
-}
-
 .kanban-card-wrap { cursor: grab; }
 .kanban-card-wrap.dragging { opacity: 0.5; cursor: grabbing; }
 
-.kanban-col-empty {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
-  font-size: 12px;
-  color: var(--color-on-surface-variant);
-  opacity: 0.7;
-}
 </style>

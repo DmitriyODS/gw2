@@ -70,7 +70,7 @@
 // повороты на 90° и отражение «запекаются» в offscreen-канву. Драг — на
 // pointer-событиях с touch-action:none, поэтому на тач-экранах двигается
 // рамка, а не страница за диалогом.
-import { computed, nextTick, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref } from 'vue'
 
 const MIN_CROP = 48       // в базовых (натуральных) пикселях
 const TARGET_SIZE = 400
@@ -247,6 +247,12 @@ function endDrag() {
   drag = null
   window.removeEventListener('pointermove', onDrag)
 }
+
+// Закрыли посреди перетаскивания — слушатель окна не должен пережить компонент.
+onBeforeUnmount(() => {
+  window.removeEventListener('pointerup', endDrag)
+  endDrag()
+})
 
 // ── Результат ──
 async function confirmCrop() {

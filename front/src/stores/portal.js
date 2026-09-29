@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import { createKeyLru } from '@/utils/keyLru.js'
 import { reactive, ref } from 'vue'
 import * as api from '@/api/portal.js'
 import { getDirectory } from '@/api/users.js'
@@ -41,6 +42,11 @@ export const usePortalStore = defineStore('portal', () => {
   const authorMap = ref(new Map())
   const commentsByPost = reactive({})
   const loadingComments = reactive({})
+  // Обсуждения держатся для последних открытых постов: открытие перечитывает.
+  const commentsLru = createKeyLru(30, (postId) => {
+    delete commentsByPost[postId]
+    delete loadingComments[postId]
+  })
   // Посты, чей просмотр уже отмечен в этой сессии — гард от повторных запросов
   // при каждом срабатывании IntersectionObserver карточки.
   const markedViews = new Set()
@@ -359,6 +365,7 @@ export const usePortalStore = defineStore('portal', () => {
     loadingComments[postId] = true
     try {
       const data = await api.getComments(postId)
+      commentsLru.touch(postId)
       commentsByPost[postId] = data.comments ?? []
     } finally {
       loadingComments[postId] = false
@@ -556,6 +563,7 @@ export const usePortalStore = defineStore('portal', () => {
     markedViews.clear()
     for (const k of Object.keys(commentsByPost)) delete commentsByPost[k]
     for (const k of Object.keys(loadingComments)) delete loadingComments[k]
+    commentsLru.clear()
   }
 
   return {

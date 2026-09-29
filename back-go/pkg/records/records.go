@@ -395,6 +395,11 @@ func ValidateValue(f FieldInfo, v any) error {
 					"Значение поля «"+f.Label+"» не соответствует шаблону", 400)
 			}
 		}
+	case FieldLink:
+		if !SafeLink(valueString(v)) {
+			return apierror.New("VALIDATION",
+				"Поле «"+f.Label+"»: ссылка должна вести на сайт (http или https)", 400)
+		}
 	case FieldEmail:
 		s := strings.TrimSpace(valueString(v))
 		if s != "" && !emailRe.MatchString(s) {
@@ -542,4 +547,32 @@ func NewShareCode() (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(b), nil
+}
+
+// linkSchemeRe — схема в начале ссылки; «site.ru:8080» схемой не считается
+// (после двоеточия идут цифры порта).
+var linkSchemeRe = regexp.MustCompile(`^([a-zA-Z][a-zA-Z0-9+.-]*):([^0-9]|$)`)
+
+// SafeLink — годится ли значение поля «ссылка» в href: пусто, адрес без
+// схемы («site.ru» — клиент допишет https://) или http(s)/mailto/tel.
+// javascript:, data: и прочие схемы исполнялись бы по клику у любого, кто
+// откроет запись, включая гостей публичной ссылки. Пробелы и управляющие
+// символы браузер внутри схемы пропускает («java\tscript:»), поэтому они
+// выбрасываются до проверки.
+func SafeLink(raw string) bool {
+	s := strings.Map(func(r rune) rune {
+		if r <= ' ' || r == 0x7f {
+			return -1
+		}
+		return r
+	}, raw)
+	m := linkSchemeRe.FindStringSubmatch(s)
+	if m == nil {
+		return true
+	}
+	switch strings.ToLower(m[1]) {
+	case "http", "https", "mailto", "tel":
+		return true
+	}
+	return false
 }

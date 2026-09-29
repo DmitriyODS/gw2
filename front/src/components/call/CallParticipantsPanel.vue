@@ -11,7 +11,7 @@
     <div class="cpanel-body">
       <div class="p-row">
         <div class="p-avatar">
-          <img v-if="myAvatar" :src="myAvatar" alt="" />
+          <img v-if="myAvatar" loading="lazy" decoding="async" :src="myAvatar" alt="" />
           <span v-else class="material-symbols-outlined">person</span>
         </div>
         <div class="p-info">
@@ -33,7 +33,7 @@
         :class="{ speaking: p.speaking, pending: p.pending }"
       >
         <div class="p-avatar">
-          <img v-if="avatarOf(p)" :src="avatarOf(p)" alt="" />
+          <img v-if="avatarOf(p)" loading="lazy" decoding="async" :src="avatarOf(p)" alt="" />
           <span v-else class="material-symbols-outlined">person</span>
         </div>
         <div class="p-info">

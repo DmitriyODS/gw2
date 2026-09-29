@@ -1029,6 +1029,9 @@ services:
       # Мобильное приложение: APK + version.json (location /apps/). APK кладёт
       # `make deploy-apk` (scp), version.json приезжает с git-репозиторием.
       - ../apps:/srv/apps:ro
+      # Общие фрагменты конфига (заголовки безопасности) для nginx.conf и
+      # nginx.prod.conf. Каталогом, а не файлами — по той же причине inode.
+      - ./nginx/snippets:/etc/nginx/snippets:ro
 
   # Медиа-сервер звонков LiveKit (SFU). Сигнальный WebSocket :7880 ходит через
   # nginx (/livekit); медиа — UDP-мультиплекс на одном порту 7882 (+ TCP 7881

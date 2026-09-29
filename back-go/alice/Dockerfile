@@ -3,7 +3,7 @@
 # вызовами tasksvc/diarysvc/notesvc; ИИ-разбор фраз — через aisvc. Контекст
 # сборки — back-go/ (общий модуль pkg подключается через replace ../pkg в
 # go.mod). Стадия сборки бежит на платформе билдера ($BUILDPLATFORM).
-FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS build
+FROM --platform=$BUILDPLATFORM golang:1.26.8-alpine AS build
 ARG TARGETOS
 ARG TARGETARCH
 WORKDIR /src
@@ -15,7 +15,7 @@ COPY pkg/ /src/pkg/
 COPY alice/ /src/alice/
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -ldflags="-s -w" -o /out/alicesvc ./cmd/alicesvc
 
-FROM alpine:3.21
+FROM alpine:3.24
 RUN apk add --no-cache ca-certificates && adduser -D alicesvc
 COPY --from=build /out/alicesvc /usr/local/bin/alicesvc
 USER alicesvc

@@ -21,7 +21,7 @@
             <span class="tv-podium-place">{{ place }}</span>
           </div>
           <div class="tv-podium-avatar-wrap">
-            <img class="tv-podium-avatar" :src="avatarOf(podiumList[place - 1].user_id)" alt="" />
+            <img loading="lazy" decoding="async" class="tv-podium-avatar" :src="avatarOf(podiumList[place - 1].user_id)" alt="" />
           </div>
           <div class="tv-podium-fio">{{ podiumList[place - 1].fio }}</div>
           <div class="tv-podium-hours">

@@ -18,7 +18,7 @@
           title="Вернуть эту картинку"
           @click="useImage(url)"
         >
-          <img :src="url" alt="" />
+          <img loading="lazy" decoding="async" :src="url" alt="" />
           <span class="dw-thumb-remove" title="Убрать из истории" @click.stop="prefs.forgetWallpaper(url)">
             <span class="material-symbols-outlined">close</span>
           </span>

@@ -42,7 +42,7 @@
 
       <ul v-if="!company && candidates.length" class="su-found">
         <li v-for="u in candidates" :key="u.id" class="su-found-item">
-          <img class="su-avatar" :src="avatarUrl(u)" :alt="u.fio" />
+          <img loading="lazy" decoding="async" class="su-avatar" :src="avatarUrl(u)" :alt="u.fio" />
           <span class="su-found-name">{{ u.fio }}</span>
           <span class="su-spacer" />
           <AppButton size="sm" variant="glass" icon="add" label="Добавить" @click="addUser(u)" />

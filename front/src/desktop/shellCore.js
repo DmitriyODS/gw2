@@ -101,9 +101,9 @@ export function useShellCore({
     .flatMap((g) => g.items.map((a) => a.id))
     .filter((id) => prefs.isTileLive(id)))
 
-  function pulseLiveTiles({ force = false } = {}) {
+  function pulseLiveTiles() {
     if (document.hidden || !auth.user || !prefs.liveTiles) return
-    live.refresh(liveAppIds.value, { force }).catch(() => {})
+    live.refresh(liveAppIds.value).catch(() => {})
   }
 
   const pageVisible = ref(!document.hidden)
@@ -116,7 +116,19 @@ export function useShellCore({
     livePulse = null
     if (!on) return
     pulseLiveTiles()
-    livePulse = setInterval(() => pulseLiveTiles({ force: true }), LIVE_PULSE)
+    // Тик лишь проверяет сроки: перезапрашивается только устаревшее.
+    livePulse = setInterval(pulseLiveTiles, LIVE_PULSE)
+  })
+
+  /* Событие раздела пометило его сводку устаревшей — видимые плитки освежаем
+     сразу, но пачкой: серия событий (массовая правка) даёт один запрос. */
+  let staleTimer = null
+  watch(() => live.staleTick, () => {
+    if (!polling.value || staleTimer) return
+    staleTimer = setTimeout(() => {
+      staleTimer = null
+      if (polling.value) pulseLiveTiles()
+    }, 1500)
   })
 
   function onVisibility() {
@@ -129,7 +141,8 @@ export function useShellCore({
      handleShortcut). На холодном старте обёртка просто грузит нужный адрес. */
   function onOpenPath(e) {
     const path = e.detail?.path
-    if (path) openForPath(path)
+    // Только внутренний путь: событие доступно любому скрипту страницы.
+    if (typeof path === 'string' && path.startsWith('/') && !path.startsWith('//')) openForPath(path)
   }
 
   /* ── Синхронизация адреса и разделов ─────────────────────────
@@ -213,6 +226,7 @@ export function useShellCore({
 
   onBeforeUnmount(() => {
     clearInterval(livePulse)
+    clearTimeout(staleTimer)
     document.removeEventListener('visibilitychange', onVisibility)
     window.removeEventListener('gw:open-path', onOpenPath)
     shellActive.value = false

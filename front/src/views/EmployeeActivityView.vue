@@ -10,7 +10,7 @@
   >
     <template #title>
       <div class="ea-who">
-        <img class="ea-avatar" :src="avatarUrl" :alt="employeeName" />
+        <img loading="lazy" decoding="async" class="ea-avatar" :src="avatarUrl" :alt="employeeName" />
         <div class="ea-who-text">
           <span class="ea-eyebrow">{{ isSelf ? 'Моя активность' : 'Активность сотрудника' }}</span>
           <h1 class="ea-name">{{ employeeName }}</h1>

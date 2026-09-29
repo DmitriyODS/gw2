@@ -54,6 +54,28 @@ describe('GatewaySocket: переподключение', () => {
     expect(last().sent[0].data.token).toBe('fresh')
   })
 
+  it('придержанные события доходят после готовности обработчиков, по порядку', async () => {
+    sock = new GatewaySocket('ws://x', { auth: { token: 'a' } })
+    let ready
+    sock.holdEvents(new Promise((r) => { ready = r }))
+    const got = []
+    const onConnect = vi.fn()
+    sock.on('connect', onConnect)
+    last().onopen()
+    last().accept()
+    expect(onConnect).toHaveBeenCalledTimes(1)
+    last().onmessage({ data: JSON.stringify({ event: 'x:1', data: 1 }) })
+    last().onmessage({ data: JSON.stringify({ event: 'x:2', data: 2 }) })
+    sock.on('x:1', (d) => got.push(d))
+    sock.on('x:2', (d) => got.push(d))
+    expect(got).toEqual([])
+    ready()
+    await Promise.resolve()
+    expect(got).toEqual([1, 2])
+    last().onmessage({ data: JSON.stringify({ event: 'x:1', data: 3 }) })
+    expect(got).toEqual([1, 2, 3])
+  })
+
   it('новый токен уходит живому соединению кадром auth, без переподключения', () => {
     sock = new GatewaySocket('ws://x', { auth: { token: 'a' } })
     last().onopen()

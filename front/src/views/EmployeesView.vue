@@ -54,7 +54,7 @@
 
           <div class="emp-card-avatar-wrap">
             <span class="avatar avatar-lg" :class="presenceClass(u)">
-              <img :src="avatarOf(u)" :alt="u.fio" />
+              <img loading="lazy" decoding="async" :src="avatarOf(u)" :alt="u.fio" />
             </span>
           </div>
 
