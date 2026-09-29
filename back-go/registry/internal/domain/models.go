@@ -299,3 +299,10 @@ type SearchHit struct {
 	RecordID     int64  `json:"record_id"`
 	Snippet      string `json:"snippet"`
 }
+
+// RegistriesSummary — сводка раздела для живой плитки (считается в SQL, без
+// полей и записей).
+type RegistriesSummary struct {
+	Total int      `json:"total"`
+	Names []string `json:"names"`
+}

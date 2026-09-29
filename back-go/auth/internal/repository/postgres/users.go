@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
@@ -163,7 +164,8 @@ func (r *UserRepository) ListAll(ctx context.Context) ([]*domain.User, error) {
 }
 
 // SearchDirectory — глобальный каталог (контакты): активные пользователи,
-// ILIKE по fio/login, без excludeID; сортировка по fio.
+// ILIKE по fio/login, без excludeID; сортировка по fio, не больше
+// globalDirectoryLimit — это поиск, а не выгрузка платформы.
 func (r *UserRepository) SearchDirectory(ctx context.Context, query string, excludeID int64, loginOnly bool) ([]*domain.User, error) {
 	where := []string{"u.is_active"}
 	var args []any
@@ -179,8 +181,11 @@ func (r *UserRepository) SearchDirectory(ctx context.Context, query string, excl
 			where = append(where, fmt.Sprintf("(lower(u.fio) LIKE $%d OR lower(u.login) LIKE $%d)", len(args), len(args)))
 		}
 	}
-	return r.listIdentity(ctx, "WHERE "+strings.Join(where, " AND ")+" ORDER BY u.fio ASC", args...)
+	return r.listIdentity(ctx, "WHERE "+strings.Join(where, " AND ")+
+		" ORDER BY u.fio ASC LIMIT "+strconv.Itoa(globalDirectoryLimit), args...)
 }
+
+const globalDirectoryLimit = 50
 
 func (r *UserRepository) Create(ctx context.Context, u *domain.User) error {
 	return r.pool.QueryRow(ctx, `
@@ -522,4 +527,22 @@ func (r *UserRepository) HardDelete(ctx context.Context, userID int64) error {
 		return err
 	}
 	return tx.Commit(ctx)
+}
+
+func (r *UserRepository) ActiveMemberIDs(ctx context.Context, companyID int64) ([]int64, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT u.id FROM user_companies uc
+		  JOIN users u ON u.id = uc.user_id
+		 WHERE uc.company_id = $1 AND u.is_active
+		 ORDER BY u.id`, companyID)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, pgx.RowTo[int64])
+}
+
+func (r *UserRepository) CountUsers(ctx context.Context) (total, active int, err error) {
+	err = r.pool.QueryRow(ctx,
+		`SELECT count(*), count(*) FILTER (WHERE is_active) FROM users`).Scan(&total, &active)
+	return total, active, err
 }

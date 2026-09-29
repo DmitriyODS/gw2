@@ -8,11 +8,13 @@ import (
 	"log/slog"
 
 	"github.com/DmitriyODS/gw2/back-go/calendar/internal/domain"
-
 	"github.com/DmitriyODS/gw2/back-go/pkg/billingclient"
+	"github.com/DmitriyODS/gw2/back-go/pkg/events"
 )
 
-const roomAll = "all"
+// companyRoom — события календарей уходят только участникам компании с ней
+// активной (комнату сажает шлюз по токену), а не в общую "all".
+func companyRoom(companyID int64) []string { return []string{events.CompanyRoom(companyID)} }
 
 type Service struct {
 	repo  domain.CalendarRepository

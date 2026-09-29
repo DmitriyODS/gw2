@@ -1,6 +1,7 @@
 package http
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"io"
 
@@ -357,12 +358,22 @@ func (h *handlers) resetPassword(c *fiber.Ctx) error {
    эмодзи-шрифт не нужен. */
 func (h *handlers) identicon(c *fiber.Ctx) error {
 	userID := pathID(c)
-	/* Кэшировать нельзя: адрес аватара один и тот же, а картинка за ним
-	   меняется вместе с выбранным значком — с кэшем человек сохранял бы
-	   значок и продолжал видеть прежний. no-cache не запрещает хранение,
-	   только требует проверки, поэтому лишнего трафика почти нет. */
+	/* Адрес аватара постоянный, а картинка за ним меняется вместе со значком,
+	   поэтому кэш с ревалидацией: ETag выводится из того, что определяет
+	   картинку (значок или его отсутствие), и повторный показ стоит 304 без
+	   тела и без отрисовки. Цифра в теге — версия рисунка: поменялась
+	   отрисовка — поднять её, иначе клиенты останутся со старой картинкой. */
+	emoji := h.userEmoji(c, userID)
+	etag := `"i1"`
+	if emoji != "" {
+		etag = `"e1-` + hex.EncodeToString([]byte(emoji)) + `"`
+	}
 	c.Set(fiber.HeaderCacheControl, "no-cache")
-	if emoji := h.userEmoji(c, userID); emoji != "" {
+	c.Set(fiber.HeaderETag, etag)
+	if c.Get(fiber.HeaderIfNoneMatch) == etag {
+		return c.SendStatus(fiber.StatusNotModified)
+	}
+	if emoji != "" {
 		c.Set(fiber.HeaderContentType, "image/svg+xml")
 		return c.Send(avatar.EmojiAvatar(userID, emoji))
 	}
@@ -556,4 +567,26 @@ func (h *handlers) joinByInvite(c *fiber.Ctx) error {
 	sess := resp.(*dto.Session)
 	setRefreshCookie(c, sess.RefreshToken)
 	return c.JSON(sess)
+}
+
+// directorySummary — сотрудники активной компании для плитки: число и id
+// (онлайн плитка считает сама, пересекая их с presence). Нет активной
+// компании — сотрудников нет.
+func (h *handlers) directorySummary(c *fiber.Ctx) error {
+	ids := []int64{}
+	if me := currentUser(c); me != nil && me.CompanyID != nil {
+		var err error
+		if ids, err = h.users.ActiveMemberIDs(c.Context(), *me.CompanyID); err != nil {
+			return h.respondError(c, err)
+		}
+	}
+	return c.JSON(fiber.Map{"total": len(ids), "ids": ids})
+}
+
+func (h *handlers) usersSummary(c *fiber.Ctx) error {
+	total, active, err := h.users.CountUsers(c.Context())
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(fiber.Map{"total": total, "active": active})
 }

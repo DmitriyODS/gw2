@@ -40,6 +40,22 @@ func (f *fakeLastSeen) SetLastSeen(_ context.Context, userID int64, _ time.Time)
 	return nil
 }
 
+// fakeAudience — круги общения: 7 ↔ 8 (общая компания), 9 — супер-админ.
+type fakeAudience struct{ calls int }
+
+func (a *fakeAudience) PresenceAudience(_ context.Context, userID int64) ([]int64, bool, error) {
+	a.calls++
+	switch userID {
+	case 7:
+		return []int64{7, 8, 9}, false, nil
+	case 8:
+		return []int64{7, 8, 9}, false, nil
+	case 9:
+		return []int64{7, 8, 9}, true, nil
+	}
+	return []int64{9}, false, nil
+}
+
 func newTestPresence(t *testing.T) (*Presence, *fakeBus, *fakeLastSeen, *time.Time) {
 	t.Helper()
 	mr := miniredis.RunT(t)
@@ -47,7 +63,7 @@ func newTestPresence(t *testing.T) (*Presence, *fakeBus, *fakeLastSeen, *time.Ti
 	t.Cleanup(func() { _ = rdb.Close() })
 	bus := &fakeBus{}
 	seen := &fakeLastSeen{}
-	p := New(rdb, seen, bus, slog.New(slog.DiscardHandler))
+	p := New(rdb, seen, bus, &fakeAudience{}, slog.New(slog.DiscardHandler))
 	now := time.Now()
 	p.now = func() time.Time { return now }
 	return p, bus, seen, &now
@@ -66,8 +82,9 @@ func TestConnectGoesOnlineOnce(t *testing.T) {
 		ev.Payload["last_seen_at"] != nil {
 		t.Fatalf("payload = %v", ev.Payload)
 	}
-	if len(ev.Rooms) != 1 || ev.Rooms[0] != "all" {
-		t.Fatalf("rooms = %v", ev.Rooms)
+	// Адресно кругу (сам, коллега, супер-админ) — не всей платформе.
+	if want := []string{"user_7", "user_8", "user_9"}; !equalStrings(ev.Rooms, want) {
+		t.Fatalf("rooms = %v, want %v", ev.Rooms, want)
 	}
 
 	// Вторая вкладка — события нет (не на переходе).
@@ -143,4 +160,83 @@ func TestSweepDropsStaleConnections(t *testing.T) {
 	if err != nil || len(ids) != 1 || ids[0] != 8 {
 		t.Fatalf("online = %v, err = %v", ids, err)
 	}
+}
+
+func equalStrings(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func TestVisibleOnlineLimitedToAudience(t *testing.T) {
+	p, _, _, _ := newTestPresence(t)
+	ctx := context.Background()
+	for _, id := range []int64{7, 8, 9, 42} {
+		p.OnConnect(ctx, id, "c")
+	}
+
+	ids, err := p.VisibleOnline(ctx, 7)
+	if err != nil || !equalInts(ids, []int64{7, 8, 9}) {
+		t.Fatalf("7 видит %v, err = %v (посторонний 42 не должен попадать)", ids, err)
+	}
+	ids, _ = p.VisibleOnline(ctx, 9)
+	if !equalInts(ids, []int64{7, 8, 9, 42}) {
+		t.Fatalf("супер-админ видит %v, ожидался весь онлайн", ids)
+	}
+}
+
+func TestAudienceCached(t *testing.T) {
+	p, _, _, now := newTestPresence(t)
+	ctx := context.Background()
+	aud := p.audience.(*fakeAudience)
+
+	p.OnConnect(ctx, 7, "c1")
+	p.OnVisibility(ctx, 7, "c1", false)
+	p.OnVisibility(ctx, 7, "c1", true)
+	if aud.calls != 1 {
+		t.Fatalf("круг запрошен %d раз, ожидался один (кэш)", aud.calls)
+	}
+	*now = now.Add(audienceTTL + time.Second)
+	p.OnVisibility(ctx, 7, "c1", false)
+	if aud.calls != 2 {
+		t.Fatalf("после TTL круг не перечитан: calls = %d", aud.calls)
+	}
+}
+
+// Зависшее соединение (без heartbeat дольше StaleAfter) не держит онлайн,
+// когда закрывается последнее живое, — и не копится в хеше после sweep'а.
+func TestStaleConnectionDoesNotKeepOnline(t *testing.T) {
+	p, bus, _, now := newTestPresence(t)
+	ctx := context.Background()
+
+	p.OnConnect(ctx, 7, "frozen")
+	*now = now.Add(StaleAfter + time.Second)
+	p.OnConnect(ctx, 7, "live")
+	p.OnDisconnect(ctx, 7, "live")
+	if bus.last().Payload["online"] != false {
+		t.Fatal("зависшее соединение удержало онлайн")
+	}
+
+	p.SweepOnce(ctx)
+	if n, _ := p.rdb.HLen(ctx, connsKey(7)).Result(); n != 0 {
+		t.Fatalf("в хеше соединений осталось %d полей", n)
+	}
+}
+
+func equalInts(a, b []int64) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }

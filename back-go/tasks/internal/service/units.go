@@ -4,6 +4,7 @@ import (
 	"context"
 	"strconv"
 
+	"github.com/DmitriyODS/gw2/back-go/pkg/events"
 	"github.com/DmitriyODS/gw2/back-go/tasks/internal/domain"
 	"github.com/DmitriyODS/gw2/back-go/tasks/internal/dto"
 )
@@ -83,7 +84,7 @@ func (s *Service) CreateUnit(ctx context.Context, taskID, userID int64, companyI
 		return nil, err
 	}
 	out := dto.NewUnit(created)
-	s.bus.Publish(ctx, "unit:started", []string{roomAll}, out)
+	s.bus.Publish(ctx, "unit:started", unitRooms(created), out)
 	return &out, nil
 }
 
@@ -130,7 +131,7 @@ func (s *Service) UpdateUnit(ctx context.Context, unitID, actorID int64, actorLe
 	}
 	out := dto.NewUnit(updated)
 	// Payload как во Flask: дамп + явные unit_id/task_id.
-	s.bus.Publish(ctx, "unit:updated", []string{roomAll}, struct {
+	s.bus.Publish(ctx, "unit:updated", unitRooms(updated), struct {
 		dto.Unit
 		UnitID int64 `json:"unit_id"`
 	}{Unit: out, UnitID: updated.ID})
@@ -177,7 +178,7 @@ func (s *Service) StopUnit(ctx context.Context, unitID, actorID int64, actorLeve
 	}
 	s.pets.OnUnitStopped(unit, taskName)
 
-	s.bus.Publish(ctx, "unit:stopped", []string{roomAll}, map[string]any{
+	s.bus.Publish(ctx, "unit:stopped", unitRooms(unit), map[string]any{
 		"unit_id":      unit.ID,
 		"task_id":      unit.TaskID,
 		"user_id":      unit.UserID,
@@ -211,10 +212,17 @@ func (s *Service) DeleteUnit(ctx context.Context, unitID, actorID int64, actorLe
 		return err
 	}
 	s.log.Info("unit.delete", "unit_id", unitID, "task_id", unit.TaskID, "user_id", actorID)
-	s.bus.Publish(ctx, "unit:deleted", []string{roomAll}, map[string]any{
+	s.bus.Publish(ctx, "unit:deleted", unitRooms(unit), map[string]any{
 		"unit_id": unitID, "task_id": unit.TaskID, "user_id": unit.UserID,
 	})
 	return nil
+}
+
+// unitRooms — компания юнита и сам владелец: активный юнит один на человека
+// во всех компаниях, и его устройства с другой активной компанией тоже должны
+// увидеть старт и остановку (дубль шлюз не доставит).
+func unitRooms(u *domain.Unit) []string {
+	return []string{events.CompanyRoom(u.CompanyID), userRoom(u.UserID)}
 }
 
 func userRoom(userID int64) string {

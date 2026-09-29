@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -226,4 +227,44 @@ func prefixed(cols, alias string) string {
 		parts[i] = alias + "." + strings.TrimSpace(p)
 	}
 	return strings.Join(parts, ", ")
+}
+
+// FormsSummary — те же формы и поля, что у ListForms (область «все»), но
+// свёрнутые в счётчики: плитке не нужен список целиком.
+func (r *Repo) FormsSummary(ctx context.Context, userID, companyID int64) (*domain.FormsSummary, error) {
+	var (
+		out   domain.FormsSummary
+		id    *int64
+		title *string
+		due   *time.Time
+	)
+	err := r.pool.QueryRow(ctx, `
+		WITH vis AS (
+		    SELECT f.id, f.title, `+accessExpr+` AS access,
+		           (SELECT min(sh.due_at) FROM form_user_shares sh
+		             WHERE sh.form_id = f.id AND sh.access = 'respond'
+		               AND (sh.user_id = $1 OR sh.company_id = $2)) AS due,
+		           EXISTS (SELECT 1 FROM form_responses fr
+		                    WHERE fr.form_id = f.id AND fr.user_id = $1) AS responded
+		      FROM forms f
+		     WHERE `+scopeCondition(domain.ScopeAll)+`)
+		SELECT a.total, a.pending,
+		       (SELECT count(*) FROM form_responses fr
+		         WHERE fr.form_id IN (SELECT id FROM vis WHERE access IN ('owner', 'edit', 'view'))),
+		       n.id, n.title, n.due
+		  FROM (SELECT count(*) AS total,
+		               count(*) FILTER (WHERE due IS NOT NULL AND NOT responded) AS pending
+		          FROM vis) a
+		  LEFT JOIN LATERAL (
+		        SELECT id, title, due FROM vis
+		         WHERE due IS NOT NULL AND NOT responded
+		         ORDER BY due, id LIMIT 1) n ON TRUE`, userID, companyID).
+		Scan(&out.Total, &out.Pending, &out.Responses, &id, &title, &due)
+	if err != nil {
+		return nil, err
+	}
+	if id != nil {
+		out.Next = &domain.FormSummaryItem{ID: *id, Title: *title, DueAt: *due}
+	}
+	return &out, nil
 }

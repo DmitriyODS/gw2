@@ -203,6 +203,14 @@ type FileStore interface {
 
 // EventPublisher — доставка событий Socket.IO через Flask-мост
 // (Redis-канал gw2:messenger:events). Потеря события не фатальна.
+// ConversationChanges — журнал изменений списка диалогов (дельта-синхронизация
+// после сна клиента). Since: ok=false — журнал не ручается за полноту, отдать
+// полный список.
+type ConversationChanges interface {
+	Touch(ctx context.Context, userIDs []int64, convID int64, gone bool)
+	Since(ctx context.Context, userID, since int64) (changed, removed []int64, cursor int64, ok bool)
+}
+
 type EventPublisher interface {
 	// Publish — {"event": ..., "rooms": ["user_12", ...], "payload": {...}}.
 	// События с префиксом "_" — служебные хуки моста, наружу не эмитятся.

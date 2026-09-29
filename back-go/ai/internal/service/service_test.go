@@ -204,12 +204,29 @@ func (r *fakeRepo) TVWeekContext(_ context.Context, _ int64, _, _ time.Time) (*d
 	return &domain.TVWeekContext{}, nil
 }
 
-// fakeFacts — in-memory кэш ТВ-фактов.
+// fakeFacts — in-memory кэш ТВ-фактов. Внеочередную генерацию не отдаёт
+// (горутина в тестах ни к чему), если не разрешить её claimable.
 type fakeFacts struct {
-	facts map[int64]*domain.TVFact
+	facts     map[int64]*domain.TVFact
+	watched   map[int64]bool
+	claimable bool
+	claims    int
 }
 
-func newFakeFacts() *fakeFacts { return &fakeFacts{facts: map[int64]*domain.TVFact{}} }
+func newFakeFacts() *fakeFacts {
+	return &fakeFacts{facts: map[int64]*domain.TVFact{}, watched: map[int64]bool{}}
+}
+
+func (f *fakeFacts) MarkWatched(_ context.Context, companyID int64, _ time.Duration) {
+	f.watched[companyID] = true
+}
+
+func (f *fakeFacts) Watched(_ context.Context, companyID int64) bool { return f.watched[companyID] }
+
+func (f *fakeFacts) ClaimGeneration(context.Context, int64, time.Duration) bool {
+	f.claims++
+	return f.claimable
+}
 
 func (f *fakeFacts) GetFact(_ context.Context, companyID int64) (*domain.TVFact, error) {
 	return f.facts[companyID], nil

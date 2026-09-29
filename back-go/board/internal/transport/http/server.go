@@ -90,6 +90,7 @@ func NewServer(svc *service.Service, users domain.UserReader, uploads *chunkuplo
 
 	// Доски.
 	api.Get("", h.listBoards)
+	api.Get("/summary", h.summary)
 	api.Post("", h.createBoard)
 	api.Get("/export", h.exportAll) // zip группировки (scope=all|archive|shared)
 	api.Post("/import", h.importBoard)

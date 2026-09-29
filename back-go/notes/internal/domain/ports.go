@@ -23,6 +23,8 @@ type NoteRepository interface {
 	// ── Заметки ──
 	// ListNotes — плитки по фильтру (без doc, с excerpt/folder_id/tag_ids).
 	ListNotes(ctx Ctx, f NoteListFilter) ([]*Note, error)
+	// NoteSummary — сводка своих неархивных заметок для живой плитки.
+	NoteSummary(ctx Ctx, ownerID int64) (*ListSummary, error)
 	// GetNote — полная заметка (с doc, folder_id и tag_ids); nil — нет такой.
 	GetNote(ctx Ctx, id int64) (*Note, error)
 	CreateNote(ctx Ctx, n *Note) error
@@ -161,6 +163,18 @@ type Embedder interface {
 // (realtime-шлюз gatewaysvc доставляет их в WS-комнаты вербатим).
 type EventBus interface {
 	Publish(ctx Ctx, event string, rooms []string, payload any)
+}
+
+// CollabViewers — кто сейчас держит документ открытым (pkg/collab): события
+// совместной работы адресуются только им, а не всей аудитории.
+type CollabViewers interface {
+	Touch(ctx Ctx, docID, userID int64) error
+	Leave(ctx Ctx, docID, userID int64) error
+	List(ctx Ctx, docID int64) ([]int64, error)
+	// RememberAccess / CachedAccess — проверенный доступ зрителя на окно
+	// реестра: кадры редактора идут чаще, чем стоит честная проверка.
+	RememberAccess(ctx Ctx, docID, userID, ownerID int64, access string)
+	CachedAccess(ctx Ctx, docID, userID int64) (access string, ownerID int64, ok bool)
 }
 
 // FileStore — хранилище картинок редактора (pkg/records.FileStore поверх

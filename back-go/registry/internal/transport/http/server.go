@@ -107,6 +107,7 @@ func NewServer(svc *service.Service, users domain.UserReader,
 	api.Get("/companies", h.companies)
 
 	api.Get("", h.listRegistries)
+	api.Get("/summary", h.tileSummary)
 	api.Post("", h.createRegistry)
 	api.Get("/:id<int>", h.getRegistry)
 	api.Patch("/:id<int>", h.updateRegistry)

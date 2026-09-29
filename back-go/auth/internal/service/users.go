@@ -170,9 +170,9 @@ func (s *Service) CreateUser(ctx context.Context, actor *domain.User, req dto.Cr
 // связки); без активной компании — глобальный поиск всех (контакты).
 func (s *Service) Directory(ctx context.Context, req dto.DirectoryRequest) ([]dto.DirectoryUser, error) {
 	if req.CompanyID == nil {
-		// Поиск строго по логину с пустым запросом — пусто (не вываливаем весь
-		// каталог по ФИО; собеседника ищут по конкретному логину).
-		if req.LoginOnly && strings.TrimSpace(req.Query) == "" {
+		// Глобальный каталог — только поиск: без запроса он выдавал бы всех
+		// пользователей платформы любому вошедшему (и рос бы вместе с ней).
+		if strings.TrimSpace(req.Query) == "" {
 			return []dto.DirectoryUser{}, nil
 		}
 		users, err := s.repo.SearchDirectory(ctx, req.Query, req.ExcludeID, req.LoginOnly)

@@ -151,18 +151,18 @@ func (r *Repo) attachDerived(ctx context.Context, posts []*domain.Post, viewerID
 	}
 
 	attRows, err := r.pool.Query(ctx, `
-		SELECT id, post_id, file_path, name, size, mime, created_at
+		SELECT id, post_id, file_path, name, size, mime, created_at, thumb_path
 		FROM portal_attachments WHERE post_id = ANY($1) ORDER BY id`, ids)
 	if err != nil {
 		return err
 	}
 	for attRows.Next() {
 		var a domain.Attachment
-		if err := attRows.Scan(&a.ID, &a.PostID, &a.FilePath, &a.Name, &a.Size, &a.Mime, &a.CreatedAt); err != nil {
+		if err := attRows.Scan(&a.ID, &a.PostID, &a.FilePath, &a.Name, &a.Size, &a.Mime, &a.CreatedAt, &a.ThumbPath); err != nil {
 			attRows.Close()
 			return err
 		}
-		a.URL = "/uploads/" + a.FilePath
+		a.SetURLs()
 		if p := byID[a.PostID]; p != nil {
 			p.Attachments = append(p.Attachments, a)
 		}
@@ -427,26 +427,26 @@ func (r *Repo) SetPinned(ctx context.Context, id int64, pinnedAt *time.Time, pin
 
 func (r *Repo) AddAttachment(ctx context.Context, a *domain.Attachment) error {
 	return r.pool.QueryRow(ctx, `
-		INSERT INTO portal_attachments (post_id, file_path, name, size, mime)
-		VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO portal_attachments (post_id, file_path, name, size, mime, thumb_path)
+		VALUES ($1, $2, $3, $4, $5, $6)
 		RETURNING id, created_at`,
-		a.PostID, a.FilePath, a.Name, a.Size, a.Mime,
+		a.PostID, a.FilePath, a.Name, a.Size, a.Mime, a.ThumbPath,
 	).Scan(&a.ID, &a.CreatedAt)
 }
 
 func (r *Repo) GetAttachment(ctx context.Context, id int64) (*domain.Attachment, error) {
 	var a domain.Attachment
 	err := r.pool.QueryRow(ctx, `
-		SELECT id, post_id, file_path, name, size, mime, created_at
+		SELECT id, post_id, file_path, name, size, mime, created_at, thumb_path
 		FROM portal_attachments WHERE id = $1`, id,
-	).Scan(&a.ID, &a.PostID, &a.FilePath, &a.Name, &a.Size, &a.Mime, &a.CreatedAt)
+	).Scan(&a.ID, &a.PostID, &a.FilePath, &a.Name, &a.Size, &a.Mime, &a.CreatedAt, &a.ThumbPath)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	a.URL = "/uploads/" + a.FilePath
+	a.SetURLs()
 	return &a, nil
 }
 
@@ -457,7 +457,7 @@ func (r *Repo) DeleteAttachment(ctx context.Context, id int64) error {
 
 func (r *Repo) ListAttachments(ctx context.Context, postID int64) ([]domain.Attachment, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, post_id, file_path, name, size, mime, created_at
+		SELECT id, post_id, file_path, name, size, mime, created_at, thumb_path
 		FROM portal_attachments WHERE post_id = $1 ORDER BY id`, postID)
 	if err != nil {
 		return nil, err
@@ -466,17 +466,20 @@ func (r *Repo) ListAttachments(ctx context.Context, postID int64) ([]domain.Atta
 	out := []domain.Attachment{}
 	for rows.Next() {
 		var a domain.Attachment
-		if err := rows.Scan(&a.ID, &a.PostID, &a.FilePath, &a.Name, &a.Size, &a.Mime, &a.CreatedAt); err != nil {
+		if err := rows.Scan(&a.ID, &a.PostID, &a.FilePath, &a.Name, &a.Size, &a.Mime, &a.CreatedAt, &a.ThumbPath); err != nil {
 			return nil, err
 		}
-		a.URL = "/uploads/" + a.FilePath
+		a.SetURLs()
 		out = append(out, a)
 	}
 	return out, rows.Err()
 }
 
 func (r *Repo) AttachmentPaths(ctx context.Context, postID int64) ([]string, error) {
-	rows, err := r.pool.Query(ctx, `SELECT file_path FROM portal_attachments WHERE post_id = $1`, postID)
+	rows, err := r.pool.Query(ctx, `
+		SELECT file_path FROM portal_attachments WHERE post_id = $1
+		UNION ALL
+		SELECT thumb_path FROM portal_attachments WHERE post_id = $1 AND thumb_path IS NOT NULL`, postID)
 	if err != nil {
 		return nil, err
 	}

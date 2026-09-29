@@ -40,7 +40,7 @@ func (s *Service) CreateComment(ctx context.Context, companyID, postID, authorID
 	if err := s.repo.CreateComment(ctx, c); err != nil {
 		return nil, err
 	}
-	s.bus.Publish(ctx, "comment:new", []string{roomAll}, commentPayload(c, companyID))
+	s.bus.Publish(ctx, "comment:new", companyRoom(companyID), commentPayload(c, companyID))
 	return c, nil
 }
 
@@ -65,7 +65,7 @@ func (s *Service) DeleteComment(ctx context.Context, companyID, commentID, userI
 	if err := s.repo.DeleteComment(ctx, commentID); err != nil {
 		return err
 	}
-	s.bus.Publish(ctx, "comment:deleted", []string{roomAll}, map[string]any{
+	s.bus.Publish(ctx, "comment:deleted", companyRoom(companyID), map[string]any{
 		"id": commentID, "post_id": c.PostID, "company_id": companyID,
 	})
 	return nil
@@ -89,7 +89,7 @@ func (s *Service) LikeComment(ctx context.Context, companyID, commentID, userID 
 		return nil, err
 	}
 	c.Liked, c.LikeCount = liked, count
-	s.bus.Publish(ctx, "comment:liked", []string{roomAll}, map[string]any{
+	s.bus.Publish(ctx, "comment:liked", companyRoom(companyID), map[string]any{
 		"id": c.ID, "post_id": c.PostID, "company_id": companyID,
 		"like_count": count,
 	})

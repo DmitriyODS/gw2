@@ -320,6 +320,10 @@ func (r *fakeRepo) CountCompanyMembersByLevel(_ context.Context, companyID int64
 	return n, nil
 }
 
+func (r *fakeRepo) ActiveMemberIDs(context.Context, int64) ([]int64, error) { return nil, nil }
+
+func (r *fakeRepo) CountUsers(context.Context) (int, int, error) { return 0, 0, nil }
+
 func (r *fakeRepo) SearchDirectoryMembers(_ context.Context, query string, excludeID, companyID int64) ([]*domain.User, error) {
 	var out []*domain.User
 	for uid, byCompany := range r.members {

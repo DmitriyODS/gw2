@@ -9,6 +9,7 @@ import (
 
 	"github.com/DmitriyODS/gw2/back-go/pets/internal/domain"
 	"github.com/DmitriyODS/gw2/back-go/pets/internal/dto"
+	"github.com/DmitriyODS/gw2/back-go/pkg/events"
 )
 
 // emitPetUpdate — синхронизация питомца между вкладками владельца.
@@ -952,9 +953,9 @@ func (s *Service) DeleteColleaguePet(ctx context.Context, adminLevel int, target
 	if err := s.installments.DeleteForUser(ctx, targetUserID); err != nil {
 		s.log.Warn("pets.delete_installments_failed", "user_id", targetUserID, "error", err)
 	}
-	// Комната all: владельцу — сброс своего питомца, остальным — обновление
-	// зоопарка; клиенты чужих компаний отфильтруют по company_id.
-	s.pub.Publish(ctx, "pet:deleted", []string{"all"}, map[string]any{
+	// Владельцу — сброс своего питомца (лично: его активная компания может быть
+	// другой), коллегам — обновление зоопарка.
+	s.pub.Publish(ctx, "pet:deleted", []string{events.CompanyRoom(companyID), events.UserRoom(targetUserID)}, map[string]any{
 		"user_id": targetUserID, "company_id": companyID,
 	})
 	return nil

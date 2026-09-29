@@ -78,8 +78,29 @@ type Attachment struct {
 	Size      int64     `json:"size"`
 	Mime      *string   `json:"mime"`
 	CreatedAt time.Time `json:"created_at"`
-	// URL — вычисляется при сериализации (не хранится).
-	URL string `json:"url"`
+	// ThumbPath — миниатюра картинки (nil — не картинка или она и так мала).
+	ThumbPath *string `json:"-"`
+	// URL / ThumbURL — вычисляются при чтении (не хранятся). Лента берёт
+	// миниатюру, лайтбокс — оригинал.
+	URL      string `json:"url"`
+	ThumbURL string `json:"thumb_url,omitempty"`
+}
+
+// Paths — все объекты хранилища вложения: оригинал и миниатюра.
+func (a *Attachment) Paths() []string {
+	if a.ThumbPath != nil && *a.ThumbPath != "" {
+		return []string{a.FilePath, *a.ThumbPath}
+	}
+	return []string{a.FilePath}
+}
+
+// SetURLs — публичные адреса по ключам хранилища.
+func (a *Attachment) SetURLs() {
+	a.URL = "/uploads/" + a.FilePath
+	a.ThumbURL = ""
+	if a.ThumbPath != nil && *a.ThumbPath != "" {
+		a.ThumbURL = "/uploads/" + *a.ThumbPath
+	}
 }
 
 // Comment — комментарий поста. ReplyToID — родитель в дереве обсуждения

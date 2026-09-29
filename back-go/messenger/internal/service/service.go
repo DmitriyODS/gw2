@@ -41,6 +41,7 @@ const supportReplyTimeout = 60 * time.Second
 // MessengerService — все use-case'ы сервиса (REST + gRPC).
 type MessengerService interface {
 	ListConversations(ctx context.Context, userID int64, companyID *int64) ([]*dto.ConversationListItem, error)
+	SyncConversations(ctx context.Context, userID int64, companyID *int64, since int64) (*dto.ConversationSync, error)
 	OpenConversation(ctx context.Context, meID, otherUserID int64) (*dto.ConversationWithOther, error)
 	ListMessages(ctx context.Context, convID, userID int64, beforeID, afterID *int64, limit int) ([]*dto.Message, error)
 	SendMessage(ctx context.Context, convID, senderID int64, req dto.MessageCreate) (*dto.Message, error)
@@ -113,6 +114,15 @@ type Service struct {
 	log *slog.Logger
 	// billing — лимиты тарифа (WithBilling; nil — ограничений нет).
 	billing *billingclient.Client
+	// changes — журнал изменений списка (WithChanges; nil — синхронизация
+	// всегда полная).
+	changes domain.ConversationChanges
+}
+
+// WithChanges — подключить журнал изменений списка диалогов.
+func (s *Service) WithChanges(c domain.ConversationChanges) *Service {
+	s.changes = c
+	return s
 }
 
 var _ MessengerService = (*Service)(nil)

@@ -633,3 +633,11 @@ func (h *handlers) sharedUpdate(c *fiber.Ctx) error {
 	}
 	return c.JSON(resp)
 }
+
+func (h *handlers) summary(c *fiber.Ctx) error {
+	resp, err := h.svc.Summary(c.Context(), currentUserID(c))
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(resp)
+}

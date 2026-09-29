@@ -112,3 +112,15 @@ const MaxFileSize = 500 << 20
 // TrashKeepDays — сколько корзина хранит удалённое, прежде чем сервис
 // вычистит его сам.
 const TrashKeepDays = 30
+
+// FileSummary — сводка диска для живой плитки: считается в SQL, а не
+// выборкой списка.
+type FileSummary struct {
+	Total  int              `json:"total"`
+	Latest *FileSummaryItem `json:"latest"`
+}
+
+type FileSummaryItem struct {
+	ID   int64  `json:"id"`
+	Name string `json:"name"`
+}

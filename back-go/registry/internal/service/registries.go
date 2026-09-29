@@ -35,6 +35,15 @@ func (s *Service) ListRegistries(ctx context.Context, userID int64, scope string
 	return regs, nil
 }
 
+// TileSummary — сводка раздела для живой плитки «Пуска».
+func (s *Service) TileSummary(ctx context.Context, userID int64) (*domain.RegistriesSummary, error) {
+	a, err := s.actor(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	return s.repo.RegistriesSummary(ctx, a.UserID, a.CompanyID, 3)
+}
+
 // GetRegistry — один доступный реестр с полями.
 func (s *Service) GetRegistry(ctx context.Context, userID, id int64) (*domain.Registry, error) {
 	a, err := s.actor(ctx, userID)

@@ -24,7 +24,7 @@ func (s *Service) Collab(ctx context.Context, userID, boardID int64, kind string
 	if !collabKinds[kind] {
 		return domain.ErrBadCollabKind
 	}
-	n, access, err := s.requireReadable(ctx, userID, boardID)
+	ownerID, access, err := s.collabAccess(ctx, userID, boardID, kind)
 	if err != nil {
 		return err
 	}
@@ -54,6 +54,55 @@ func (s *Service) Collab(ctx context.Context, userID, boardID int64, kind string
 	if title != nil && kind == "scene" {
 		payload["title"] = *title
 	}
-	s.bus.Publish(ctx, "board_collab:"+kind, s.boardRooms(ctx, boardID, n.OwnerID), payload)
+	s.bus.Publish(ctx, "board_collab:"+kind, s.collabRooms(ctx, userID, boardID, ownerID, kind), payload)
 	return nil
+}
+
+// collabAccess — доступ отправителя кадра. join проверяет честно и запоминает
+// результат на окно зрителя, частые кадры (курсор, живые правки) берут
+// запомненный: после отзыва шары рассылка прекращается не позже collab.TTL.
+func (s *Service) collabAccess(ctx context.Context, userID, docID int64, kind string) (int64, string, error) {
+	if s.viewers != nil && kind != "join" {
+		if access, ownerID, ok := s.viewers.CachedAccess(ctx, docID, userID); ok {
+			return ownerID, access, nil
+		}
+	}
+	doc, access, err := s.requireReadable(ctx, userID, docID)
+	if err != nil {
+		return 0, "", err
+	}
+	if s.viewers != nil {
+		s.viewers.RememberAccess(ctx, docID, userID, doc.OwnerID, access)
+	}
+	return doc.OwnerID, access, nil
+}
+
+// collabRooms — адресаты события совместной работы: открывшие документ, кроме
+// самого отправителя. Реестр зрителей недоступен — вся аудитория, как раньше:
+// лишние кадры лучше потерянной правки.
+func (s *Service) collabRooms(ctx context.Context, userID, docID, ownerID int64, kind string) []string {
+	if s.viewers == nil {
+		return s.boardRooms(ctx, docID, ownerID)
+	}
+	var err error
+	if kind == "leave" {
+		err = s.viewers.Leave(ctx, docID, userID)
+	} else {
+		err = s.viewers.Touch(ctx, docID, userID)
+	}
+	var ids []int64
+	if err == nil {
+		ids, err = s.viewers.List(ctx, docID)
+	}
+	if err != nil {
+		s.log.Warn("collab.viewers_failed", "doc_id", docID, "error", err)
+		return s.boardRooms(ctx, docID, ownerID)
+	}
+	rooms := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if id != userID {
+			rooms = append(rooms, userRoom(id))
+		}
+	}
+	return rooms
 }

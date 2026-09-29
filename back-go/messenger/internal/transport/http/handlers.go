@@ -95,10 +95,24 @@ func scopeParam(c *fiber.Ctx) string {
 
 // ── Диалоги ──────────────────────────────────────────────────────
 
+// listConversations — без ?since прежний массив; с ?since (курсор прошлой
+// синхронизации, 0 — первая) — объект синхронизации: дельта либо полный
+// список с full=true.
 func (h *handlers) listConversations(c *fiber.Ctx) error {
-	resp, err := h.eps.ListConversations(c.Context(), endpoint.ListConversationsRequest{
-		UserID: currentUserID(c), CompanyID: activeCompanyID(c),
-	})
+	req := endpoint.ListConversationsRequest{UserID: currentUserID(c), CompanyID: activeCompanyID(c)}
+	if raw := c.Query("since"); raw != "" {
+		since, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil || since < 0 {
+			return validationError(c, "since", "Некорректный курсор синхронизации")
+		}
+		req.Since = since
+		resp, err := h.eps.SyncConversations(c.Context(), req)
+		if err != nil {
+			return h.respondError(c, err)
+		}
+		return c.JSON(resp)
+	}
+	resp, err := h.eps.ListConversations(c.Context(), req)
 	if err != nil {
 		return h.respondError(c, err)
 	}

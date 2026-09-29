@@ -13,11 +13,17 @@
 // SweepInterval опускает в офлайн тех, от кого сигналов не было дольше
 // StaleAfter. last_seen_at пишется в users на переходе в офлайн.
 //
+// Событие уходит не всей платформе, а АУДИТОРИИ пользователя (Audience):
+// коллегам по общим компаниям, собеседникам и супер-админам. Широковещание
+// росло как N² и будило телефоны из-за входа и выхода незнакомых людей.
+//
 // Ключи Redis:
 //
-//	gw2:presence:beats  — ZSET, member "uid:connID", score — unix-время
-//	                      последнего сигнала живой видимой вкладки;
-//	gw2:presence:online — SET онлайн-пользователей (для переходов и REST).
+//	gw2:presence:beats     — ZSET, member "uid:connID", score — unix-время
+//	                         последнего сигнала живой видимой вкладки (sweeper);
+//	gw2:presence:conns:uid — HASH connID → то же время: «жив ли человек»
+//	                         проверяется по его соединениям, а не по всему ZSET;
+//	gw2:presence:online    — SET онлайн-пользователей (для переходов и REST).
 package presence
 
 import (
@@ -27,22 +33,35 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
+
+	"github.com/DmitriyODS/gw2/back-go/pkg/events"
 )
 
 const (
-	beatsKey  = "gw2:presence:beats"
-	onlineKey = "gw2:presence:online"
+	beatsKey    = "gw2:presence:beats"
+	onlineKey   = "gw2:presence:online"
+	connsPrefix = "gw2:presence:conns:"
 
 	// SweepInterval / StaleAfter — те же, что во Flask-presence.
 	SweepInterval = 15 * time.Second
 	StaleAfter    = 60 * time.Second
 
-	roomAll = "all"
+	// audienceTTL — сколько живёт снимок аудитории: переходы онлайн/офлайн
+	// частые (каждое сворачивание вкладки), а круг общения меняется редко.
+	audienceTTL = time.Minute
 )
+
+// Audience — круг людей, которым виден онлайн-статус пользователя: общие
+// компании, диалоги и группы, супер-админы. Отношение симметрично, поэтому тот
+// же круг — это и те, чей статус виден ему самому. all — видит всех (супер-админ).
+type Audience interface {
+	PresenceAudience(ctx context.Context, userID int64) (ids []int64, all bool, err error)
+}
 
 // LastSeenWriter — запись users.last_seen_at (pgx-пул).
 type LastSeenWriter interface {
@@ -63,17 +82,78 @@ type Bus interface {
 	Publish(ctx context.Context, event string, rooms []string, payload any)
 }
 
+type audienceEntry struct {
+	ids []int64
+	all bool
+	at  time.Time
+}
+
 type Presence struct {
 	rdb      *redis.Client
 	lastSeen LastSeenWriter
 	bus      Bus
+	audience Audience
 	log      *slog.Logger
 	now      func() time.Time
+
+	mu    sync.Mutex
+	cache map[int64]audienceEntry
 }
 
-func New(rdb *redis.Client, lastSeen LastSeenWriter, bus Bus, log *slog.Logger) *Presence {
-	return &Presence{rdb: rdb, lastSeen: lastSeen, bus: bus, log: log, now: time.Now}
+func New(rdb *redis.Client, lastSeen LastSeenWriter, bus Bus, audience Audience, log *slog.Logger) *Presence {
+	return &Presence{
+		rdb: rdb, lastSeen: lastSeen, bus: bus, audience: audience, log: log,
+		now: time.Now, cache: map[int64]audienceEntry{},
+	}
 }
+
+// audienceOf — круг пользователя с кэшем на audienceTTL.
+func (p *Presence) audienceOf(ctx context.Context, userID int64) (audienceEntry, error) {
+	now := p.now()
+	p.mu.Lock()
+	e, ok := p.cache[userID]
+	p.mu.Unlock()
+	if ok && now.Sub(e.at) < audienceTTL {
+		return e, nil
+	}
+	ids, all, err := p.audience.PresenceAudience(ctx, userID)
+	if err != nil {
+		return audienceEntry{}, err
+	}
+	e = audienceEntry{ids: ids, all: all, at: now}
+	p.mu.Lock()
+	// Протухшие снимки чистим на записи — отдельный цикл ради этого не нужен.
+	if len(p.cache) > 1024 {
+		for id, old := range p.cache {
+			if now.Sub(old.at) >= audienceTTL {
+				delete(p.cache, id)
+			}
+		}
+	}
+	p.cache[userID] = e
+	p.mu.Unlock()
+	return e, nil
+}
+
+// publish — presence:update аудитории пользователя (и ему самому: статус видят
+// его же вкладки на других устройствах).
+func (p *Presence) publish(ctx context.Context, userID int64, payload map[string]any) {
+	e, err := p.audienceOf(ctx, userID)
+	if err != nil {
+		p.log.Warn("presence.audience_failed", "user_id", userID, "error", err)
+		return
+	}
+	rooms := make([]string, 0, len(e.ids)+1)
+	rooms = append(rooms, events.UserRoom(userID))
+	for _, id := range e.ids {
+		if id != userID {
+			rooms = append(rooms, events.UserRoom(id))
+		}
+	}
+	p.bus.Publish(ctx, "presence:update", rooms, payload)
+}
+
+func connsKey(userID int64) string { return connsPrefix + strconv.FormatInt(userID, 10) }
 
 func member(userID int64, connID string) string {
 	return strconv.FormatInt(userID, 10) + ":" + connID
@@ -100,10 +180,13 @@ func isoUTC(t time.Time) string {
 
 // beat — пометить соединение живым и видимым.
 func (p *Presence) beat(ctx context.Context, userID int64, connID string) {
-	if err := p.rdb.ZAdd(ctx, beatsKey, redis.Z{
-		Score:  float64(p.now().Unix()),
-		Member: member(userID, connID),
-	}).Err(); err != nil {
+	ts := p.now().Unix()
+	pipe := p.rdb.TxPipeline()
+	pipe.ZAdd(ctx, beatsKey, redis.Z{Score: float64(ts), Member: member(userID, connID)})
+	pipe.HSet(ctx, connsKey(userID), connID, ts)
+	// Хеш ушедшего пользователя исчезнет сам: sweeper чистит поля, а TTL — ключ.
+	pipe.Expire(ctx, connsKey(userID), 2*StaleAfter)
+	if _, err := pipe.Exec(ctx); err != nil {
 		p.log.Warn("presence.beat_failed", "user_id", userID, "error", err)
 		return
 	}
@@ -112,7 +195,10 @@ func (p *Presence) beat(ctx context.Context, userID int64, connID string) {
 
 // drop — соединение больше не видимо/живо.
 func (p *Presence) drop(ctx context.Context, userID int64, connID string) {
-	if err := p.rdb.ZRem(ctx, beatsKey, member(userID, connID)).Err(); err != nil {
+	pipe := p.rdb.TxPipeline()
+	pipe.ZRem(ctx, beatsKey, member(userID, connID))
+	pipe.HDel(ctx, connsKey(userID), connID)
+	if _, err := pipe.Exec(ctx); err != nil {
 		p.log.Warn("presence.drop_failed", "user_id", userID, "error", err)
 		return
 	}
@@ -153,7 +239,7 @@ func (p *Presence) setOnline(ctx context.Context, userID int64) {
 	if added == 0 {
 		return
 	}
-	p.bus.Publish(ctx, "presence:update", []string{roomAll}, map[string]any{
+	p.publish(ctx, userID, map[string]any{
 		"user_id": userID, "online": true, "last_seen_at": nil,
 	})
 }
@@ -161,12 +247,12 @@ func (p *Presence) setOnline(ctx context.Context, userID int64) {
 // maybeOffline — если живых видимых соединений не осталось, выставить офлайн.
 // Уход чистый (дисконнект/скрытие вкладки) — last_seen = сейчас.
 func (p *Presence) maybeOffline(ctx context.Context, userID int64) {
-	alive, err := p.aliveUsers(ctx)
+	alive, err := p.isAlive(ctx, userID)
 	if err != nil {
 		p.log.Warn("presence.alive_failed", "error", err)
 		return
 	}
-	if alive[userID] {
+	if alive {
 		return
 	}
 	p.setOffline(ctx, userID, p.now())
@@ -189,24 +275,49 @@ func (p *Presence) setOffline(ctx context.Context, userID int64, at time.Time) {
 	if err := p.lastSeen.SetLastSeen(ctx, userID, at); err != nil {
 		p.log.Warn("presence.last_seen_failed", "user_id", userID, "error", err)
 	}
-	p.bus.Publish(ctx, "presence:update", []string{roomAll}, map[string]any{
+	p.publish(ctx, userID, map[string]any{
 		"user_id": userID, "online": false, "last_seen_at": isoUTC(at),
 	})
 }
 
-// aliveUsers — пользователи с хотя бы одним свежим видимым соединением.
-func (p *Presence) aliveUsers(ctx context.Context) (map[int64]bool, error) {
-	minScore := strconv.FormatInt(p.now().Add(-StaleAfter).Unix(), 10)
-	members, err := p.rdb.ZRangeByScore(ctx, beatsKey, &redis.ZRangeBy{
-		Min: "(" + minScore, Max: "+inf",
-	}).Result()
+// isAlive — есть ли у пользователя свежее видимое соединение.
+func (p *Presence) isAlive(ctx context.Context, userID int64) (bool, error) {
+	conns, err := p.rdb.HGetAll(ctx, connsKey(userID)).Result()
+	if err != nil {
+		return false, err
+	}
+	minScore := p.now().Add(-StaleAfter).Unix()
+	for _, v := range conns {
+		if ts, err := strconv.ParseInt(v, 10, 64); err == nil && ts > minScore {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// VisibleOnline — онлайн из круга пользователя (REST /api/messenger/presence):
+// чужой онлайн платформы ему знать незачем.
+func (p *Presence) VisibleOnline(ctx context.Context, userID int64) ([]int64, error) {
+	online, err := p.OnlineUserIDs(ctx)
 	if err != nil {
 		return nil, err
 	}
-	out := map[int64]bool{}
-	for _, m := range members {
-		if id := memberUserID(m); id > 0 {
-			out[id] = true
+	e, err := p.audienceOf(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if e.all {
+		return online, nil
+	}
+	allowed := make(map[int64]struct{}, len(e.ids)+1)
+	allowed[userID] = struct{}{}
+	for _, id := range e.ids {
+		allowed[id] = struct{}{}
+	}
+	out := online[:0]
+	for _, id := range online {
+		if _, ok := allowed[id]; ok {
+			out = append(out, id)
 		}
 	}
 	return out, nil
@@ -244,18 +355,23 @@ func (p *Presence) SweepOnce(ctx context.Context) {
 		return
 	}
 	lastBeat := make(map[int64]int64)
+	pipe := p.rdb.Pipeline()
 	for _, z := range withScores {
 		m, _ := z.Member.(string)
 		id := memberUserID(m)
 		if id <= 0 {
 			continue
 		}
-		if s := int64(z.Score); s > lastBeat[id] {
+		s := int64(z.Score)
+		if s > lastBeat[id] {
 			lastBeat[id] = s
 		}
+		if s <= staleBefore {
+			pipe.HDel(ctx, connsKey(id), m[strings.IndexByte(m, ':')+1:])
+		}
 	}
-
-	if err := p.rdb.ZRemRangeByScore(ctx, beatsKey, "-inf", strconv.FormatInt(staleBefore, 10)).Err(); err != nil {
+	pipe.ZRemRangeByScore(ctx, beatsKey, "-inf", strconv.FormatInt(staleBefore, 10))
+	if _, err := pipe.Exec(ctx); err != nil {
 		p.log.Warn("presence.sweep_trim_failed", "error", err)
 		return
 	}

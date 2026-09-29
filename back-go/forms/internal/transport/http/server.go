@@ -93,6 +93,7 @@ func NewServer(svc *service.Service, users domain.UserReader,
 	api.Get("/companies", h.companies)
 
 	api.Get("", h.listForms)
+	api.Get("/summary", h.tileSummary)
 	api.Post("", h.createForm)
 	api.Get("/:id<int>", h.getForm)
 	api.Patch("/:id<int>", h.updateForm)

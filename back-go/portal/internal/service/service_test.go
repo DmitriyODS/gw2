@@ -1,8 +1,11 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"image"
+	"image/png"
 	"io"
 	"log/slog"
 	"slices"
@@ -394,7 +397,10 @@ func (b *fakeBus) Publish(_ domain.Ctx, event string, _ []string, _ any) {
 	b.events = append(b.events, event)
 }
 
-type fakeFiles struct{ removed []string }
+type fakeFiles struct {
+	removed []string
+	saved   []string
+}
 
 func (f *fakeFiles) SaveStreamFor(_ context.Context, _, _ int64, _ string, r io.Reader, _ int64) (string, error) {
 	// Поток вычитываем целиком: незакрытая часть осталась бы висеть.
@@ -402,8 +408,9 @@ func (f *fakeFiles) SaveStreamFor(_ context.Context, _, _ int64, _ string, r io.
 	return "portal/x", nil
 }
 
-func (f *fakeFiles) SaveFor(_ context.Context, _, _ int64, _ string, _ []byte) (string, error) {
-	return "portal/x", nil
+func (f *fakeFiles) SaveFor(_ context.Context, _, _ int64, name string, _ []byte) (string, error) {
+	f.saved = append(f.saved, name)
+	return "portal/" + name, nil
 }
 func (f *fakeFiles) RemoveFor(_ context.Context, _, _ int64, paths []string) {
 	f.removed = append(f.removed, paths...)
@@ -562,6 +569,49 @@ func TestDeletePost_RemovesAttachmentFiles(t *testing.T) {
 }
 
 // ── Удаление вложения ────────────────────────────────────────────
+
+// Картинка крупнее миниатюры получает её рядом с оригиналом: лента берёт
+// thumb_url, а удаление вложения уносит оба объекта.
+func TestAttachmentImageGetsThumbnail(t *testing.T) {
+	svc, repo, _ := newTestService()
+	files := svc.files.(*fakeFiles)
+	p := mustCreatePost(t, svc, 1, 10)
+
+	img := image.NewRGBA(image.Rect(0, 0, 1200, 800))
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		t.Fatal(err)
+	}
+	a, err := svc.AddAttachment(context.Background(), 1, p.ID, 10, domain.LevelEmployee, "фото.png", "image/png", buf.Bytes())
+	if err != nil {
+		t.Fatalf("AddAttachment: %v", err)
+	}
+	if a.ThumbURL == "" || a.ThumbURL == a.URL {
+		t.Fatalf("нет миниатюры: url=%q thumb=%q", a.URL, a.ThumbURL)
+	}
+	if got := repo.atts[p.ID][0].ThumbPath; got == nil {
+		t.Fatal("миниатюра не записана во вложение")
+	}
+
+	if err := svc.RemoveAttachment(context.Background(), 1, a.ID, 10, domain.LevelEmployee); err != nil {
+		t.Fatal(err)
+	}
+	if len(files.removed) != 2 {
+		t.Fatalf("удалены %v — ожидались оригинал и миниатюра", files.removed)
+	}
+}
+
+func TestAttachmentNonImageHasNoThumbnail(t *testing.T) {
+	svc, _, _ := newTestService()
+	p := mustCreatePost(t, svc, 1, 10)
+	a, err := svc.AddAttachment(context.Background(), 1, p.ID, 10, domain.LevelEmployee, "отчёт.pdf", "application/pdf", []byte("%PDF"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.ThumbURL != "" {
+		t.Fatalf("у документа миниатюра: %q", a.ThumbURL)
+	}
+}
 
 func mustAddAttachment(t *testing.T, svc *Service, companyID int64, p *domain.Post) *domain.Attachment {
 	t.Helper()

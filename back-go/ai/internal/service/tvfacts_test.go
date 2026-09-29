@@ -60,6 +60,31 @@ func TestGenerateTVFactDisabledAIClearsCache(t *testing.T) {
 	}
 }
 
+// Цикл генерирует факты только компаниям, чьё табло открывали: генерация
+// тратит токены, а факт без зрителя никому не нужен.
+func TestTVFactsTickOnlyWatched(t *testing.T) {
+	svc, repo, llm, facts := tvService()
+	repo.companies[1] = enabledCompany(1)
+	repo.companies[2] = enabledCompany(2)
+	llm.chatResult = &domain.ChatResult{Content: "Факт"}
+
+	svc.tvFactsTick(context.Background())
+	if llm.chatCalls != 0 {
+		t.Fatalf("без зрителей модель вызвана %d раз", llm.chatCalls)
+	}
+
+	if _, err := svc.GetTVFact(context.Background(), 1); err != nil {
+		t.Fatal(err)
+	}
+	if facts.claims != 1 {
+		t.Fatalf("первый показ без факта должен запросить генерацию: claims = %d", facts.claims)
+	}
+	svc.tvFactsTick(context.Background())
+	if llm.chatCalls != 1 || facts.facts[1] == nil || facts.facts[2] != nil {
+		t.Fatalf("calls = %d, факты = %v — генерируется только открытое табло", llm.chatCalls, facts.facts)
+	}
+}
+
 func TestTVWeekWindowMSK(t *testing.T) {
 	now := time.Date(2026, 6, 12, 1, 30, 0, 0, time.UTC) // 04:30 МСК
 	start, end := tvWeekWindowMSK(now)

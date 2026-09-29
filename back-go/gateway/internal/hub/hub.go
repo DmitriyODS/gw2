@@ -1,7 +1,8 @@
 // Package hub — реестр WS-клиентов и комнат realtime-шлюза.
 //
-// Комнаты повторяют прежний Flask-SocketIO: каждый авторизованный клиент
-// состоит в "all" и "user_{id}". События доставляются кадрами
+// Каждый авторизованный клиент состоит в "all", "user_{id}" и — если в токене
+// есть активная компания — в "company_{id}" (её меняет переавторизация на
+// живом соединении). События доставляются кадрами
 // {"event": ..., "data": ...} — формат тонкой WS-обёртки фронта.
 package hub
 
@@ -23,6 +24,10 @@ var connSeq atomic.Int64
 type Client struct {
 	UserID int64
 	ConnID string
+
+	// company — текущая комната компании ("" — активной нет); меняется
+	// только под Hub.mu.
+	company string
 
 	send   chan []byte
 	closed sync.Once
@@ -94,12 +99,8 @@ func (h *Hub) Add(c *Client, rooms ...string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for _, room := range rooms {
-		if h.rooms[room] == nil {
-			h.rooms[room] = map[*Client]struct{}{}
-		}
-		h.rooms[room][c] = struct{}{}
+		h.join(c, room)
 	}
-	h.membership[c] = append(h.membership[c], rooms...)
 }
 
 // Remove — убрать клиента из всех комнат.
@@ -115,11 +116,66 @@ func (h *Hub) Remove(c *Client) {
 	delete(h.membership, c)
 }
 
-// Broadcast — доставить кадр всем клиентам комнаты.
-func (h *Hub) Broadcast(room string, frame []byte) {
+func (h *Hub) join(c *Client, room string) {
+	if h.rooms[room] == nil {
+		h.rooms[room] = map[*Client]struct{}{}
+	}
+	h.rooms[room][c] = struct{}{}
+	h.membership[c] = append(h.membership[c], room)
+}
+
+func (h *Hub) leave(c *Client, room string) {
+	delete(h.rooms[room], c)
+	if len(h.rooms[room]) == 0 {
+		delete(h.rooms, room)
+	}
+	rooms := h.membership[c]
+	for i, r := range rooms {
+		if r == room {
+			h.membership[c] = append(rooms[:i], rooms[i+1:]...)
+			break
+		}
+	}
+}
+
+// SetCompany — пересадить клиента в комнату другой активной компании
+// ("" — ни в какую). Идемпотентно.
+func (h *Hub) SetCompany(c *Client, room string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if c.company == room {
+		return
+	}
+	if c.company != "" {
+		h.leave(c, c.company)
+	}
+	c.company = room
+	if room != "" {
+		h.join(c, room)
+	}
+}
+
+// Broadcast — доставить кадр клиентам комнат. Клиент, состоящий в нескольких
+// адресованных комнатах сразу (user_{id} и company_{id}), получает кадр ОДИН
+// раз: дубль стоил бы телефону лишнего пробуждения, а обработчикам — повторной
+// работы.
+func (h *Hub) Broadcast(frame []byte, rooms ...string) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
-	for c := range h.rooms[room] {
-		c.push(frame)
+	if len(rooms) == 1 {
+		for c := range h.rooms[rooms[0]] {
+			c.push(frame)
+		}
+		return
+	}
+	seen := map[*Client]struct{}{}
+	for _, room := range rooms {
+		for c := range h.rooms[room] {
+			if _, ok := seen[c]; ok {
+				continue
+			}
+			seen[c] = struct{}{}
+			c.push(frame)
+		}
 	}
 }

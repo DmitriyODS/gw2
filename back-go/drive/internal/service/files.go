@@ -283,3 +283,8 @@ func (s *Service) fileWithAccess(ctx context.Context, userID, id int64, want str
 	}
 	return file, access, nil
 }
+
+// Summary — сводка диска для живой плитки «Пуска».
+func (s *Service) Summary(ctx context.Context, userID int64) (*domain.FileSummary, error) {
+	return s.repo.FileSummary(ctx, userID)
+}

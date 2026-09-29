@@ -123,6 +123,11 @@ type UserRepository interface {
 	// SearchDirectoryMembers — каталог членов КОМПАНИИ (по user_companies) с
 	// ролью в этой компании; только активные, ILIKE по fio/login.
 	SearchDirectoryMembers(ctx context.Context, query string, excludeID, companyID int64) ([]*User, error)
+	// ActiveMemberIDs — id активных участников компании (сводка живой плитки:
+	// плитке нужны число и пересечение с онлайном, а не карточки).
+	ActiveMemberIDs(ctx context.Context, companyID int64) ([]int64, error)
+	// CountUsers — всего пользователей платформы и активных из них.
+	CountUsers(ctx context.Context) (total, active int, err error)
 	// SearchNonMembers — активные пользователи (не супер-админ), ЕЩЁ НЕ
 	// состоящие в компании (кандидаты на добавление), ILIKE по fio/login.
 	SearchNonMembers(ctx context.Context, query string, companyID int64) ([]*User, error)

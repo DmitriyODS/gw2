@@ -538,12 +538,14 @@ func TestBuyItemSuccessEquipsAndLogs(t *testing.T) {
 	}
 	pet, _ := env.pets.GetOrCreate(ctx, 1, 10)
 	pet.Kudos = 10
+	// Товар может попасть под скидку дня — списывается цена дня, а не базовая.
+	price, _ := salePrice(env.shop.items["cap"], todayMSK())
 
 	data, err := env.svc.BuyItem(ctx, 1, 10, "cap", false)
 	if err != nil {
 		t.Fatalf("BuyItem: %v", err)
 	}
-	if data.Kudos != 0 || data.Hat == nil || *data.Hat != "cap" {
+	if data.Kudos != 10-price || data.Hat == nil || *data.Hat != "cap" {
 		t.Errorf("питомец после покупки: %+v", data)
 	}
 	if !env.activity.hasKind("item_bought") {

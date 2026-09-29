@@ -28,6 +28,7 @@ import (
 	"github.com/DmitriyODS/gw2/back-go/pkg/billingclient"
 	"github.com/DmitriyODS/gw2/back-go/pkg/bootstrap"
 	"github.com/DmitriyODS/gw2/back-go/pkg/chunkupload"
+	"github.com/DmitriyODS/gw2/back-go/pkg/collab"
 	"github.com/DmitriyODS/gw2/back-go/pkg/events"
 	"github.com/DmitriyODS/gw2/back-go/pkg/pasetoauth"
 	"github.com/DmitriyODS/gw2/back-go/pkg/records"
@@ -80,6 +81,7 @@ func main() {
 		Files:   fileStore,
 		Bus:     events.NewPublisher(rdb, log, "gw2:board:events"),
 		Limiter: redisrepo.NewWriteLimiter(rdb, sharedWriteLimit),
+		Viewers: collab.New(rdb, "gw2:board:viewers:"),
 		Log:     log,
 	})
 	svc.WithBilling(billing)

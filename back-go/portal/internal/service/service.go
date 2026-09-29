@@ -9,12 +9,14 @@ package service
 import (
 	"log/slog"
 
-	"github.com/DmitriyODS/gw2/back-go/portal/internal/domain"
-
 	"github.com/DmitriyODS/gw2/back-go/pkg/billingclient"
+	"github.com/DmitriyODS/gw2/back-go/pkg/events"
+	"github.com/DmitriyODS/gw2/back-go/portal/internal/domain"
 )
 
-const roomAll = "all"
+// companyRoom — события портала уходят только участникам компании с ней
+// активной (комнату сажает шлюз по токену), а не в общую "all".
+func companyRoom(companyID int64) []string { return []string{events.CompanyRoom(companyID)} }
 
 type Service struct {
 	repo      domain.Repository

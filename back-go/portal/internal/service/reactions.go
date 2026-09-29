@@ -32,7 +32,7 @@ func (s *Service) AddReaction(ctx context.Context, companyID, postID, userID int
 	if err := s.repo.AddReaction(ctx, &domain.Reaction{PostID: postID, UserID: userID, Emoji: emoji}); err != nil {
 		return err
 	}
-	s.bus.Publish(ctx, "reaction:added", []string{roomAll}, map[string]any{
+	s.bus.Publish(ctx, "reaction:added", companyRoom(companyID), map[string]any{
 		"post_id": postID, "user_id": userID, "emoji": emoji, "company_id": companyID,
 	})
 	return nil
@@ -49,7 +49,7 @@ func (s *Service) RemoveReaction(ctx context.Context, companyID, postID, userID 
 	if err := s.repo.RemoveReaction(ctx, postID, userID, emoji); err != nil {
 		return err
 	}
-	s.bus.Publish(ctx, "reaction:removed", []string{roomAll}, map[string]any{
+	s.bus.Publish(ctx, "reaction:removed", companyRoom(companyID), map[string]any{
 		"post_id": postID, "user_id": userID, "emoji": emoji, "company_id": companyID,
 	})
 	return nil

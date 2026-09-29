@@ -5,7 +5,10 @@
 //   - первый кадр клиента — {"event": "auth", "data": {"token": "<PASETO>"}}
 //     (таймаут authTimeout); невалидный токен → {"event": "_error"} и close,
 //     успех → {"event": "_connected", "data": {"user_id": N}} и подписка на
-//     комнаты all/user_{id} (как прежний Flask-SocketIO connect);
+//     комнаты all/user_{id} и company_{id} активной компании токена;
+//   - повторный кадр auth на живом соединении (обновился токен, сменилась
+//     активная компания) пересаживает клиента в комнату новой компании —
+//     переподключаться ради этого не нужно;
 //   - дальше клиент шлёт presence:visibility / presence:heartbeat / call:*;
 //   - сервер пингует каждые pingInterval, нет pong'а дольше pongWait — close.
 package http
@@ -22,6 +25,7 @@ import (
 	"github.com/DmitriyODS/gw2/back-go/gateway/internal/hub"
 	"github.com/DmitriyODS/gw2/back-go/gateway/internal/presence"
 	"github.com/DmitriyODS/gw2/back-go/gateway/internal/ring"
+	"github.com/DmitriyODS/gw2/back-go/pkg/events"
 	"github.com/DmitriyODS/gw2/back-go/pkg/httpserver"
 	"github.com/DmitriyODS/gw2/back-go/pkg/pasetoauth"
 )
@@ -51,11 +55,11 @@ func NewServer(d Deps) *Server {
 	app := httpserver.New(httpserver.Config{AppName: "gw2-gatewaysvc", Log: d.Log})
 	s := &wsHandler{deps: d}
 
-	// Онлайн-пользователи (presence) — прежний exact-роут Flask
-	// /api/messenger/presence; presence-домен теперь живёт в шлюзе.
+	// Онлайн-пользователи (presence) — exact-роут /api/messenger/presence;
+	// отдаётся только круг спрашивающего (см. presence.Audience).
 	auth := pasetoauth.NewMiddleware(d.Verifier, d.Auth)
 	app.Get("/api/messenger/presence", auth.RequireAuth, func(c *fiber.Ctx) error {
-		online, err := d.Presence.OnlineUserIDs(c.Context())
+		online, err := d.Presence.VisibleOnline(c.Context(), pasetoauth.UserID(c))
 		if err != nil {
 			d.Log.Error("presence.list_failed", "error", err)
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -129,7 +133,8 @@ func (h *wsHandler) handle(conn *websocket.Conn) {
 	userID := claims.UserID
 
 	client := hub.NewClient(userID)
-	h.deps.Hub.Add(client, "all", "user_"+itoa(userID))
+	h.deps.Hub.Add(client, "all", events.UserRoom(userID))
+	h.deps.Hub.SetCompany(client, companyRoom(claims))
 
 	ctx := context.Background()
 	h.deps.Presence.OnConnect(ctx, userID, client.ConnID)
@@ -203,6 +208,8 @@ func (h *wsHandler) cleanup(client *hub.Client) {
 func (h *wsHandler) dispatch(client *hub.Client, frame hub.Frame) {
 	ctx := context.Background()
 	switch frame.Event {
+	case "auth":
+		h.reauth(client, frame.Data)
 	case "presence:visibility":
 		var data struct {
 			Visible *bool `json:"visible"`
@@ -222,6 +229,34 @@ func (h *wsHandler) dispatch(client *hub.Client, frame hub.Frame) {
 	}
 }
 
+// reauth — свежий токен на живом соединении. Чужой токен (другой
+// пользователь) соединение закрывает: личная комната уже выдана прежнему.
+// Невалидный или протухший — игнорируется, клиент остаётся где был.
+func (h *wsHandler) reauth(client *hub.Client, raw json.RawMessage) {
+	var data struct {
+		Token string `json:"token"`
+	}
+	if json.Unmarshal(raw, &data) != nil || data.Token == "" {
+		return
+	}
+	claims := h.deps.Verifier.ParseAccess(data.Token)
+	if claims.UserID == 0 {
+		return
+	}
+	if claims.UserID != client.UserID || claims.LegalRequired {
+		client.Close()
+		return
+	}
+	h.deps.Hub.SetCompany(client, companyRoom(claims))
+}
+
+func companyRoom(claims pasetoauth.Claims) string {
+	if claims.CompanyID == nil || *claims.CompanyID <= 0 {
+		return ""
+	}
+	return events.CompanyRoom(*claims.CompanyID)
+}
+
 func (h *wsHandler) relayTyping(ctx context.Context, fromUserID int64, raw json.RawMessage) {
 	if h.deps.Bus == nil {
 		return
@@ -235,23 +270,9 @@ func (h *wsHandler) relayTyping(ctx context.Context, fromUserID int64, raw json.
 		return
 	}
 	typing := data.Typing == nil || *data.Typing
-	h.deps.Bus.Publish(ctx, "typing", []string{"user_" + itoa(data.ToUserID)}, map[string]any{
+	h.deps.Bus.Publish(ctx, "typing", []string{events.UserRoom(data.ToUserID)}, map[string]any{
 		"conversation_id": data.ConversationID,
 		"user_id":         fromUserID,
 		"typing":          typing,
 	})
-}
-
-func itoa(v int64) string {
-	buf := [20]byte{}
-	pos := len(buf)
-	if v == 0 {
-		return "0"
-	}
-	for v > 0 {
-		pos--
-		buf[pos] = byte('0' + v%10)
-		v /= 10
-	}
-	return string(buf[pos:])
 }

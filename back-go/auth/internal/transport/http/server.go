@@ -130,6 +130,10 @@ func NewServer(eps endpoint.Endpoints, verifier *pasetoauth.Verifier,
 	usersAPI.Post("/platform/:id<int>/reactivate", auth.RequireAuth, auth.RequireSuperAdmin, h.reactivatePlatformUser)
 	usersAPI.Delete("/platform/:id<int>/purge", auth.RequireAuth, auth.RequireSuperAdmin, h.purgePlatformUser)
 	usersAPI.Get("/directory", auth.RequireAuth, h.directory)
+	// Сводки живых плиток: только счётчики, без карточек. Чтение без
+	// бизнес-правил — мимо endpoint-слоя, как у аватара.
+	usersAPI.Get("/directory/summary", auth.RequireAuth, h.directorySummary)
+	usersAPI.Get("/summary", auth.RequireAuth, auth.RequireSuperAdmin, h.usersSummary)
 	usersAPI.Get("/directory/:id<int>", auth.RequireAuth, h.directoryUser)
 	usersAPI.Get("/me", auth.RequireAuth, h.me)
 	usersAPI.Patch("/me", auth.RequireAuth, h.updateMe)

@@ -37,6 +37,10 @@ type fakeRepo struct {
 	nextID     int64
 }
 
+func (f *fakeRepo) RegistriesSummary(domain.Ctx, int64, int64, int) (*domain.RegistriesSummary, error) {
+	return &domain.RegistriesSummary{Names: []string{}}, nil
+}
+
 func (f *fakeRepo) ListRegistries(_ domain.Ctx, _, _ int64, _ string) ([]*domain.Registry, error) {
 	return []*domain.Registry{f.reg}, nil
 }

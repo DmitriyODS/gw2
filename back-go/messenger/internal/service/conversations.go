@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"sort"
+	"time"
 
 	"github.com/DmitriyODS/gw2/back-go/messenger/internal/domain"
 	"github.com/DmitriyODS/gw2/back-go/messenger/internal/dto"
@@ -14,6 +15,55 @@ import (
 // companyID — активная компания сессии ИЗ ТОКЕНА: в users её нет (идентичность
 // развязана с компаниями), поэтому передаётся транспортом.
 func (s *Service) ListConversations(ctx context.Context, userID int64, companyID *int64) ([]*dto.ConversationListItem, error) {
+	return s.listConversations(ctx, userID, companyID, nil)
+}
+
+// SyncConversations — дельта списка после сна клиента: изменившиеся диалоги,
+// ушедшие из списка и курсор следующего раза. Журнал не ручается за полноту
+// (нет журнала, Redis сбрасывался, курсор старше окна) — полный список с
+// full=true: лишний трафик лучше пропавшего диалога.
+func (s *Service) SyncConversations(ctx context.Context, userID int64, companyID *int64, since int64) (*dto.ConversationSync, error) {
+	var (
+		changed, removed []int64
+		cursor           = time.Now().UnixMilli()
+		ok               bool
+	)
+	if s.changes != nil {
+		changed, removed, cursor, ok = s.changes.Since(ctx, userID, since)
+	}
+	if !ok {
+		items, err := s.listConversations(ctx, userID, companyID, nil)
+		if err != nil {
+			return nil, err
+		}
+		return &dto.ConversationSync{Full: true, Conversations: items, Removed: []int64{}, Cursor: cursor}, nil
+	}
+	out := &dto.ConversationSync{Conversations: []*dto.ConversationListItem{}, Removed: removed, Cursor: cursor}
+	if len(changed) == 0 {
+		return out, nil
+	}
+	only := make(map[int64]bool, len(changed))
+	for _, id := range changed {
+		only[id] = true
+	}
+	items, err := s.listConversations(ctx, userID, companyID, only)
+	if err != nil {
+		return nil, err
+	}
+	out.Conversations = items
+	// Изменился, но в список не попал (скрыт, покинут) — для клиента он ушёл.
+	for _, it := range items {
+		delete(only, it.ID)
+	}
+	for id := range only {
+		out.Removed = append(out.Removed, id)
+	}
+	return out, nil
+}
+
+// listConversations — строки списка; only != nil — только эти диалоги (дельта):
+// батч-запросы последних сообщений и непрочитанных идут лишь по ним.
+func (s *Service) listConversations(ctx context.Context, userID int64, companyID *int64, only map[int64]bool) ([]*dto.ConversationListItem, error) {
 	me, err := s.users.GetUser(ctx, userID)
 	if err != nil {
 		return nil, err
@@ -33,6 +83,7 @@ func (s *Service) ListConversations(ctx context.Context, userID int64, companyID
 	if err != nil {
 		return nil, err
 	}
+	convs = keepOnly(convs, only)
 	// Закреплённые первыми (pinned_at DESC); не закреплённые сохраняют
 	// SQL-порядок (стабильная сортировка, как в Python).
 	sort.SliceStable(convs, func(i, j int) bool {
@@ -111,7 +162,7 @@ func (s *Service) ListConversations(ctx context.Context, userID int64, companyID
 
 	// Группы пользователя — свой источник (conversation_members), досыпаем
 	// в общий список (порядок клиент пересобирает сам).
-	groups, err := s.groupListItems(ctx, userID)
+	groups, err := s.groupListItems(ctx, userID, only)
 	if err != nil {
 		return nil, err
 	}
@@ -123,18 +174,19 @@ func (s *Service) ListConversations(ctx context.Context, userID int64, companyID
 	if err != nil {
 		return nil, err
 	}
-	if dev != nil {
+	if dev != nil && (only == nil || only[dev.ID]) {
 		result = append([]*dto.ConversationListItem{dev}, result...)
 	}
 	return result, nil
 }
 
 // groupListItems — элементы списка для групп пользователя.
-func (s *Service) groupListItems(ctx context.Context, userID int64) ([]*dto.ConversationListItem, error) {
+func (s *Service) groupListItems(ctx context.Context, userID int64, only map[int64]bool) ([]*dto.ConversationListItem, error) {
 	convs, err := s.repo.ListGroupConversations(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
+	convs = keepOnly(convs, only)
 	if len(convs) == 0 {
 		return nil, nil
 	}
@@ -200,6 +252,11 @@ func (s *Service) OpenConversation(ctx context.Context, meID, otherUserID int64)
 	conv, err := s.ensureConversation(ctx, meID, otherUserID)
 	if err != nil {
 		return nil, err
+	}
+	// Открытие (новый или вновь показанный диалог) сокет-события не шлёт —
+	// другим устройствам о нём скажет только журнал изменений.
+	if s.changes != nil {
+		s.changes.Touch(ctx, []int64{meID}, conv.ID, false)
 	}
 	var other *domain.User
 	if oid := conv.OtherUserID(meID); oid != nil {
@@ -434,4 +491,18 @@ func (s *Service) TotalUnread(ctx context.Context, userID int64) (int, error) {
 		return 0, err
 	}
 	return pairs + groups, nil
+}
+
+// keepOnly — отбор диалогов для дельты (only == nil — все).
+func keepOnly(convs []*domain.Conversation, only map[int64]bool) []*domain.Conversation {
+	if only == nil {
+		return convs
+	}
+	out := convs[:0]
+	for _, c := range convs {
+		if only[c.ID] {
+			out = append(out, c)
+		}
+	}
+	return out
 }

@@ -58,7 +58,7 @@ func (s *Service) CreateCalendar(ctx context.Context, companyID, userID int64, n
 		return nil, err
 	}
 	cal.Fields = []domain.Field{}
-	s.bus.Publish(ctx, "calendar:created", []string{roomAll}, calendarPayload(cal))
+	s.bus.Publish(ctx, "calendar:created", companyRoom(companyID), calendarPayload(cal))
 	return cal, nil
 }
 
@@ -72,7 +72,7 @@ func (s *Service) UpdateCalendar(ctx context.Context, companyID, id int64, name 
 		return nil, err
 	}
 	cal.Name = name
-	s.bus.Publish(ctx, "calendar:updated", []string{roomAll}, calendarPayload(cal))
+	s.bus.Publish(ctx, "calendar:updated", companyRoom(companyID), calendarPayload(cal))
 	return cal, nil
 }
 
@@ -83,7 +83,7 @@ func (s *Service) DeleteCalendar(ctx context.Context, companyID, id int64) error
 	if err := s.repo.DeleteCalendar(ctx, id); err != nil {
 		return err
 	}
-	s.bus.Publish(ctx, "calendar:deleted", []string{roomAll}, map[string]any{
+	s.bus.Publish(ctx, "calendar:deleted", companyRoom(companyID), map[string]any{
 		"id": id, "company_id": companyID,
 	})
 	return nil
@@ -110,7 +110,7 @@ func (s *Service) ReplaceFields(ctx context.Context, companyID, id int64, fields
 		}
 	}
 	cal.Fields = fields
-	s.bus.Publish(ctx, "calendar:updated", []string{roomAll}, calendarPayload(cal))
+	s.bus.Publish(ctx, "calendar:updated", companyRoom(companyID), calendarPayload(cal))
 	return cal, nil
 }
 

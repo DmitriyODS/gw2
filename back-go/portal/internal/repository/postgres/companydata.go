@@ -48,6 +48,7 @@ type dumpAttach struct {
 	Name      string    `json:"name"`
 	Size      int64     `json:"size"`
 	Mime      *string   `json:"mime,omitempty"`
+	ThumbPath *string   `json:"thumb_path,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
 }
 
@@ -114,7 +115,7 @@ func (r *Repo) ExportCompany(ctx context.Context, companyID int64) (companydata.
 	// Вложения и обсуждения — двумя запросами на весь портал, не по посту.
 	files := []string{}
 	rows, err = r.pool.Query(ctx, `
-		SELECT post_id, file_path, name, size, mime, created_at
+		SELECT post_id, file_path, name, size, mime, thumb_path, created_at
 		  FROM portal_attachments WHERE post_id = ANY($1) ORDER BY id`, postIDs)
 	if err != nil {
 		return companydata.Export{}, err
@@ -122,7 +123,7 @@ func (r *Repo) ExportCompany(ctx context.Context, companyID int64) (companydata.
 	for rows.Next() {
 		var postID int64
 		var a dumpAttach
-		if err := rows.Scan(&postID, &a.FilePath, &a.Name, &a.Size, &a.Mime, &a.CreatedAt); err != nil {
+		if err := rows.Scan(&postID, &a.FilePath, &a.Name, &a.Size, &a.Mime, &a.ThumbPath, &a.CreatedAt); err != nil {
 			rows.Close()
 			return companydata.Export{}, err
 		}
@@ -131,6 +132,9 @@ func (r *Repo) ExportCompany(ctx context.Context, companyID int64) (companydata.
 		}
 		if a.FilePath != "" {
 			files = append(files, a.FilePath)
+		}
+		if a.ThumbPath != nil && *a.ThumbPath != "" {
+			files = append(files, *a.ThumbPath)
 		}
 	}
 	rows.Close()
@@ -216,9 +220,9 @@ func (r *Repo) ImportCompany(ctx context.Context, in companydata.Import) (int, e
 
 		for _, a := range p.Attachments {
 			if _, err := tx.Exec(ctx, `
-				INSERT INTO portal_attachments (post_id, file_path, name, size, mime, created_at)
-				VALUES ($1, $2, $3, $4, $5, $6)`,
-				postID, in.FileKey(a.FilePath), a.Name, a.Size, a.Mime, a.CreatedAt); err != nil {
+				INSERT INTO portal_attachments (post_id, file_path, name, size, mime, thumb_path, created_at)
+				VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+				postID, in.FileKey(a.FilePath), a.Name, a.Size, a.Mime, thumbKey(in, a.ThumbPath), a.CreatedAt); err != nil {
 				return 0, err
 			}
 		}
@@ -248,4 +252,13 @@ func (r *Repo) ImportCompany(ctx context.Context, in companydata.Import) (int, e
 		return 0, err
 	}
 	return len(dump.Posts), nil
+}
+
+// thumbKey — ключ миниатюры в компании-приёмнике (миниатюры нет — nil).
+func thumbKey(in companydata.Import, key *string) *string {
+	if key == nil || *key == "" {
+		return nil
+	}
+	k := in.FileKey(*key)
+	return &k
 }

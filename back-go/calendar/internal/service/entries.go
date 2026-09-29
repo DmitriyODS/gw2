@@ -135,7 +135,7 @@ func (s *Service) CreateEntry(ctx context.Context, companyID, calendarID, userID
 	if err := s.repo.CreateEntry(ctx, e, buildSearchText(fields, clean)); err != nil {
 		return nil, err
 	}
-	s.bus.Publish(ctx, "entry:created", []string{roomAll}, entryPayload(companyID, e))
+	s.bus.Publish(ctx, "entry:created", companyRoom(companyID), entryPayload(companyID, e))
 	return e, nil
 }
 
@@ -161,7 +161,7 @@ func (s *Service) UpdateEntry(ctx context.Context, companyID, calendarID, entryI
 	}
 	e.EventAt = at
 	e.Data = clean
-	s.bus.Publish(ctx, "entry:updated", []string{roomAll}, entryPayload(companyID, e))
+	s.bus.Publish(ctx, "entry:updated", companyRoom(companyID), entryPayload(companyID, e))
 	return e, nil
 }
 
@@ -174,7 +174,7 @@ func (s *Service) DeleteEntry(ctx context.Context, companyID, calendarID, entryI
 		return err
 	}
 	s.removeEntryFiles(ctx, companyID, e)
-	s.bus.Publish(ctx, "entry:deleted", []string{roomAll}, map[string]any{
+	s.bus.Publish(ctx, "entry:deleted", companyRoom(companyID), map[string]any{
 		"id": entryID, "calendar_id": calendarID, "company_id": companyID,
 	})
 	return nil
@@ -195,7 +195,7 @@ func (s *Service) DeleteEntries(ctx context.Context, companyID, calendarID int64
 		return 0, err
 	}
 	s.removeEntryFiles(ctx, companyID, entries...)
-	s.bus.Publish(ctx, "entry:bulk-deleted", []string{roomAll}, map[string]any{
+	s.bus.Publish(ctx, "entry:bulk-deleted", companyRoom(companyID), map[string]any{
 		"ids": ids, "calendar_id": calendarID, "company_id": companyID,
 	})
 	return n, nil

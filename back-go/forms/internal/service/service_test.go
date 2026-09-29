@@ -36,6 +36,10 @@ func (f *fakeRepo) ListForms(_ domain.Ctx, _, _ int64, _ string) ([]*domain.Form
 	return []*domain.Form{f.form}, nil
 }
 
+func (f *fakeRepo) FormsSummary(domain.Ctx, int64, int64) (*domain.FormsSummary, error) {
+	return &domain.FormsSummary{Total: 1}, nil
+}
+
 func (f *fakeRepo) GetForm(_ domain.Ctx, id int64) (*domain.Form, error) {
 	if f.form != nil && f.form.ID == id {
 		copyForm := *f.form
@@ -366,6 +370,27 @@ func TestRespondentCannotSeeResponses(t *testing.T) {
 	_, err := s.svc.ListResponses(ctx(), assigneeID, 1, domain.ResponseListFilter{})
 	if got := code(t, err); got != "FORBIDDEN" {
 		t.Fatalf("назначенный получил %s на список ответов, ожидался FORBIDDEN", got)
+	}
+}
+
+// Сколько ответов собрано, отвечающему не показываем — это часть ответов.
+func TestResponseCountHiddenFromRespondent(t *testing.T) {
+	s := newStand()
+	s.repo.form.Responses = 7
+	user := int64(assigneeID)
+	s.repo.userShares = []*domain.UserShare{
+		{FormID: 1, UserID: &user, Access: domain.AccessRespond},
+	}
+
+	form, err := s.svc.GetForm(ctx(), assigneeID, 1)
+	if err != nil {
+		t.Fatalf("чтение формы: %v", err)
+	}
+	if form.Responses != 0 {
+		t.Fatalf("отвечающий видит число ответов: %d", form.Responses)
+	}
+	if own, _ := s.svc.GetForm(ctx(), ownerID, 1); own.Responses != 7 {
+		t.Fatalf("автор потерял число ответов: %d", own.Responses)
 	}
 }
 

@@ -191,7 +191,7 @@ func (s *Service) CreatePost(ctx context.Context, companyID, authorID int64, top
 	p.Attachments = []domain.Attachment{}
 	p.ReactionCount = map[string]int{}
 	p.MyReactions = []string{}
-	s.bus.Publish(ctx, "post:new", []string{roomAll}, postPayload(p))
+	s.bus.Publish(ctx, "post:new", companyRoom(companyID), postPayload(p))
 	return p, nil
 }
 
@@ -226,7 +226,7 @@ func (s *Service) UpdatePost(ctx context.Context, companyID, id, userID int64, r
 	if err != nil {
 		return nil, err
 	}
-	s.bus.Publish(ctx, "post:updated", []string{roomAll}, postPayload(full))
+	s.bus.Publish(ctx, "post:updated", companyRoom(companyID), postPayload(full))
 	return full, nil
 }
 
@@ -248,7 +248,7 @@ func (s *Service) DeletePost(ctx context.Context, companyID, id, userID int64, r
 	if len(paths) > 0 {
 		s.files.RemoveFor(ctx, userID, companyID, paths)
 	}
-	s.bus.Publish(ctx, "post:deleted", []string{roomAll}, map[string]any{
+	s.bus.Publish(ctx, "post:deleted", companyRoom(companyID), map[string]any{
 		"id": id, "company_id": companyID,
 	})
 	return nil
@@ -294,7 +294,7 @@ func (s *Service) Pin(ctx context.Context, companyID, id, userID int64, roleLeve
 	if err != nil {
 		return nil, err
 	}
-	s.bus.Publish(ctx, "post:pinned", []string{roomAll}, postPayload(full))
+	s.bus.Publish(ctx, "post:pinned", companyRoom(companyID), postPayload(full))
 	return full, nil
 }
 
@@ -313,7 +313,7 @@ func (s *Service) Unpin(ctx context.Context, companyID, id, userID int64, roleLe
 	if err != nil {
 		return nil, err
 	}
-	s.bus.Publish(ctx, "post:unpinned", []string{roomAll}, postPayload(full))
+	s.bus.Publish(ctx, "post:unpinned", companyRoom(companyID), postPayload(full))
 	return full, nil
 }
 

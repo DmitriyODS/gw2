@@ -67,6 +67,7 @@ func NewServer(svc *service.Service, users domain.UserReader, uploads *chunkuplo
 
 	// Обзор: содержимое папки и сквозные выборки (корзина, избранное, недавние).
 	api.Get("", h.browse)
+	api.Get("/summary", h.summary)
 	api.Get("/shared-with-me", h.sharedWithMe)
 	api.Get("/users", h.searchUsers)
 

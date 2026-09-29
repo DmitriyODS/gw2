@@ -329,3 +329,27 @@ func (r *Repo) ListRecipientNotes(ctx context.Context, userID int64, companyIDs 
 	}
 	return out, rows.Err()
 }
+
+func (r *Repo) NoteSummary(ctx domain.Ctx, ownerID int64) (*domain.ListSummary, error) {
+	var (
+		out   domain.ListSummary
+		id    *int64
+		title *string
+	)
+	err := r.pool.QueryRow(ctx, `
+		SELECT (SELECT count(*) FROM notes WHERE owner_id = $1 AND NOT archived),
+		       l.id, l.title
+		  FROM (SELECT 1) one
+		  LEFT JOIN LATERAL (
+		        SELECT id, title FROM notes
+		         WHERE owner_id = $1 AND NOT archived
+		         ORDER BY updated_at DESC, id DESC LIMIT 1) l ON TRUE`, ownerID).
+		Scan(&out.Total, &id, &title)
+	if err != nil {
+		return nil, err
+	}
+	if id != nil {
+		out.Latest = &domain.SummaryItem{ID: *id, Title: *title}
+	}
+	return &out, nil
+}

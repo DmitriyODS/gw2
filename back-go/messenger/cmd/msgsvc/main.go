@@ -21,6 +21,7 @@ import (
 	"github.com/DmitriyODS/gw2/back-go/messenger/internal/endpoint"
 	"github.com/DmitriyODS/gw2/back-go/messenger/internal/files"
 	"github.com/DmitriyODS/gw2/back-go/messenger/internal/repository/postgres"
+	"github.com/DmitriyODS/gw2/back-go/messenger/internal/repository/redisx"
 	"github.com/DmitriyODS/gw2/back-go/messenger/internal/service"
 	grpctransport "github.com/DmitriyODS/gw2/back-go/messenger/internal/transport/grpc"
 	httptransport "github.com/DmitriyODS/gw2/back-go/messenger/internal/transport/http"
@@ -59,7 +60,10 @@ func main() {
 	repo := postgres.NewRepo(pool)
 	users := postgres.NewUserReader(pool)
 	store := files.NewStore(storage.FromEnv(log, uploadFolder))
-	pub := events.NewPublisher(rdb, log, "gw2:messenger:events")
+	// Публикатор с журналом изменений списка: дельта-синхронизация после сна
+	// клиента видит ровно то, что видел бы realtime.
+	changes := redisx.NewChanges(rdb, log)
+	pub := redisx.Publisher{Inner: events.NewPublisher(rdb, log, "gw2:messenger:events"), Changes: changes}
 	// ИИ техподдержки dev-чата — gRPC aisvc (SupportChat). Fail-open: aisvc
 	// недоступен / ключ не настроен → канированный автоответ. ЯВНО пустой
 	// AI_GRPC_ADDR= выключает ИИ совсем (автоответ синхронный — так работает
@@ -78,7 +82,7 @@ func main() {
 		defer client.Close()
 		supportAI = client
 	}
-	svc := service.New(repo, users, store, pub, supportAI, log)
+	svc := service.New(repo, users, store, pub, supportAI, log).WithChanges(changes)
 
 	// Лимиты тарифа — gRPC billingsvc. Пустой адрес выключает проверки,
 	// недоступный биллинг их не блокирует (fail-open).

@@ -64,6 +64,8 @@ func TestGatewayHandshake(t *testing.T) {
 func TestGatewayPresence(t *testing.T) {
 	a := newVerifiedUser(t)
 	viewer := newVerifiedUser(t)
+	// Онлайн виден только кругу общения — связываем диалогом.
+	openConv(t, viewer, a.ID)
 
 	// REST presence без токена — 401.
 	r := gatewayAPI.doJSON(t, http.MethodGet, "/api/messenger/presence", "", nil)
@@ -165,7 +167,7 @@ func TestGatewayCallsUnavailable(t *testing.T) {
 }
 
 // TestGatewayBridgesAllServiceChannels — мост шлюза подписан на каналы ВСЕХ
-// сервисов: события diarysvc (личная комната) и calendarsvc (комната all)
+// сервисов: события diarysvc (личная комната) и calendarsvc (комната компании)
 // доезжают до WS-клиентов. Регресс: calendar/diary отсутствовали в списке
 // каналов моста — их realtime молча терялся.
 func TestGatewayBridgesAllServiceChannels(t *testing.T) {
@@ -189,7 +191,7 @@ func TestGatewayBridgesAllServiceChannels(t *testing.T) {
 		return int64(id) == entryID
 	}, 10*time.Second)
 
-	// Calendar: события в комнату all с company_id в payload.
+	// Calendar: события в комнату компании с company_id в payload.
 	admin := newVerifiedUser(t)
 	companyID := admin.createCompany(t, uniq("Календарь WS "))
 	wsAdmin := connectWS(t, admin.Token)
@@ -205,5 +207,80 @@ func TestGatewayBridgesAllServiceChannels(t *testing.T) {
 	}, 10*time.Second)
 	if int64(f.Obj()["company_id"].(float64)) != companyID {
 		t.Fatalf("entry:created без company_id: %s", f.Data)
+	}
+}
+
+// TestGatewayCompanyIsolation — компанийные события и онлайн не выходят за
+// круг: чужая компания их не получает ни кадром, ни через REST presence, а
+// участник, у которого активна ДРУГАЯ его компания, получает их только после
+// переключения (кадр переавторизации на живом соединении).
+func TestGatewayCompanyIsolation(t *testing.T) {
+	admin, companyID, deptID := newTaskCompany(t)
+	outsider := newVerifiedUser(t)
+	outsider.createCompany(t, uniq("Чужая "))
+	multi := newVerifiedUser(t)
+	ownCompany := multi.createCompany(t, uniq("Своя "))
+	addToCompany(t, admin, companyID, multi, roleEmployee)
+	multi.switchCompany(t, ownCompany)
+
+	wsAdmin := connectWS(t, admin.Token)
+	wsOutsider := connectWS(t, outsider.Token)
+	wsMulti := connectWS(t, multi.Token)
+
+	// Посторонний не видит онлайн админа ни кадром, ни в REST.
+	if presenceOnline(t, outsider)[admin.ID] {
+		t.Fatal("онлайн чужой компании виден постороннему в REST presence")
+	}
+	isAdmin := func(f wsFrame) bool { return int64(f.Obj()["user_id"].(float64)) == admin.ID }
+	if f, err := wsOutsider.tryWaitFrame("presence:update", isAdmin, 500*time.Millisecond); err == nil {
+		t.Fatalf("presence:update чужого человека: %s", f.Data)
+	}
+	// Коллега (общая компания) онлайн видит.
+	waitPresence(t, multi, admin.ID, true, 5*time.Second)
+
+	sameTask := func(id int64) func(wsFrame) bool {
+		return func(f wsFrame) bool {
+			v, _ := f.Obj()["id"].(float64)
+			return int64(v) == id
+		}
+	}
+	first := createTask(t, admin, deptID, uniq("Секретная "), nil)
+	wsAdmin.waitFrameMatch(t, "task:created", sameTask(first), 10*time.Second)
+	if f, err := wsOutsider.tryWaitFrame("task:created", sameTask(first), 1500*time.Millisecond); err == nil {
+		t.Fatalf("задача протекла в чужую компанию: %s", f.Data)
+	}
+	if _, err := wsMulti.tryWaitFrame("task:created", sameTask(first), 500*time.Millisecond); err == nil {
+		t.Fatal("событие компании дошло до соединения с другой активной компанией")
+	}
+
+	// Переключение компании: новый токен уходит живому соединению.
+	multi.switchCompany(t, companyID)
+	wsMulti.emit(t, "auth", map[string]any{"token": multi.Token})
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		id := createTask(t, admin, deptID, uniq("После переключения "), nil)
+		if _, err := wsMulti.tryWaitFrame("task:created", sameTask(id), time.Second); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("после переавторизации события компании не доходят")
+		}
+	}
+
+	// Удаление несёт компанию и ответственного — клиенту не нужно
+	// перезапрашивать бейдж «моих задач».
+	r := tasksAPI.doJSON(t, http.MethodDelete, fmt.Sprintf("/api/tasks/%d", first), admin.Token, nil)
+	if r.Status >= 300 {
+		t.Fatalf("удаление задачи: %d %s", r.Status, r.Raw)
+	}
+	f := wsMulti.waitFrameMatch(t, "task:deleted", func(f wsFrame) bool {
+		v, _ := f.Obj()["task_id"].(float64)
+		return int64(v) == first
+	}, 10*time.Second)
+	if int64(f.Obj()["company_id"].(float64)) != companyID {
+		t.Fatalf("task:deleted без company_id: %s", f.Data)
+	}
+	if _, ok := f.Obj()["responsible_user_id"]; !ok {
+		t.Fatalf("task:deleted без responsible_user_id: %s", f.Data)
 	}
 }

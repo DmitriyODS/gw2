@@ -27,6 +27,7 @@ type Service struct {
 	files   domain.FileStore
 	bus     domain.EventBus
 	limiter domain.WriteLimiter
+	viewers domain.CollabViewers
 	log     *slog.Logger
 	// billing — лимиты тарифа (WithBilling; nil — ограничений нет).
 	billing *billingclient.Client
@@ -38,12 +39,14 @@ type Deps struct {
 	Files   domain.FileStore
 	Bus     domain.EventBus
 	Limiter domain.WriteLimiter
+	// Viewers — зрители документа; nil — события идут всей аудитории.
+	Viewers domain.CollabViewers
 	Log     *slog.Logger
 }
 
 func New(d Deps) *Service {
 	return &Service{repo: d.Repo, users: d.Users, files: d.Files, bus: d.Bus,
-		limiter: d.Limiter, log: d.Log}
+		limiter: d.Limiter, viewers: d.Viewers, log: d.Log}
 }
 
 // companyIDs — компании пользователя (скоуп «расшарено моей компании»). Ошибка

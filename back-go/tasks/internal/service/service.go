@@ -11,11 +11,14 @@ import (
 
 	"github.com/DmitriyODS/gw2/back-go/pkg/apierror"
 	"github.com/DmitriyODS/gw2/back-go/pkg/billingclient"
+	"github.com/DmitriyODS/gw2/back-go/pkg/events"
 	"github.com/DmitriyODS/gw2/back-go/tasks/internal/domain"
 	"github.com/DmitriyODS/gw2/back-go/tasks/internal/dto"
 )
 
-const roomAll = "all"
+// companyRoom — события компании уходят только её участникам с этой активной
+// компанией (комнату сажает шлюз по токену), а не в общую "all".
+func companyRoom(companyID int64) []string { return []string{events.CompanyRoom(companyID)} }
 
 type Service struct {
 	tasks     domain.TaskRepository
@@ -175,5 +178,5 @@ func (s *Service) enrichTask(ctx context.Context, t *domain.Task, userID int64) 
 // broadcastTask — сокет-событие task:created/task:updated: тот же дамп без
 // личного цвета.
 func (s *Service) broadcastTask(ctx context.Context, event string, task dto.Task) {
-	s.bus.Publish(ctx, event, []string{roomAll}, dto.NewTaskBroadcast(task))
+	s.bus.Publish(ctx, event, companyRoom(task.CompanyID), dto.NewTaskBroadcast(task))
 }

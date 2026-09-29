@@ -211,7 +211,7 @@ func (y *Yougile) applyRestored(ctx context.Context, task *domain.Task) (map[str
 	return map[string]any{"status": "restored"}, nil
 }
 
-// broadcastTaskUpdate — task:updated в комнату all. Вебхуки идут без
+// broadcastTaskUpdate — task:updated в комнату компании. Вебхуки идут без
 // пользователя — дамп с userID=0 (is_favorite=false/color=null; клиенты
 // подмёрджат своё локально).
 func (y *Yougile) broadcastTaskUpdate(ctx context.Context, taskID int64) (*dto.Task, error) {

@@ -111,7 +111,8 @@ func (s *Service) notifyMentions(ctx context.Context, taskID, commentID, authorI
 }
 
 func (s *Service) CreateComment(ctx context.Context, taskID, authorID int64, companyID *int64, text string) (*dto.Comment, error) {
-	if _, err := s.taskInCompany(ctx, taskID, companyID); err != nil {
+	task, err := s.taskInCompany(ctx, taskID, companyID)
+	if err != nil {
 		return nil, err
 	}
 	text = strings.TrimSpace(text)
@@ -128,7 +129,7 @@ func (s *Service) CreateComment(ctx context.Context, taskID, authorID int64, com
 		return nil, err
 	}
 	out := dto.NewComment(created)
-	s.bus.Publish(ctx, "comment:new", []string{roomAll}, out)
+	s.bus.Publish(ctx, "comment:new", companyRoom(task.CompanyID), out)
 	s.notifyMentions(ctx, taskID, comment.ID, authorID, companyID, text)
 	return &out, nil
 }
@@ -142,7 +143,8 @@ func (s *Service) UpdateComment(ctx context.Context, commentID, userID int64, ac
 		return nil, domain.NewError("NOT_FOUND", "Комментарий не найден", 404)
 	}
 	// Комментарий чужой компании неотличим от несуществующего.
-	if _, err := s.taskInCompany(ctx, comment.TaskID, companyID); err != nil {
+	task, err := s.taskInCompany(ctx, comment.TaskID, companyID)
+	if err != nil {
 		return nil, domain.NewError("NOT_FOUND", "Комментарий не найден", 404)
 	}
 	if err := ensureCanEditComment(comment, userID, actorLevel); err != nil {
@@ -161,7 +163,7 @@ func (s *Service) UpdateComment(ctx context.Context, commentID, userID int64, ac
 		return nil, err
 	}
 	out := dto.NewComment(updated)
-	s.bus.Publish(ctx, "comment:updated", []string{roomAll}, out)
+	s.bus.Publish(ctx, "comment:updated", companyRoom(task.CompanyID), out)
 	return &out, nil
 }
 
@@ -173,7 +175,8 @@ func (s *Service) DeleteComment(ctx context.Context, taskID, commentID, userID i
 	if comment == nil || comment.DeletedAt != nil {
 		return domain.NewError("NOT_FOUND", "Комментарий не найден", 404)
 	}
-	if _, err := s.taskInCompany(ctx, comment.TaskID, companyID); err != nil {
+	task, err := s.taskInCompany(ctx, comment.TaskID, companyID)
+	if err != nil {
 		return domain.NewError("NOT_FOUND", "Комментарий не найден", 404)
 	}
 	if err := ensureCanEditComment(comment, userID, actorLevel); err != nil {
@@ -182,7 +185,7 @@ func (s *Service) DeleteComment(ctx context.Context, taskID, commentID, userID i
 	if err := s.comments.SoftDeleteComment(ctx, commentID, time.Now().UTC()); err != nil {
 		return err
 	}
-	s.bus.Publish(ctx, "comment:deleted", []string{roomAll}, map[string]any{
+	s.bus.Publish(ctx, "comment:deleted", companyRoom(task.CompanyID), map[string]any{
 		"task_id": taskID, "comment_id": commentID,
 	})
 	return nil

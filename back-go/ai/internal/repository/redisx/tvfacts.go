@@ -3,6 +3,8 @@
 // Ключи gw2:ai:tv_fact:{company_id} сохранены с Flask-времён: значение —
 // JSON {generated_at, kind, text}, TTL вдвое больше тика генерации (если
 // тик пропустится, на табло остаётся прошлый факт, а не фолбэк).
+// gw2:ai:tv_watch:{cid} — метка спроса (табло открыто), gw2:ai:tv_gen:{cid} —
+// замок внеочередной генерации.
 package redisx
 
 import (
@@ -63,4 +65,25 @@ func (c *FactCache) DeleteFact(ctx context.Context, companyID int64) {
 	if err := c.rdb.Del(ctx, factKey(companyID)).Err(); err != nil {
 		c.log.Warn("ai.tv_facts.redis_del_failed", "company_id", companyID, "error", err)
 	}
+}
+
+func watchKey(companyID int64) string { return fmt.Sprintf("gw2:ai:tv_watch:%d", companyID) }
+func claimKey(companyID int64) string { return fmt.Sprintf("gw2:ai:tv_gen:%d", companyID) }
+
+func (c *FactCache) MarkWatched(ctx context.Context, companyID int64, ttl time.Duration) {
+	if err := c.rdb.Set(ctx, watchKey(companyID), 1, ttl).Err(); err != nil {
+		c.log.Warn("ai.tv_facts.redis_watch_failed", "company_id", companyID, "error", err)
+	}
+}
+
+// Watched — Redis недоступен: считаем, что спроса нет (генерация платная,
+// а табло без факта просто покажет фолбэк).
+func (c *FactCache) Watched(ctx context.Context, companyID int64) bool {
+	n, err := c.rdb.Exists(ctx, watchKey(companyID)).Result()
+	return err == nil && n > 0
+}
+
+func (c *FactCache) ClaimGeneration(ctx context.Context, companyID int64, ttl time.Duration) bool {
+	ok, err := c.rdb.SetNX(ctx, claimKey(companyID), 1, ttl).Result()
+	return err == nil && ok
 }

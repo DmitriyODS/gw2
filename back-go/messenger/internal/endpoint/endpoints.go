@@ -18,6 +18,7 @@ import (
 // Endpoints — все use-case'ы сервиса мессенджера.
 type Endpoints struct {
 	ListConversations     endpoint.Endpoint
+	SyncConversations     endpoint.Endpoint
 	OpenConversation      endpoint.Endpoint
 	ListMessages          endpoint.Endpoint
 	SendMessage           endpoint.Endpoint
@@ -99,6 +100,8 @@ type SoloChatRequest struct {
 type ListConversationsRequest struct {
 	UserID    int64
 	CompanyID *int64
+	// Since — курсор дельта-синхронизации (SyncConversations).
+	Since int64
 }
 
 type UploadRequest struct {
@@ -162,6 +165,10 @@ type CallMessageResponse struct {
 
 func New(svc service.MessengerService) Endpoints {
 	return Endpoints{
+		SyncConversations: func(ctx context.Context, request any) (any, error) {
+			req := request.(ListConversationsRequest)
+			return svc.SyncConversations(ctx, req.UserID, req.CompanyID, req.Since)
+		},
 		ListConversations: func(ctx context.Context, request any) (any, error) {
 			req := request.(ListConversationsRequest)
 			return svc.ListConversations(ctx, req.UserID, req.CompanyID)

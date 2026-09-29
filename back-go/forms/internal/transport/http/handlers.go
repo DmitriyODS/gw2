@@ -653,3 +653,11 @@ func (h *handlers) companies(c *fiber.Ctx) error {
 	}
 	return c.JSON(fiber.Map{"companies": companies})
 }
+
+func (h *handlers) tileSummary(c *fiber.Ctx) error {
+	out, err := h.svc.TileSummary(c.Context(), userID(c))
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(out)
+}

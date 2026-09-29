@@ -124,6 +124,9 @@ type JoinByCodeResponse struct {
 
 type ActiveCallResponse struct {
 	Call *CallDTO `json:"call"`
+	// Incoming — звонок, который мне ещё звонит: клиент, чей сокет спал
+	// (фон телефона, обрыв), подхватывает ринг без события call:incoming.
+	Incoming *CallDTO `json:"incoming,omitempty"`
 }
 
 // ── Вебхук LiveKit ───────────────────────────────────────────────

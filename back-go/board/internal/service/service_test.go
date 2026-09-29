@@ -65,6 +65,24 @@ func (f *fakeRepo) ancestors(folderID *int64) []int64 {
 }
 
 // ── Доски ──
+func (f *fakeRepo) BoardSummary(_ domain.Ctx, ownerID int64) (*domain.ListSummary, error) {
+	out := &domain.ListSummary{}
+	var latest *domain.Board
+	for _, n := range f.boards {
+		if n.OwnerID != ownerID || n.Archived {
+			continue
+		}
+		out.Total++
+		if latest == nil || n.UpdatedAt.After(latest.UpdatedAt) {
+			latest = n
+		}
+	}
+	if latest != nil {
+		out.Latest = &domain.SummaryItem{ID: latest.ID, Title: latest.Title}
+	}
+	return out, nil
+}
+
 func (f *fakeRepo) ListBoards(_ domain.Ctx, fl domain.BoardListFilter) ([]*domain.Board, error) {
 	out := []*domain.Board{}
 	for _, n := range f.boards {

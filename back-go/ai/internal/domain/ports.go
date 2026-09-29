@@ -70,6 +70,12 @@ type FactCache interface {
 	GetFact(ctx context.Context, companyID int64) (*TVFact, error)
 	SetFact(ctx context.Context, companyID int64, fact *TVFact, ttl time.Duration) error
 	DeleteFact(ctx context.Context, companyID int64)
+	// MarkWatched / Watched — спрос на факты: табло компании открыто недавно.
+	MarkWatched(ctx context.Context, companyID int64, ttl time.Duration)
+	Watched(ctx context.Context, companyID int64) bool
+	// ClaimGeneration — занять внеочередную генерацию (одна на компанию за
+	// ttl, на все инстансы); false — уже идёт или Redis недоступен.
+	ClaimGeneration(ctx context.Context, companyID int64, ttl time.Duration) bool
 }
 
 // UserReader — read-only доступ к пользователям платформы (auth-мидлварь

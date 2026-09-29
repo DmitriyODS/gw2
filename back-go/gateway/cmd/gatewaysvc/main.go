@@ -1,6 +1,6 @@
 // gatewaysvc — realtime-шлюз Groove Work (наследник Flask-SocketIO).
 //
-// Лёгкий WS-шлюз: PASETO-handshake, комнаты all/user_{id}, presence в Redis
+// Лёгкий WS-шлюз: PASETO-handshake, комнаты all/user_{id}/company_{id}, presence в Redis
 // (visibility + heartbeat + sweeper, last_seen_at в users) и ринг-фаза
 // звонков (WS-команды call:* → gRPC callsvc). Сам подписывается на все
 // Redis-каналы gw2:<svc>:events (общий envelope) и доставляет события
@@ -57,9 +57,9 @@ func main() {
 
 	h := hub.New()
 	bus := events.NewPublisher(rdb, log, "gw2:gateway:events")
-	pres := presence.New(rdb, presence.PGLastSeen{Pool: pool}, bus, log)
-	rng := ring.New(calls, bus, log)
 	users := postgres.NewUserReader(pool)
+	pres := presence.New(rdb, presence.PGLastSeen{Pool: pool}, bus, users, log)
+	rng := ring.New(calls, bus, log)
 	br := bridge.New(rdb, h, log)
 
 	server := httptransport.NewServer(httptransport.Deps{

@@ -1,7 +1,10 @@
 // ТВ-факт дня для брендового слайда. Портировано из
 // back/app/services/tv_facts_service.py без изменения правил.
 //
-// Генерируем раз в час по каждой компании с включённым AI, храним в Redis
+// Генерируем раз в час по каждой компании с включённым AI, чьё табло недавно
+// открывали (tvWatchTTL): генерация тратит токены создателя компании, и
+// платить за факты, которых никто не видит, незачем. Первый показ без факта
+// запускает генерацию сразу, не дожидаясь тика. Храним в Redis
 // (gw2:ai:tv_fact:{cid}). Жанры чередуются 50/50: "general" — общий факт о
 // работе/продуктивности, "context" — наблюдение по статистике компании за
 // последние 7 дней. Никаких ретраев на месте: упала генерация — пропускаем
@@ -28,6 +31,11 @@ const (
 	// tvFactTTL вдвое больше тика — если следующий тик пропустится, факт
 	// всё ещё будет на табло, а не превратится в фолбэк.
 	tvFactTTL = 2 * tvTickInterval
+
+	// tvWatchTTL — сколько после последнего показа табло считается открытым.
+	tvWatchTTL = 3 * time.Hour
+	// tvClaimTTL — замок внеочередной генерации: не чаще раза за это время.
+	tvClaimTTL = 5 * time.Minute
 
 	tvMaxTokens   = 180
 	tvTemperature = 0.9
@@ -106,9 +114,21 @@ func pyISOUTC(t time.Time) string {
 // факт не сгенерён / Redis лёг — nil с 200 OK: фронт молча падает на
 // фолбэк-слайд.
 func (s *Service) GetTVFact(ctx context.Context, companyID int64) (*domain.TVFact, error) {
+	s.facts.MarkWatched(ctx, companyID, tvWatchTTL)
 	fact, err := s.facts.GetFact(ctx, companyID)
 	if err != nil {
 		return nil, nil // fail-open, как try/except вокруг Redis во Flask
+	}
+	if fact == nil && s.facts.ClaimGeneration(ctx, companyID, tvClaimTTL) {
+		// Табло открыли впервые за долгое время — факт будет к следующему
+		// опросу, а не через час.
+		go func() {
+			genCtx, cancel := context.WithTimeout(context.Background(), 2*tvTimeout)
+			defer cancel()
+			if err := s.GenerateTVFact(genCtx, companyID); err != nil {
+				s.log.Warn("ai.tv_facts.ondemand_failed", "company_id", companyID, "err", err)
+			}
+		}()
 	}
 	return fact, nil
 }
@@ -201,6 +221,9 @@ func (s *Service) tvFactsTick(ctx context.Context) {
 		return
 	}
 	for _, cid := range companyIDs {
+		if !s.facts.Watched(ctx, cid) {
+			continue
+		}
 		if err := s.GenerateTVFact(ctx, cid); err != nil {
 			s.log.Warn("ai.tv_facts.iter_failed", "company_id", cid, "err", err)
 		}

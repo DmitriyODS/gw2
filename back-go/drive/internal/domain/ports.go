@@ -32,6 +32,9 @@ type Repository interface {
 
 	// ── Файлы ──
 	ListFiles(ctx Ctx, f ListFilter) ([]*File, error)
+	// FileSummary — сколько файлов на диске (без корзины) и последний
+	// изменённый — для живой плитки.
+	FileSummary(ctx Ctx, ownerID int64) (*FileSummary, error)
 	GetFile(ctx Ctx, id int64) (*File, error)
 	CreateFile(ctx Ctx, f *File) error
 	RenameFile(ctx Ctx, id int64, name string) error

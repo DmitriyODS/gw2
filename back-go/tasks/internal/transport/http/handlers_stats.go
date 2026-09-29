@@ -6,6 +6,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
+	"github.com/DmitriyODS/gw2/back-go/tasks/internal/dto"
 	"github.com/DmitriyODS/gw2/back-go/tasks/internal/endpoint"
 )
 
@@ -246,4 +247,42 @@ func (h *handlers) statsProfile(c *fiber.Ctx) error {
 		return h.respondError(c, err)
 	}
 	return c.JSON(resp)
+}
+
+// statsSummary — сводка живой плитки одним запросом: часы и задачи за неделю
+// и часы за сегодня. Границы дней присылает клиент (?week_from, ?today —
+// даты в его зоне), как и у профиля.
+func (h *handlers) statsSummary(c *fiber.Ctx) error {
+	weekFrom, okWeek := parseISODateTime(c.Query("week_from"))
+	today, okToday := parseISODateTime(c.Query("today"))
+	if !okWeek || !okToday {
+		return badPeriod(c)
+	}
+	dayStart := func(t time.Time) time.Time { return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, bizZone) }
+	dayEnd := func(t time.Time) time.Time {
+		return time.Date(t.Year(), t.Month(), t.Day(), 23, 59, 59, 999999000, bizZone)
+	}
+	user := currentUser(c)
+	profile := func(start, end time.Time) (*dto.StatsProfile, error) {
+		resp, err := h.eps.StatsProfile(c.Context(), endpoint.ProfileRequest{
+			UserID: user.ID, CompanyID: user.CompanyID, Start: start, End: end,
+		})
+		if err != nil {
+			return nil, err
+		}
+		return resp.(*dto.StatsProfile), nil
+	}
+	week, err := profile(dayStart(weekFrom), dayEnd(today))
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	day, err := profile(dayStart(today), dayEnd(today))
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(fiber.Map{
+		"week_hours":  week.TotalHours,
+		"week_tasks":  week.TasksCount,
+		"today_hours": day.TotalHours,
+	})
 }

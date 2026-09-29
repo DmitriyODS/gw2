@@ -161,3 +161,15 @@ type Company struct {
 	ID   int64
 	Name string
 }
+
+// ListSummary — сводка для живой плитки: сколько всего и что менялось
+// последним. Считается в SQL (COUNT + LIMIT 1), а не выборкой всего списка.
+type ListSummary struct {
+	Total  int          `json:"total"`
+	Latest *SummaryItem `json:"latest"`
+}
+
+type SummaryItem struct {
+	ID    int64  `json:"id"`
+	Title string `json:"title"`
+}

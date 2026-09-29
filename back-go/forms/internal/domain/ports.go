@@ -19,6 +19,8 @@ type FormRepository interface {
 	// обязанность считаются тем же запросом (список раздела показывает всё это
 	// сразу). companyID == 0 — активной компании нет.
 	ListForms(ctx Ctx, userID, companyID int64, scope string) ([]*Form, error)
+	// FormsSummary — счётчики раздела для живой плитки.
+	FormsSummary(ctx Ctx, userID, companyID int64) (*FormsSummary, error)
 	// GetForm — форма без структуры и без проверки доступа (её делает сервис).
 	GetForm(ctx Ctx, id int64) (*Form, error)
 	CountOwned(ctx Ctx, ownerID int64) (int, error)

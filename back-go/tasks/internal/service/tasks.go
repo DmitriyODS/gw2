@@ -317,14 +317,15 @@ func (s *Service) UpdateTask(ctx context.Context, taskID, actorID int64, company
 }
 
 func (s *Service) DeleteTask(ctx context.Context, taskID int64, companyID *int64) error {
-	if _, err := s.taskInCompany(ctx, taskID, companyID); err != nil {
+	task, err := s.taskInCompany(ctx, taskID, companyID)
+	if err != nil {
 		return err
 	}
 	if err := s.tasks.DeleteTask(ctx, taskID); err != nil {
 		return err
 	}
 	s.log.Info("task.delete", "task_id", taskID)
-	s.bus.Publish(ctx, "task:deleted", []string{roomAll}, map[string]any{"task_id": taskID})
+	s.bus.Publish(ctx, "task:deleted", companyRoom(task.CompanyID), taskRef(task, nil))
 	return nil
 }
 
@@ -365,9 +366,9 @@ func (s *Service) ArchiveTask(ctx context.Context, taskID, actorID int64, compan
 	if s.yg != nil {
 		s.yg.PushAfterArchive(taskID, actorID, true)
 	}
-	s.bus.Publish(ctx, "task:archived", []string{roomAll}, map[string]any{
-		"task_id": taskID, "archived_at": dto.ISO(now),
-	})
+	s.bus.Publish(ctx, "task:archived", companyRoom(task.CompanyID), taskRef(task, map[string]any{
+		"archived_at": dto.ISO(now),
+	}))
 	return out, nil
 }
 
@@ -396,7 +397,7 @@ func (s *Service) RestoreTask(ctx context.Context, taskID, actorID int64, compan
 	if s.yg != nil {
 		s.yg.PushAfterArchive(taskID, actorID, false)
 	}
-	s.bus.Publish(ctx, "task:restored", []string{roomAll}, map[string]any{"task_id": taskID})
+	s.bus.Publish(ctx, "task:restored", companyRoom(task.CompanyID), taskRef(task, nil))
 	return out, nil
 }
 
@@ -474,4 +475,19 @@ func (s *Service) Contributors(ctx context.Context, taskID int64, companyID *int
 		return nil, err
 	}
 	return dto.NewUserRefs(users), nil
+}
+
+// taskRef — полезная нагрузка task:deleted/archived/restored. Компания и
+// ответственный нужны клиенту, чтобы решить, трогает ли событие бейдж «моих
+// задач», не перезапрашивая счётчик.
+func taskRef(task *domain.Task, extra map[string]any) map[string]any {
+	out := map[string]any{
+		"task_id":             task.ID,
+		"company_id":          task.CompanyID,
+		"responsible_user_id": task.ResponsibleUserID,
+	}
+	for k, v := range extra {
+		out[k] = v
+	}
+	return out
 }

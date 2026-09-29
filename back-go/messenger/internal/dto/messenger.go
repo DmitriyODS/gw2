@@ -342,6 +342,16 @@ type ConversationWithOther struct {
 	OtherUser *DirectoryUser `json:"other_user"`
 }
 
+// ConversationSync — ответ синхронизации списка (?since=): Full — полный
+// список (журнал не ручается за дельту), иначе только изменившиеся диалоги и
+// ушедшие из списка. Cursor — since следующего запроса.
+type ConversationSync struct {
+	Full          bool                    `json:"full"`
+	Conversations []*ConversationListItem `json:"conversations"`
+	Removed       []int64                 `json:"removed"`
+	Cursor        int64                   `json:"cursor"`
+}
+
 // ConversationListItem — форма ConversationListItemSchema.
 type ConversationListItem struct {
 	ID            int64          `json:"id"`

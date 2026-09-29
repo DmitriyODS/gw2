@@ -22,7 +22,7 @@ func (s *Service) CreateTopic(ctx context.Context, companyID, userID int64, name
 	if err := s.repo.CreateTopic(ctx, t); err != nil {
 		return nil, err
 	}
-	s.bus.Publish(ctx, "topic:created", []string{roomAll}, topicPayload(t))
+	s.bus.Publish(ctx, "topic:created", companyRoom(companyID), topicPayload(t))
 	return t, nil
 }
 
@@ -39,7 +39,7 @@ func (s *Service) UpdateTopic(ctx context.Context, companyID, id int64, name str
 		return nil, err
 	}
 	t.Name, t.Color, t.Icon = name, color, icon
-	s.bus.Publish(ctx, "topic:updated", []string{roomAll}, topicPayload(t))
+	s.bus.Publish(ctx, "topic:updated", companyRoom(companyID), topicPayload(t))
 	return t, nil
 }
 
@@ -50,7 +50,7 @@ func (s *Service) DeleteTopic(ctx context.Context, companyID, id int64) error {
 	if err := s.repo.DeleteTopic(ctx, id); err != nil {
 		return err
 	}
-	s.bus.Publish(ctx, "topic:deleted", []string{roomAll}, map[string]any{
+	s.bus.Publish(ctx, "topic:deleted", companyRoom(companyID), map[string]any{
 		"id": id, "company_id": companyID,
 	})
 	return nil

@@ -68,6 +68,24 @@ func (f *fakeRepo) ancestors(folderID *int64) []int64 {
 }
 
 // ── Заметки ──
+func (f *fakeRepo) NoteSummary(_ domain.Ctx, ownerID int64) (*domain.ListSummary, error) {
+	out := &domain.ListSummary{}
+	var latest *domain.Note
+	for _, n := range f.notes {
+		if n.OwnerID != ownerID || n.Archived {
+			continue
+		}
+		out.Total++
+		if latest == nil || n.UpdatedAt.After(latest.UpdatedAt) {
+			latest = n
+		}
+	}
+	if latest != nil {
+		out.Latest = &domain.SummaryItem{ID: latest.ID, Title: latest.Title}
+	}
+	return out, nil
+}
+
 func (f *fakeRepo) ListNotes(_ domain.Ctx, fl domain.NoteListFilter) ([]*domain.Note, error) {
 	out := []*domain.Note{}
 	for _, n := range f.notes {
@@ -846,5 +864,94 @@ func TestImportPlainKeepsMarkdownLiteral(t *testing.T) {
 	}
 	if !strings.Contains(n.TextContent, "**звёздочками**") {
 		t.Errorf("текст изменён: %q", n.TextContent)
+	}
+}
+
+type capBus struct{ rooms [][]string }
+
+func (b *capBus) Publish(_ domain.Ctx, _ string, rooms []string, _ any) { b.rooms = append(b.rooms, rooms) }
+
+// fakeViewers — реестр зрителей в памяти.
+type fakeViewers struct {
+	ids    map[int64]bool
+	access map[int64]string
+	owner  int64
+}
+
+func (v *fakeViewers) RememberAccess(_ domain.Ctx, _, userID, ownerID int64, access string) {
+	if v.access == nil {
+		v.access = map[int64]string{}
+	}
+	v.access[userID], v.owner = access, ownerID
+}
+
+func (v *fakeViewers) CachedAccess(_ domain.Ctx, _, userID int64) (string, int64, bool) {
+	a, ok := v.access[userID]
+	return a, v.owner, ok
+}
+
+func (v *fakeViewers) Touch(_ domain.Ctx, _, userID int64) error { v.ids[userID] = true; return nil }
+func (v *fakeViewers) Leave(_ domain.Ctx, _, userID int64) error { delete(v.ids, userID); return nil }
+func (v *fakeViewers) List(domain.Ctx, int64) ([]int64, error) {
+	out := []int64{}
+	for id := range v.ids {
+		out = append(out, id)
+	}
+	return out, nil
+}
+
+// Курсор уходит только тем, кто держит заметку открытой, и не отправителю:
+// остальная аудитория (коллеги с доступом) из-за чужого курсора не просыпается.
+func TestCollabGoesOnlyToViewers(t *testing.T) {
+	repo, users := newFakeRepo(), newFakeUsers()
+	users.users[1] = &domain.User{ID: 1, IsActive: true}
+	n := &domain.Note{OwnerID: 1, Title: "Общая"}
+	_ = repo.CreateNote(ctx(), n)
+	bus := &capBus{}
+	viewers := &fakeViewers{ids: map[int64]bool{7: true}}
+	s := New(Deps{Repo: repo, Users: users, Files: nopFiles{}, Bus: bus, Limiter: allowLimiter{},
+		Viewers: viewers, Log: discardLogger()})
+
+	if err := s.Collab(ctx(), 1, n.ID, "cursor", &domain.CollabCursor{}, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := bus.rooms[len(bus.rooms)-1]; len(got) != 1 || got[0] != "user_7" {
+		t.Fatalf("адресаты курсора: %v, ожидался только зритель user_7", got)
+	}
+	if !viewers.ids[1] {
+		t.Fatal("отправитель не отмечен зрителем")
+	}
+	if err := s.Collab(ctx(), 1, n.ID, "leave", nil, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if viewers.ids[1] {
+		t.Fatal("leave не снял отправителя")
+	}
+}
+
+// join проверяет доступ честно и запоминает его; частые кадры (курсор) берут
+// запомненный и в БД за проверкой не ходят.
+func TestCollabJoinChecksAccessCursorUsesCache(t *testing.T) {
+	repo, users := newFakeRepo(), newFakeUsers()
+	users.users[1] = &domain.User{ID: 1, IsActive: true}
+	n := &domain.Note{OwnerID: 1, Title: "Общая"}
+	_ = repo.CreateNote(ctx(), n)
+	viewers := &fakeViewers{ids: map[int64]bool{}}
+	s := New(Deps{Repo: repo, Users: users, Files: nopFiles{}, Bus: &capBus{}, Limiter: allowLimiter{},
+		Viewers: viewers, Log: discardLogger()})
+
+	if err := s.Collab(ctx(), 1, n.ID, "join", nil, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if viewers.access[1] != domain.AccessOwner {
+		t.Fatalf("join не запомнил доступ: %v", viewers.access)
+	}
+	// Заметки больше нет: курсор в окне кэша проходит, новый join — нет.
+	_ = repo.DeleteNote(ctx(), n.ID)
+	if err := s.Collab(ctx(), 1, n.ID, "cursor", &domain.CollabCursor{}, nil, nil); err != nil {
+		t.Fatalf("курсор не взял доступ из кэша: %v", err)
+	}
+	if err := s.Collab(ctx(), 1, n.ID, "join", nil, nil, nil); err == nil {
+		t.Fatal("join обязан проверять доступ заново")
 	}
 }

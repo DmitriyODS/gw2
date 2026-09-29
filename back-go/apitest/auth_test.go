@@ -874,6 +874,14 @@ func TestUsersUpdateMe(t *testing.T) {
 	if ct := r.Header.Get("Content-Type"); ct != "image/png" {
 		t.Fatalf("identicon: content-type %q", ct)
 	}
+	// Повторный показ с тем же ETag — 304 без тела.
+	etag := r.Header.Get("ETag")
+	if etag == "" {
+		t.Fatal("identicon без ETag")
+	}
+	r = authAPI.doJSON(t, http.MethodGet, fmt.Sprintf("/api/users/%d/identicon", u.ID), "", nil,
+		func(req *http.Request) { req.Header.Set("If-None-Match", etag) })
+	requireStatus(t, r, 304, "identicon с If-None-Match")
 }
 
 // ── Каталог пользователей ────────────────────────────────────────
@@ -898,12 +906,12 @@ func TestUsersDirectory(t *testing.T) {
 			colleague.ID, outsider.ID, r.Raw)
 	}
 
-	// Глобальный каталог ?all=1 — виден и посторонний.
+	// Глобальный каталог ?all=1 — только поиск: без запроса он выдавал бы
+	// всю платформу любому вошедшему.
 	r = authAPI.doJSON(t, http.MethodGet, "/api/users/directory?all=1", creator.Token, nil)
 	requireStatus(t, r, 200, "directory all=1")
-	ids = directoryIDs(t, r)
-	if !ids[outsider.ID] {
-		t.Fatalf("directory all=1: посторонний %d должен быть виден", outsider.ID)
+	if ids = directoryIDs(t, r); len(ids) != 0 {
+		t.Fatalf("directory all=1 без запроса: ожидался пустой ответ, получено %d", len(ids))
 	}
 
 	// exclude_self.

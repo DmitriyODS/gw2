@@ -18,6 +18,9 @@ type RegistryRepository interface {
 	// расшаренные самой активной компании. Уровень доступа считается тем же
 	// запросом. companyID == 0 — активной компании нет.
 	ListRegistries(ctx Ctx, userID, companyID int64, scope string) ([]*Registry, error)
+	// RegistriesSummary — сколько реестров доступно и имена первых в порядке
+	// списка — для живой плитки.
+	RegistriesSummary(ctx Ctx, userID, companyID int64, names int) (*RegistriesSummary, error)
 	// GetRegistry — реестр без полей и без проверки доступа (её делает сервис).
 	GetRegistry(ctx Ctx, id int64) (*Registry, error)
 	// CountOwned — сколько реестров завёл человек (лимит тарифа).

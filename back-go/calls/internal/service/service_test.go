@@ -317,6 +317,38 @@ func TestStartCallP2P(t *testing.T) {
 	}
 }
 
+// Приглашённому звонящий звонок приходит как входящий, а не как «свой»:
+// иначе перезагрузка страницы во время гудков возвращала бы его в звонок, то
+// есть принимала вызов без его согласия.
+func TestActiveCallRingingIsIncomingForInvitee(t *testing.T) {
+	svc, _, _, _ := newTestService()
+	resp, err := svc.StartCall(context.Background(), dto.StartCallRequest{
+		InitiatorID: 10, InviteeIDs: []int64{20}, Media: "audio", ConversationID: 5,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	callID := resp.Call.ID
+
+	invitee, err := svc.ActiveCall(context.Background(), 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if invitee.Call != nil || invitee.Incoming == nil || invitee.Incoming.ID != callID {
+		t.Fatalf("приглашённому: call=%v incoming=%v", invitee.Call, invitee.Incoming)
+	}
+	initiator, _ := svc.ActiveCall(context.Background(), 10)
+	if initiator.Call == nil || initiator.Incoming != nil {
+		t.Fatalf("инициатору: call=%v incoming=%v", initiator.Call, initiator.Incoming)
+	}
+
+	// Принял — теперь это его звонок, в который можно вернуться.
+	svc.ring.MarkJoined(callID, 20)
+	if after, _ := svc.ActiveCall(context.Background(), 20); after.Call == nil || after.Incoming != nil {
+		t.Fatalf("после принятия: call=%v incoming=%v", after.Call, after.Incoming)
+	}
+}
+
 // p2p без переданного conversation_id: callsvc сам создаёт парный диалог
 // через msgsvc и заводит плашку (PillCreated). Недоступный msgsvc звонок
 // не блокирует — он пройдёт без привязки к чату.

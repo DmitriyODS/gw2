@@ -286,3 +286,20 @@ func (r *Repo) ReplaceFields(ctx context.Context, registryID int64, fields []dom
 	}
 	return removed, tx.Commit(ctx)
 }
+
+func (r *Repo) RegistriesSummary(ctx context.Context, userID, companyID int64, names int) (*domain.RegistriesSummary, error) {
+	out := domain.RegistriesSummary{Names: []string{}}
+	err := r.pool.QueryRow(ctx, `
+		WITH vis AS (
+		    SELECT reg.id, reg.name, reg.position FROM registries reg
+		     WHERE `+scopeCondition(domain.ScopeAll)+`)
+		SELECT (SELECT count(*) FROM vis),
+		       COALESCE((SELECT array_agg(name ORDER BY position, id)
+		                   FROM (SELECT name, position, id FROM vis
+		                          ORDER BY position, id LIMIT $3) head), '{}')`,
+		userID, companyID, names).Scan(&out.Total, &out.Names)
+	if err != nil {
+		return nil, err
+	}
+	return &out, nil
+}

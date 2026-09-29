@@ -33,6 +33,7 @@ var Channels = []string{
 	"gw2:registry:events",
 	"gw2:calendar:events",
 	"gw2:diary:events",
+	"gw2:schedule:events",
 	"gw2:portal:events",
 	"gw2:notes:events",
 	"gw2:board:events",
@@ -110,8 +111,8 @@ func (b *Bridge) handle(raw string) {
 		b.log.Warn("bridge.unknown_internal", "event", ev.Event)
 		return
 	}
-	frame := hub.MarshalFrame(ev.Event, ev.Payload)
-	for _, room := range ev.Rooms {
-		b.hub.Broadcast(room, frame)
+	if len(ev.Rooms) == 0 {
+		return
 	}
+	b.hub.Broadcast(hub.MarshalFrame(ev.Event, ev.Payload), ev.Rooms...)
 }

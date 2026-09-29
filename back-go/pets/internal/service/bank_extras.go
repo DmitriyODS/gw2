@@ -7,6 +7,7 @@ import (
 
 	"github.com/DmitriyODS/gw2/back-go/pets/internal/domain"
 	"github.com/DmitriyODS/gw2/back-go/pets/internal/dto"
+	"github.com/DmitriyODS/gw2/back-go/pkg/events"
 )
 
 // Кудо-банк 2.0: копилки-цели (личные суб-счета «коплю на мечту») и
@@ -239,10 +240,9 @@ func (s *Service) GetBankStats(ctx context.Context, userID int64) (*dto.BankStat
 	return dto.NewBankStats(days, kinds), nil
 }
 
-// emitFundUpdate — событие сбора всей компании (комната all, клиент фильтрует
-// по company_id — как pet:deleted).
+// emitFundUpdate — событие сбора всей компании (комната компании).
 func (s *Service) emitFundUpdate(ctx context.Context, companyID int64, f *domain.BankFund, action string) {
-	s.pub.Publish(ctx, "bank:fund", []string{"all"}, map[string]any{
+	s.pub.Publish(ctx, "bank:fund", []string{events.CompanyRoom(companyID)}, map[string]any{
 		"company_id": companyID, "action": action, "fund": dto.NewFund(f),
 	})
 }

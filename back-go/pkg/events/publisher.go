@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"strconv"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -47,3 +48,12 @@ func (p *Publisher) Publish(ctx context.Context, event string, rooms []string, p
 		p.log.Warn("events.publish_failed", "event", event, "error", err)
 	}
 }
+
+// UserRoom — личная комната пользователя: в ней все его соединения.
+func UserRoom(userID int64) string { return "user_" + strconv.FormatInt(userID, 10) }
+
+// CompanyRoom — комната АКТИВНОЙ компании: шлюз сажает в неё соединение по
+// company_id access-токена и пересаживает на кадре переавторизации. Компанийные
+// события идут только сюда — в общую комнату "all" их не шлют: её слышит вся
+// платформа.
+func CompanyRoom(companyID int64) string { return "company_" + strconv.FormatInt(companyID, 10) }

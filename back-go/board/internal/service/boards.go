@@ -385,3 +385,8 @@ func copyTitle(t string) string {
 	}
 	return t + " (копия)"
 }
+
+// Summary — сводка для живой плитки «Пуска».
+func (s *Service) Summary(ctx context.Context, userID int64) (*domain.ListSummary, error) {
+	return s.repo.BoardSummary(ctx, userID)
+}

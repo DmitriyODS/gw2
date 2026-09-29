@@ -1504,3 +1504,59 @@ func TestSupportInbox(t *testing.T) {
 		t.Fatalf("owner_user: %+v", items[0].OwnerUser)
 	}
 }
+
+// fakeChanges — журнал изменений списка с заданным ответом.
+type fakeChanges struct {
+	changed, removed []int64
+	ok               bool
+	touched          []int64
+}
+
+func (f *fakeChanges) Touch(_ context.Context, _ []int64, convID int64, _ bool) {
+	f.touched = append(f.touched, convID)
+}
+
+func (f *fakeChanges) Since(context.Context, int64, int64) ([]int64, []int64, int64, bool) {
+	return f.changed, f.removed, 42, f.ok
+}
+
+// Дельта отдаёт только изменившиеся диалоги; изменившийся, но выпавший из
+// списка — в removed. Журнал не ручается — полный список с full=true.
+func TestSyncConversationsDelta(t *testing.T) {
+	svc, _, _, _ := newTestEnv()
+	ctx := context.Background()
+	convA, _ := svc.OpenConversation(ctx, 2, 3)
+	convB, _ := svc.OpenConversation(ctx, 2, 1)
+
+	changes := &fakeChanges{changed: []int64{convB.ID, 999}, removed: []int64{77}, ok: true}
+	svc.WithChanges(changes)
+
+	sync, err := svc.SyncConversations(ctx, 2, nil, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sync.Full || sync.Cursor != 42 || len(sync.Conversations) != 1 || sync.Conversations[0].ID != convB.ID {
+		t.Fatalf("дельта: %+v", sync)
+	}
+	if len(sync.Removed) != 2 {
+		t.Fatalf("removed = %v, ожидались 77 и выпавший 999", sync.Removed)
+	}
+
+	changes.ok = false
+	full, _ := svc.SyncConversations(ctx, 2, nil, 1)
+	ids := map[int64]bool{}
+	for _, it := range full.Conversations {
+		ids[it.ID] = true
+	}
+	if !full.Full || !ids[convA.ID] || !ids[convB.ID] {
+		t.Fatalf("полная синхронизация: %+v", full)
+	}
+
+	// Открытие диалога событий не шлёт — отмечается в журнале явно.
+	if _, err := svc.OpenConversation(ctx, 2, 4); err != nil && domain.AsDomainError(err) == nil {
+		t.Fatal(err)
+	}
+	if len(changes.touched) == 0 {
+		t.Fatal("открытие диалога не отмечено в журнале")
+	}
+}

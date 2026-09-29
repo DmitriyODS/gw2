@@ -672,6 +672,12 @@ func (s *Service) ActiveCall(ctx context.Context, userID int64) (*dto.ActiveCall
 	if err != nil {
 		return nil, err
 	}
+	// Приглашённый числится за звонком с первого гудка, но участником ещё не
+	// стал: такой звонок ему ЗВОНИТ, и возвращаться в него клиент не вправе —
+	// иначе перезагрузка страницы во время гудков молча принимала звонок.
+	if ring, ok := s.ring.Snapshot(callID); ok && !domain.Has(ring.Joined, userID) {
+		return &dto.ActiveCallResponse{Incoming: snap}, nil
+	}
 	return &dto.ActiveCallResponse{Call: snap}, nil
 }
 

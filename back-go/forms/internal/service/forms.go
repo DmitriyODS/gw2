@@ -16,7 +16,33 @@ func (s *Service) ListForms(ctx context.Context, userID int64, scope string) ([]
 	if err != nil {
 		return nil, err
 	}
-	return s.repo.ListForms(ctx, a.UserID, a.CompanyID, domain.NormalizeScope(scope))
+	forms, err := s.repo.ListForms(ctx, a.UserID, a.CompanyID, domain.NormalizeScope(scope))
+	if err != nil {
+		return nil, err
+	}
+	for _, f := range forms {
+		hideResponseCount(f)
+	}
+	return forms, nil
+}
+
+// hideResponseCount — сколько ответов собрано, видит тот, кому видны сами
+// ответы (уровень view и выше); адресату-респонденту это знать незачем.
+func hideResponseCount(f *domain.Form) {
+	if !domain.AccessAtLeast(f.MyAccess, domain.AccessView) {
+		f.Responses = 0
+	}
+}
+
+// TileSummary — сводка форм для живой плитки: сколько доступно, сколько ждут
+// моего ответа (назначены со сроком), ближайшая из них и сколько ответов
+// собрано на формы, где ответы мне видны.
+func (s *Service) TileSummary(ctx context.Context, userID int64) (*domain.FormsSummary, error) {
+	a, err := s.actor(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	return s.repo.FormsSummary(ctx, a.UserID, a.CompanyID)
 }
 
 // GetForm — одна доступная форма со структурой. Ключи правильных ответов
@@ -37,6 +63,7 @@ func (s *Service) GetForm(ctx context.Context, userID, id int64) (*domain.Form, 
 	if !domain.AccessAtLeast(form.MyAccess, domain.AccessView) {
 		sections = stripAnswerKeys(sections)
 	}
+	hideResponseCount(form)
 	form.Sections = sections
 	return form, nil
 }

@@ -25,23 +25,26 @@ type Service struct {
 	files    domain.FileStore
 	bus      domain.EventBus
 	limiter  domain.WriteLimiter
+	viewers  domain.CollabViewers
 	embedder domain.Embedder
 	log      *slog.Logger
 }
 
 type Deps struct {
-	Repo     domain.NoteRepository
-	Users    domain.UserReader
-	Files    domain.FileStore
-	Bus      domain.EventBus
-	Limiter  domain.WriteLimiter
+	Repo    domain.NoteRepository
+	Users   domain.UserReader
+	Files   domain.FileStore
+	Bus     domain.EventBus
+	Limiter domain.WriteLimiter
+	// Viewers — зрители документа; nil — события идут всей аудитории.
+	Viewers  domain.CollabViewers
 	Embedder domain.Embedder // nil — ИИ-поиск выключен (фолбэк на текстовый)
 	Log      *slog.Logger
 }
 
 func New(d Deps) *Service {
 	return &Service{repo: d.Repo, users: d.Users, files: d.Files, bus: d.Bus,
-		limiter: d.Limiter, embedder: d.Embedder, log: d.Log}
+		limiter: d.Limiter, viewers: d.Viewers, embedder: d.Embedder, log: d.Log}
 }
 
 // aiEnabled — ИИ-поиск доступен (клиент aisvc настроен).

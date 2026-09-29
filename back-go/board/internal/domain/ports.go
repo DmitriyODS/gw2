@@ -23,6 +23,8 @@ type BoardRepository interface {
 	// ── Доски ──
 	// ListBoards — плитки по фильтру (без сцены, с excerpt и превью).
 	ListBoards(ctx Ctx, f BoardListFilter) ([]*Board, error)
+	// BoardSummary — сводка своих неархивных досок для живой плитки.
+	BoardSummary(ctx Ctx, ownerID int64) (*ListSummary, error)
 	// GetBoard — полная доска (со сценой и folder_id); nil — нет такой.
 	GetBoard(ctx Ctx, id int64) (*Board, error)
 	// CountBoards — сколько досок уже есть (лимит тарифа).
@@ -137,6 +139,18 @@ type UserReader interface {
 // (realtime-шлюз gatewaysvc доставляет их в WS-комнаты вербатим).
 type EventBus interface {
 	Publish(ctx Ctx, event string, rooms []string, payload any)
+}
+
+// CollabViewers — кто сейчас держит документ открытым (pkg/collab): события
+// совместной работы адресуются только им, а не всей аудитории.
+type CollabViewers interface {
+	Touch(ctx Ctx, docID, userID int64) error
+	Leave(ctx Ctx, docID, userID int64) error
+	List(ctx Ctx, docID int64) ([]int64, error)
+	// RememberAccess / CachedAccess — проверенный доступ зрителя на окно
+	// реестра: кадры редактора идут чаще, чем стоит честная проверка.
+	RememberAccess(ctx Ctx, docID, userID, ownerID int64, access string)
+	CachedAccess(ctx Ctx, docID, userID int64) (access string, ownerID int64, ok bool)
 }
 
 // FileStore — хранилище картинок холста и превью досок (pkg/records.FileStore

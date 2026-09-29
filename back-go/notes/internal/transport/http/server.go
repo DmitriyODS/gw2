@@ -92,6 +92,7 @@ func NewServer(svc *service.Service, users domain.UserReader, uploads *chunkuplo
 
 	// Заметки.
 	api.Get("", h.listNotes)
+	api.Get("/summary", h.summary)
 	api.Post("", h.createNote)
 	api.Get("/export", h.exportAll) // zip группировки (scope=all|archive|shared)
 	api.Post("/import", h.importNote)

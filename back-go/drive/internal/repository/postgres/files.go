@@ -209,3 +209,27 @@ func (r *Repo) ExpiredTrash(ctx domain.Ctx) ([]*domain.File, []int64, error) {
 	}
 	return files, folders, frows.Err()
 }
+
+func (r *Repo) FileSummary(ctx domain.Ctx, ownerID int64) (*domain.FileSummary, error) {
+	var (
+		out  domain.FileSummary
+		id   *int64
+		name *string
+	)
+	err := r.pool.QueryRow(ctx, `
+		SELECT (SELECT count(*) FROM drive_files WHERE owner_id = $1 AND deleted_at IS NULL),
+		       l.id, l.name
+		  FROM (SELECT 1) one
+		  LEFT JOIN LATERAL (
+		        SELECT id, name FROM drive_files
+		         WHERE owner_id = $1 AND deleted_at IS NULL
+		         ORDER BY updated_at DESC, id DESC LIMIT 1) l ON TRUE`, ownerID).
+		Scan(&out.Total, &id, &name)
+	if err != nil {
+		return nil, err
+	}
+	if id != nil {
+		out.Latest = &domain.FileSummaryItem{ID: *id, Name: *name}
+	}
+	return &out, nil
+}

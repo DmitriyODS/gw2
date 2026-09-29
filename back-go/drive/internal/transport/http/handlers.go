@@ -383,3 +383,11 @@ func folderTarget(c *fiber.Ctx) service.Target {
 	id := pathID(c)
 	return service.Target{FolderID: &id}
 }
+
+func (h *handlers) summary(c *fiber.Ctx) error {
+	out, err := h.svc.Summary(c.Context(), currentUserID(c))
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(out)
+}

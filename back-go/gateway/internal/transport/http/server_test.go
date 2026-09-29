@@ -30,9 +30,22 @@ type nopLastSeen struct{}
 
 func (nopLastSeen) SetLastSeen(context.Context, int64, time.Time) error { return nil }
 
+type selfAudience struct{}
+
+func (selfAudience) PresenceAudience(context.Context, int64) ([]int64, bool, error) {
+	return nil, false, nil
+}
+
 func signToken(t *testing.T, secret paseto.V4AsymmetricSecretKey, userID int64) string {
+	return signCompanyToken(t, secret, userID, 0)
+}
+
+func signCompanyToken(t *testing.T, secret paseto.V4AsymmetricSecretKey, userID, companyID int64) string {
 	t.Helper()
 	tok := paseto.NewToken()
+	if companyID > 0 {
+		_ = tok.Set("company_id", companyID)
+	}
 	tok.SetSubject(fmt.Sprint(userID))
 	tok.SetString("type", "access")
 	tok.SetIssuedAt(time.Now())
@@ -67,7 +80,7 @@ func startServer(t *testing.T) (addr string, rdb *redis.Client, secret paseto.V4
 	log := slog.New(slog.DiscardHandler)
 	h := hub.New()
 	bus := events.NewPublisher(rdb, log, "gw2:gateway:events")
-	pres := presence.New(rdb, nopLastSeen{}, bus, log)
+	pres := presence.New(rdb, nopLastSeen{}, bus, selfAudience{}, log)
 
 	server := NewServer(Deps{
 		Hub:      h,
@@ -176,5 +189,67 @@ func TestWSRejectsBadToken(t *testing.T) {
 	authConnect(t, conn, "garbage")
 	if f := readFrame(t, conn); f.Event != "_error" {
 		t.Fatalf("ожидался _error, получен %s", f.Event)
+	}
+}
+
+func publishTo(t *testing.T, rdb *redis.Client, event string, room string) {
+	t.Helper()
+	env, _ := json.Marshal(map[string]any{"event": event, "rooms": []string{room}, "payload": nil})
+	if err := rdb.Publish(context.Background(), "gw2:tasks:events", env).Err(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Компанийные события доходят только до соединений с этой активной компанией,
+// а кадр переавторизации пересаживает соединение в новую компанию.
+func TestWSCompanyRoomAndReauth(t *testing.T) {
+	addr, rdb, secret := startServer(t)
+	conn := dial(t, addr)
+	authConnect(t, conn, signCompanyToken(t, secret, 7, 5))
+	if f := readFrame(t, conn); f.Event != "_connected" {
+		t.Fatalf("ожидался _connected, получен %s", f.Event)
+	}
+	if f := readFrame(t, conn); f.Event != "presence:update" {
+		t.Fatalf("ожидался presence:update, получен %s", f.Event)
+	}
+
+	publishTo(t, rdb, "foreign", "company_6")
+	publishTo(t, rdb, "own", "company_5")
+	if f := readFrame(t, conn); f.Event != "own" {
+		t.Fatalf("дошло событие чужой компании: %s", f.Event)
+	}
+
+	authConnect(t, conn, signCompanyToken(t, secret, 7, 6))
+	// Кадр переавторизации ответа не имеет — шлём пробы в новую компанию,
+	// пока первая из них не дойдёт.
+	stop := make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(20 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-stop:
+				return
+			case <-ticker.C:
+				// t.Fatal из чужой горутины нельзя — ошибку публикации пережидаем.
+				env, _ := json.Marshal(map[string]any{"event": "probe", "rooms": []string{"company_6"}})
+				_ = rdb.Publish(context.Background(), "gw2:tasks:events", env).Err()
+			}
+		}
+	}()
+	for readFrame(t, conn).Event != "probe" {
+	}
+	close(stop)
+	// Хвост probe-кадров мог остаться в пути — дочитываем до маркера.
+	publishTo(t, rdb, "old", "company_5")
+	publishTo(t, rdb, "marker", "user_7")
+	for {
+		f := readFrame(t, conn)
+		if f.Event == "old" {
+			t.Fatal("после смены компании дошло событие прежней")
+		}
+		if f.Event == "marker" {
+			break
+		}
 	}
 }

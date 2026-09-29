@@ -282,3 +282,20 @@ type UploadedFile struct {
 	// оригинал и так мал либо формат не декодируется.
 	Thumb string `json:"thumb,omitempty"`
 }
+
+// FormsSummary — сводка раздела для живой плитки (считается в SQL).
+type FormsSummary struct {
+	Total int `json:"total"`
+	// Pending — назначены мне со сроком, а ответа ещё нет.
+	Pending int `json:"pending"`
+	// Next — ближайшая по сроку из ждущих ответа.
+	Next *FormSummaryItem `json:"next"`
+	// Responses — собрано ответов на формы, где ответы мне видны.
+	Responses int `json:"responses"`
+}
+
+type FormSummaryItem struct {
+	ID    int64     `json:"id"`
+	Title string    `json:"title"`
+	DueAt time.Time `json:"due_at"`
+}

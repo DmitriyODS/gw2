@@ -19,7 +19,7 @@ func (r *Repo) ListStorageFiles(ctx context.Context, companyIDs []int64) ([]stor
 		return nil, nil
 	}
 	rows, err := r.pool.Query(ctx, `
-		SELECT a.file_path, a.name, a.created_at, p.id, p.company_id,
+		SELECT a.file_path, a.thumb_path, a.name, a.created_at, p.id, p.company_id,
 		       COALESCE(NULLIF(p.title, ''), left(p.body, 60))
 		  FROM portal_attachments a
 		  JOIN portal_posts p ON p.id = a.post_id
@@ -33,22 +33,32 @@ func (r *Repo) ListStorageFiles(ctx context.Context, companyIDs []int64) ([]stor
 	for rows.Next() {
 		var (
 			path, name, postTitle string
+			thumb                 *string
 			createdAt             time.Time
 			postID, companyID     int64
 		)
-		if err := rows.Scan(&path, &name, &createdAt, &postID, &companyID, &postTitle); err != nil {
+		if err := rows.Scan(&path, &thumb, &name, &createdAt, &postID, &companyID, &postTitle); err != nil {
 			return nil, err
 		}
-		out = append(out, storagefiles.File{
-			Key: path, Name: name, Kind: "post", ID: strconv.FormatInt(postID, 10),
-			Title: "Публикация: " + postTitle, CompanyID: companyID, CreatedAt: createdAt,
-		})
+		keys := []string{path}
+		// Миниатюра — такой же объект хранилища: не названная здесь, она
+		// считалась бы сиротой и стиралась при ближайшей сверке.
+		if thumb != nil && *thumb != "" {
+			keys = append(keys, *thumb)
+		}
+		for _, key := range keys {
+			out = append(out, storagefiles.File{
+				Key: key, Name: name, Kind: "post", ID: strconv.FormatInt(postID, 10),
+				Title: "Публикация: " + postTitle, CompanyID: companyID, CreatedAt: createdAt,
+			})
+		}
 	}
 	return out, rows.Err()
 }
 
 // DeleteStorageFiles — снять вложения с публикаций. Сама публикация остаётся:
-// человек освобождает место, а не стирает ленту компании.
+// человек освобождает место, а не стирает ленту компании. Вложение уходит
+// целиком, по какому бы из его ключей (оригинал или миниатюра) ни попросили.
 func (r *Repo) DeleteStorageFiles(ctx context.Context, companyIDs []int64, keys []string) ([]string, error) {
 	if len(companyIDs) == 0 || len(keys) == 0 {
 		return nil, nil
@@ -56,19 +66,26 @@ func (r *Repo) DeleteStorageFiles(ctx context.Context, companyIDs []int64, keys 
 	rows, err := r.pool.Query(ctx, `
 		DELETE FROM portal_attachments a
 		 USING portal_posts p
-		 WHERE p.id = a.post_id AND p.company_id = ANY($1) AND a.file_path = ANY($2)
-		RETURNING a.file_path`, companyIDs, keys)
+		 WHERE p.id = a.post_id AND p.company_id = ANY($1)
+		   AND (a.file_path = ANY($2) OR a.thumb_path = ANY($2))
+		RETURNING a.file_path, a.thumb_path`, companyIDs, keys)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	deleted := []string{}
 	for rows.Next() {
-		var path string
-		if err := rows.Scan(&path); err != nil {
+		var (
+			path  string
+			thumb *string
+		)
+		if err := rows.Scan(&path, &thumb); err != nil {
 			return nil, err
 		}
 		deleted = append(deleted, path)
+		if thumb != nil && *thumb != "" {
+			deleted = append(deleted, *thumb)
+		}
 	}
 	return deleted, rows.Err()
 }
