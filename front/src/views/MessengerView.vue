@@ -12,13 +12,13 @@
     <template #list="{ narrow, toggle }">
       <ConversationList
         :narrow="narrow"
-        @toggle-list="toggle"
         :conversations="visibleConversations"
         :active-id="activeId"
         :loading="listLoading"
         :show-support-tab="authStore.isSuperAdmin"
         :tab="listTab"
         :support-unread="supportTabUnread"
+        @toggle-list="toggle"
         @select="selectConversation"
         @new-chat="newChatOpen = true"
         @new-group="newGroupOpen = true"
@@ -29,7 +29,7 @@
       />
     </template>
 
-    <template #detail="{ narrow, collapsed, toggle }">
+    <template #detail="{ collapsed, toggle }">
     <!-- Переписка — панель ядра (headless: шапку чата рисуем сами, общая
          слишком высока для переписки), обои — слотом `background`. -->
     <AppPage
@@ -189,10 +189,13 @@
           </div>
           <div v-for="g in messageGroups" :key="g.key" class="msg-day-group">
             <MessageDateDivider :label="g.label" @jump="jumpToDay" />
+            <!-- Все обработчики — стабильные ссылки, без замыкания на `m`: инлайн-
+                 стрелка давала пузырю новый prop на каждом рендере раздела, и при
+                 ресайзе окна перерисовывалась вся лента. v-memo тут не помощник —
+                 во вложенном v-for у всех дневных групп один кэш. -->
             <MessageBubble
               v-for="m in g.items"
               :key="m.id"
-              v-memo="[m.id, m.text, m.edited_at, m.read_at, m.pinned_at, m.reactions, m.call?.status, authStore.user?.id, active?.is_dev_chat, active?.is_group, groupReadCount(m)]"
               :message="m"
               :is-mine="m.sender_id === authStore.user?.id"
               :sender-name="senderNameFor(m)"
@@ -208,7 +211,7 @@
               @open-post="openPost"
               @context-menu="openContextMenu"
               @quote-click="onQuoteClick"
-              @react="emoji => onReact(m, emoji)"
+              @react="onReact"
               @read-by="openReadBy"
             />
           </div>
@@ -230,10 +233,10 @@
       <MessageInput
         v-if="active"
         ref="messageInputRef"
+        v-model:attached-task="attachedTask"
         :sending="messenger.sending"
         :reply-to="replyTo"
         :editing-message="editing"
-        v-model:attached-task="attachedTask"
         @send="onSend"
         @save-edit="onSaveEdit"
         @cancel-reply="replyTo = null"
@@ -895,6 +898,9 @@ async function selectConversation(id) {
   replyTo.value = null
   editing.value = null
   await messenger.setActive(id)
+  // Пока грузилось, пользователь мог уйти в другой чат: адрес прежнего вернул
+  // бы его назад, и чаты перещёлкивались бы туда-обратно.
+  if (messenger.activeConversationId !== id) return
   /* replace, а не push: список и переписка — два состояния ОДНОГО раздела, и
      возврат к списку уже нарисован стрелкой в шапке чата. С push окно копило
      свою историю и рисовало ВТОРУЮ стрелку «назад» в рамке — две кнопки об
@@ -907,6 +913,7 @@ async function selectConversation(id) {
 
 async function startWith(user) {
   const id = await messenger.openWith(user.id)
+  if (messenger.activeConversationId !== id) return
   router.replace(`/messenger/${id}`)
   await nextTick()
   scrollToBottom()
@@ -982,6 +989,7 @@ const showJumpDown = ref(false)
 const inputClearance = ref(84)
 const jumpDownBottom = computed(() => `${inputClearance.value + 12}px`)
 let inputResizeObserver = null
+let unmounted = false
 
 function measureInputClearance() {
   const el = messageInputRef.value?.$el
@@ -991,9 +999,16 @@ function measureInputClearance() {
     Math.round(panel.getBoundingClientRect().bottom - el.getBoundingClientRect().top))
 }
 
-watch([() => messageInputRef.value, () => active.value?.id], async () => {
-  inputResizeObserver?.disconnect()
+/* Отключаем прежний наблюдатель ПОСЛЕ await: запуски watch накладываются при
+   быстром переключении чатов, и отключённый до паузы наблюдатель затирался
+   новым, оставаясь жить, — каждый такой форсировал layout на любом ресайзе. */
+watch([() => messageInputRef.value, () => active.value?.id], async (_, __, onCleanup) => {
+  let stale = false
+  onCleanup(() => { stale = true })
   await nextTick()
+  if (stale || unmounted) return
+  inputResizeObserver?.disconnect()
+  inputResizeObserver = null
   const el = messageInputRef.value?.$el
   if (!el || !(el instanceof HTMLElement)) return
   inputResizeObserver = new ResizeObserver(measureInputClearance)
@@ -1055,6 +1070,8 @@ onMounted(async () => {
     requestNotificationPermission()
   }
   await activateRouteConversation()
+  // Окно успели закрыть, пока шли загрузки: слушатели ниже уже некому снять.
+  if (unmounted) return
   await nextTick()
   scrollToBottom()
   window.addEventListener('messenger:open-conversation', handleExternalOpen)
@@ -1063,6 +1080,7 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  unmounted = true
   window.removeEventListener('messenger:open-conversation', handleExternalOpen)
   inputResizeObserver?.disconnect()
   window.visualViewport?.removeEventListener('resize', onViewportChange)

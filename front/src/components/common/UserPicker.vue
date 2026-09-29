@@ -107,7 +107,7 @@ watch(() => props.modelValue, syncSelected)
 </script>
 
 <template>
-  <div class="user-picker" ref="root">
+  <div ref="root" class="user-picker">
     <button type="button" class="picker-control" @click="toggle">
       <template v-if="selected">
         <img :src="avatarOf(selected)" class="ava" alt="" />

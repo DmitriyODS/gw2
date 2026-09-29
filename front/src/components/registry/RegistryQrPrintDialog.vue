@@ -45,11 +45,11 @@
 
         <div v-if="hasSelection" class="qp-scope">
           <label class="qp-radio">
-            <input type="radio" value="selected" v-model="scope" />
+            <input v-model="scope" type="radio" value="selected" />
             <span>Только выбранные записи ({{ selectedCount }})</span>
           </label>
           <label class="qp-radio">
-            <input type="radio" value="all" v-model="scope" />
+            <input v-model="scope" type="radio" value="all" />
             <span>Все записи<template v-if="filtered"> (по фильтру списка)</template></span>
           </label>
         </div>

@@ -23,8 +23,8 @@
               <div class="bit-item">
                 <Checkbox
                   :model-value="getBit(sIdx, section.bits[bit].bit)"
-                  @update:model-value="setBit(sIdx, section.bits[bit].bit, $event)"
                   :binary="true"
+                  @update:model-value="setBit(sIdx, section.bits[bit].bit, $event)"
                 />
                 <label class="bit-label" @click="setBit(sIdx, section.bits[bit].bit, !getBit(sIdx, section.bits[bit].bit))">
                   {{ section.bits[bit].label }}

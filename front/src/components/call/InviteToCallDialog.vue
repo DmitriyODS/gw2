@@ -26,7 +26,7 @@
     </div>
     <div v-else-if="!items.length" class="inv-empty">
       <span class="material-symbols-outlined">person_search</span>
-      <p>{{ q ? 'Никого не нашли' : 'Все уже в звонке или начните вводить' }}</p>
+      <p>{{ q.trim() ? 'Никого не нашли' : 'Начните вводить имя или логин' }}</p>
     </div>
     <ul v-else class="inv-list">
       <li
@@ -88,6 +88,11 @@ const dialogActions = computed(() => [
 ])
 
 async function search() {
+  // Каталог платформы — только поиск: без запроса сервер ничего не отдаёт.
+  if (!q.value.trim()) {
+    results.value = []
+    return
+  }
   loading.value = true
   try {
     results.value = await getDirectory(q.value.trim(), /* excludeSelf */ true, { global: true })
@@ -100,7 +105,7 @@ watch(() => props.modelValue, (v) => {
   if (v) {
     q.value = ''
     selectedIds.value = new Set()
-    search()
+    results.value = []
   }
 })
 

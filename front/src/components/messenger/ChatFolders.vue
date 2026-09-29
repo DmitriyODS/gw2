@@ -10,8 +10,8 @@
     <button
       v-for="tab in tabs"
       :key="tab.token"
-      class="cf-item"
       :ref="el => tab.id === messenger.activeFolderId && (activeEl = el)"
+      class="cf-item"
       :class="{
         active: tab.id === messenger.activeFolderId,
         dragging: dragToken != null && dragToken === tab.token,

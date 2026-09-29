@@ -22,12 +22,12 @@
   >
     <div v-if="user" class="emp-profile">
       <div class="profile-cover" aria-hidden="true"></div>
-      <button class="profile-close" @click="close" aria-label="Закрыть">
+      <button class="profile-close" aria-label="Закрыть" @click="close">
         <span class="material-symbols-outlined">close</span>
       </button>
 
       <div class="profile-hero">
-        <button class="profile-avatar-btn" @click="lightboxOpen = true" aria-label="Открыть фото">
+        <button class="profile-avatar-btn" aria-label="Открыть фото" @click="lightboxOpen = true">
           <span class="avatar avatar-xl" :class="presenceClass(user)">
             <img :src="avatarOf(user)" :alt="user.fio" />
           </span>

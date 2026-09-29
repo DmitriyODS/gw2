@@ -5,7 +5,7 @@
    выгрузка в разные форматы. Напоминания — сроки и повторы: тут важны
    граничные значения (прошлое время, «каждые N», конец повтора). */
 import { it, expect } from 'vitest'
-import { describeIntegration, uniq } from '../setup/harness.js'
+import { describeIntegration } from '../setup/harness.js'
 import { registerVerified, newCompanyAdmin, newMember } from '../setup/factory.js'
 import * as boards from '@/api/boards.js'
 import * as reminders from '@/api/reminders.js'

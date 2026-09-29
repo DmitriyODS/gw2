@@ -40,7 +40,7 @@ const FACES = {
     return out
   },
 
-  messenger: ({ data, messenger }) => {
+  messenger: ({ messenger }) => {
     const out = []
     const unread = messenger?.totalUnread || 0
     if (unread) out.push(face('unread', unread, plural(unread, 'новое сообщение', 'новых сообщения', 'новых сообщений')))
@@ -138,7 +138,7 @@ const FACES = {
     if (!d) return []
     if (!d.total) return [face('empty', 'Диск пуст', 'Перетащите сюда файлы')]
 
-    const out = [face('count', d.total, plural(d.total, 'недавний файл', 'недавних файла', 'недавних файлов'))]
+    const out = [face('count', d.total, plural(d.total, 'файл на диске', 'файла на диске', 'файлов на диске'))]
     if (d.latest) out.push(face('latest', 'Последний', d.latest.name || 'Без названия'))
     return out
   },
@@ -200,8 +200,11 @@ const FACES = {
     if (!e?.total) return []
     const out = [face('total', e.total, plural(e.total, 'сотрудник', 'сотрудника', 'сотрудников'))]
 
-    // Онлайн считаем по своей компании, а не по всей платформе.
-    const online = (e.ids || []).filter((id) => messenger?.onlineIds?.has(id)).length
+    // Онлайн считаем по своей компании, а не по всей платформе; супер-админу
+    // presence и так отдаёт весь онлайн платформы.
+    const online = e.allOnline
+      ? (messenger?.onlineIds?.size ?? 0)
+      : (e.ids || []).filter((id) => messenger?.onlineIds?.has(id)).length
     if (online) out.push(face('online', online, plural(online, 'в сети', 'в сети', 'в сети')))
     return out
   },

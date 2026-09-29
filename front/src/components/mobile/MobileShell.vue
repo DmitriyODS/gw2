@@ -41,7 +41,7 @@
 
     <!-- Панель задач: у планшета — настольная в компактном сенсорном виде
          (юнит, часы и уведомления там уже есть), у телефона — своя. -->
-    <Taskbar v-if="tablet" platform="tablet" touch />
+    <DesktopTaskbar v-if="tablet" platform="tablet" touch />
     <MobileTaskbar v-else :platform="platform" />
 
     <Transition name="np">
@@ -89,7 +89,7 @@ const HolaPopup = defineAsyncComponent(() => import('@/components/desktop/HolaPo
 import MobileStatusBar from './MobileStatusBar.vue'
 import MobileStart from './MobileStart.vue'
 import MobileTaskbar from './MobileTaskbar.vue'
-import Taskbar from '@/components/desktop/Taskbar.vue'
+import DesktopTaskbar from '@/components/desktop/DesktopTaskbar.vue'
 import AppScreen from './AppScreen.vue'
 
 /* Сколько разделов держим открытыми: они остаются смонтированными, а память
@@ -120,6 +120,7 @@ const { wallpaper, boot } = useShellCore({
   // возвращает к предыдущему разделу, а из первого — на стартовый экран.
   navigate: 'push',
   platform: props.platform,
+  tilesVisible: () => startVisible.value,
   onHome: () => { desktop.startOpen = true },
 })
 

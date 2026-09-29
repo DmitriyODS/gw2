@@ -97,13 +97,25 @@ const tickerDuration = computed(() => Math.max(20, items.value.length * 6))
   width: 6px;
   height: 6px;
   border-radius: 50%;
+  position: relative;
+  background: var(--color-error);
+}
+
+/* Пульс — кольцо отдельным слоем на transform/opacity: табло работает
+   круглые сутки, а пульс box-shadow перерисовывал точку на каждом кадре. */
+.tv-ticker-dot::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
   background: var(--color-error);
   animation: tv-ticker-pulse 1.6s ease-out infinite;
+  pointer-events: none;
 }
 
 @keyframes tv-ticker-pulse {
-  0%   { box-shadow: 0 0 0 0 color-mix(in oklch, var(--color-error) 65%, transparent); }
-  100% { box-shadow: 0 0 0 12px color-mix(in oklch, var(--color-error) 0%, transparent); }
+  0%   { transform: scale(1); opacity: 0.65; }
+  100% { transform: scale(3); opacity: 0; }
 }
 
 .tv-ticker-viewport {

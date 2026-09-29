@@ -21,7 +21,7 @@
       />
     </template>
 
-    <template #default="{ narrow }">
+    <template #default>
     <!-- Режим отпуска: создание/редактирование задач и юниты закрыты -->
     <AppInfoBar
       v-if="onVacation"
@@ -54,7 +54,6 @@
       <TaskFilters :mobile-visible="showMobileFilters" @close="showMobileFilters = false" />
 
       <main
-        ref="cardsAreaRef"
         class="cards-area"
         :class="{ 'cards-area--board': viewMode === 'board' }"
       >
@@ -264,7 +263,6 @@ import AppTabs from '@/components/ui/AppTabs.vue'
 import SearchField from '@/components/common/SearchField.vue'
 import BrandLoader from '@/components/common/BrandLoader.vue'
 import { useCompanySettings } from '@/composables/useCompanySettings.js'
-import { useScrollCollapse } from '@/composables/useScrollCollapse.js'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
 import { storageGet, storageSet } from '@/utils/storage.js'
 
@@ -355,24 +353,11 @@ watch(viewMode, (m) => {
   }
 }, { immediate: true })
 
-const cardsAreaRef = ref(null)
-const { isCompact } = useScrollCollapse(cardsAreaRef)
 const { isMobile } = useBreakpoint()
 
 const onVacation = computed(() => !!auth.user?.on_vacation)
 const canCreateTask = computed(() => isAtLeast(ROLES.EMPLOYEE) && !onVacation.value)
 const totalPages = computed(() => Math.ceil(tasksStore.total / tasksStore.filters.per_page))
-
-const hasActiveFilters = computed(() => {
-  const f = tasksStore.filters
-  return f.sort !== 'last_activity'
-    || f.dept_id != null
-    || f.has_units != null
-    || f.period_preset != null
-    || f.received_from
-    || f.received_to
-    || f.created_by_me
-})
 
 const emptyMeta = {
   active: { icon: 'task_alt', title: 'Активных задач нет', sub: 'Создайте новую задачу или измените фильтры.' },

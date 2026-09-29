@@ -4,7 +4,7 @@
        переключателем приложений, а не ссылкой на перезагрузку экрана. -->
   <section v-show="active" ref="rootEl" class="mscreen" :class="{ active }">
     <div class="mscreen-body main-content">
-      <WindowContent :win="win" />
+      <WindowContent v-if="!win.dormant" :win="win" />
     </div>
 
     <Transition name="mspl">
@@ -14,11 +14,12 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import router from '@/router/index.js'
 import { appById, windowTitle } from '@/desktop/apps.js'
 import { provideFloatHost, provideFlushShell } from '@/desktop/windowHost.js'
 import WindowContent from '@/components/desktop/WindowContent.vue'
+import { useDesktopStore } from '@/stores/desktop.js'
 import AppSplash from './AppSplash.vue'
 
 // Сколько держим экран запуска. Дольше — раздражает, короче — мелькает.
@@ -28,6 +29,10 @@ const props = defineProps({
   win: { type: Object, required: true },
   active: { type: Boolean, default: false },
 })
+
+// Восстановленный из сессии раздел монтируется при первом показе.
+const desktop = useDesktopStore()
+watch(() => props.active, (on) => { if (on) desktop.wake(props.win.id) }, { immediate: true })
 
 /* Плавающие кнопки раздела (AppFab) телепортируются СЮДА: улетев в body, они
    продолжали бы висеть и над стартовым экраном, и над соседним разделом. */

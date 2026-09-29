@@ -4,7 +4,7 @@
       <div class="mg-panel">
         <header class="mg-head">
           <h3>Купание</h3>
-          <button class="mg-close" type="button" @click="emit('close')" aria-label="Закрыть">
+          <button class="mg-close" type="button" aria-label="Закрыть" @click="emit('close')">
             <span class="material-symbols-outlined">close</span>
           </button>
         </header>

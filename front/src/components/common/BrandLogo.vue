@@ -39,21 +39,17 @@
   </svg>
 </template>
 
-<script>
-// Модульный счётчик: id маски уникален на экземпляр. При нескольких
-// логотипах на странице дублирующийся id ссылался на СКРЫТЫЙ первый
-// экземпляр (мобильный сайдбар), и круглая маска переставала работать —
-// эмблема становилась квадратной.
-let uid = 0
-</script>
-
 <script setup>
+import { useId } from 'vue'
+
 defineProps({
   size: { type: [Number, String], default: 56 },
   alt: { type: String, default: 'Groove Work' },
 })
 
-const maskId = `gw-logo-mask-${++uid}`
+// id маски уникален на экземпляр: при нескольких логотипах дубль ссылался на
+// СКРЫТЫЙ первый экземпляр, и круглая маска переставала работать.
+const maskId = `gw-logo-mask-${useId()}`
 </script>
 
 <style scoped>

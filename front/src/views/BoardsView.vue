@@ -8,7 +8,7 @@ import { useRoute, useRouter } from 'vue-router'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppListDetail from '@/components/ui/AppListDetail.vue'
 import AppPage from '@/components/ui/AppPage.vue'
-import Breadcrumbs from '@/components/common/Breadcrumbs.vue'
+import FolderBreadcrumbs from '@/components/common/FolderBreadcrumbs.vue'
 import SearchField from '@/components/common/SearchField.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import ContextMenu from '@/components/common/ContextMenu.vue'
@@ -380,7 +380,7 @@ async function onImportPick(e) {
         @command="onCommand"
       >
         <template #subhead>
-          <Breadcrumbs
+          <FolderBreadcrumbs
             :items="store.path"
             :root-label="crumbRootLabel"
             root-icon="gesture"

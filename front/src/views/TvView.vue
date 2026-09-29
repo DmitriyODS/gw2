@@ -60,13 +60,17 @@
           За {{ railPeriodLabel }}
         </div>
 
-        <TvKpiTile tone="primary" icon="inbox" label="Поступило"
+        <TvKpiTile
+tone="primary" icon="inbox" label="Поступило"
           :value="commonData?.tasks?.received ?? 0" format="int" prefix="+" />
-        <TvKpiTile tone="success" icon="task_alt" label="Закрыто"
+        <TvKpiTile
+tone="success" icon="task_alt" label="Закрыто"
           :value="commonData?.tasks?.closed ?? 0" format="int" prefix="−" />
-        <TvKpiTile tone="tertiary" icon="hourglass_top" label="В работе"
+        <TvKpiTile
+tone="tertiary" icon="hourglass_top" label="В работе"
           :value="commonData?.tasks?.remaining ?? 0" format="int" />
-        <TvKpiTile tone="secondary" icon="schedule" label="Часы команды"
+        <TvKpiTile
+tone="secondary" icon="schedule" label="Часы команды"
           :value="totalHours" format="hours" />
       </aside>
 
@@ -77,8 +81,8 @@
             <BrandLoader />
           </div>
           <component
-            v-else
             :is="SLIDE_COMPONENTS[currentSlide.kind]"
+            v-else
             :slide="currentSlide"
             v-bind="stageProps"
           />
@@ -102,19 +106,19 @@
 
     <!-- ═══ CONTROLS (auto-hide) ════════════════════════════════════ -->
     <div class="tv-controls" :class="{ visible: controlsVisible }">
-      <button class="tv-ctrl" @click="prev" title="Предыдущий слайд">
+      <button class="tv-ctrl" title="Предыдущий слайд" @click="prev">
         <span class="material-symbols-outlined">chevron_left</span>
       </button>
-      <button class="tv-ctrl" @click="togglePause" :title="paused ? 'Запустить' : 'Пауза'">
+      <button class="tv-ctrl" :title="paused ? 'Запустить' : 'Пауза'" @click="togglePause">
         <span class="material-symbols-outlined">{{ paused ? 'play_arrow' : 'pause' }}</span>
       </button>
-      <button class="tv-ctrl" @click="next" title="Следующий слайд">
+      <button class="tv-ctrl" title="Следующий слайд" @click="next">
         <span class="material-symbols-outlined">chevron_right</span>
       </button>
-      <button class="tv-ctrl" @click="settingsOpen = true" title="Настройки табло">
+      <button class="tv-ctrl" title="Настройки табло" @click="settingsOpen = true">
         <span class="material-symbols-outlined">settings</span>
       </button>
-      <button class="tv-ctrl" @click="toggleFullscreen" :title="isFullscreen ? 'Свернуть' : 'Во весь экран'">
+      <button class="tv-ctrl" :title="isFullscreen ? 'Свернуть' : 'Во весь экран'" @click="toggleFullscreen">
         <span class="material-symbols-outlined">{{ isFullscreen ? 'fullscreen_exit' : 'fullscreen' }}</span>
       </button>
     </div>
@@ -522,14 +526,25 @@ onBeforeUnmount(() => {
   width: 8px;
   height: 8px;
   border-radius: 50%;
+  position: relative;
   background: var(--color-error);
-  box-shadow: 0 0 0 0 color-mix(in oklch, var(--color-error) 45%, transparent);
+}
+
+/* Пульс — кольцо отдельным слоем на transform/opacity: табло работает
+   круглые сутки, а пульс box-shadow перерисовывал точку на каждом кадре. */
+.tv-live-dot::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: var(--color-error);
   animation: tv-live-pulse 1.6s ease-out infinite;
+  pointer-events: none;
 }
 
 @keyframes tv-live-pulse {
-  0%   { box-shadow: 0 0 0 0 color-mix(in oklch, var(--color-error) 65%, transparent); }
-  100% { box-shadow: 0 0 0 16px color-mix(in oklch, var(--color-error) 0%, transparent); }
+  0%   { transform: scale(1); opacity: 0.65; }
+  100% { transform: scale(3); opacity: 0; }
 }
 
 /* Данные протухли: без пульса, приглушённый warning; совсем старые — error. */

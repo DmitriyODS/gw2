@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { defineComponent, h, nextTick } from 'vue'
+import { h, nextTick } from 'vue'
 import { mount } from '@vue/test-utils'
 import { useRoute, useRouter } from 'vue-router'
 import { setActivePinia, createPinia } from 'pinia'
@@ -10,22 +10,22 @@ import { provideWindowRoute } from './windowRoute.js'
 // получать маршрут СВОЕГО окна, а не адрес страницы.
 const mounted = []
 
-const Section = defineComponent({
+const Section = {
   setup() {
     const route = useRoute()
     const router = useRouter()
     mounted.push({ route, router })
     return () => h('div', route.path)
   },
-})
+}
 
-const Host = defineComponent({
+const Host = {
   props: { win: { type: Object, required: true } },
   setup(props) {
     provideWindowRoute(props.win, useDesktopStore())
     return () => h(Section)
   },
-})
+}
 
 function setup(path = '/notes') {
   setActivePinia(createPinia())

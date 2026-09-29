@@ -237,7 +237,7 @@ function onMenuSelect(action) {
   }
 }
 
-watch(() => props.scene, scheduleThumbs, { deep: true })
+watch(() => props.scene, scheduleThumbs)
 watch(frames, scheduleThumbs, { immediate: true })
 // Частота меняется на ходу — перезапускаем таймер, иначе ролик идёт по старой.
 watch(fps, () => { if (playing.value) { stop(); start() } })

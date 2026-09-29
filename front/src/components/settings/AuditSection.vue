@@ -4,7 +4,7 @@
        заказы и выплаты, журнал действий. Компании, пользователи и резервная
        копия открываются своими разделами — они живут отдельными маршрутами. -->
   <div class="audit">
-    <AppTabs variant="tint" v-model="tab" :tabs="TABS" />
+    <AppTabs v-model="tab" variant="tint" :tabs="TABS" />
 
     <AuditPlans v-if="tab === 'plans'" />
     <AuditSubscriptions v-else-if="tab === 'subs'" />

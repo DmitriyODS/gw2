@@ -4,7 +4,7 @@
     size="sm"
     :title="title"
     :subtitle="subtitle"
-    @update:modelValue="close"
+    @update:model-value="close"
   >
     <div class="scan-body">
       <div class="scan-view">

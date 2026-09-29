@@ -1,5 +1,7 @@
 import { GatewaySocket } from '@/socket/gateway.js'
+import { refreshSession } from '@/api/client.js'
 import { useAuthStore } from '@/stores/auth.js'
+import { isNativeApp } from '@/utils/nativeApp.js'
 import { useUnitsStore } from '@/stores/units.js'
 import { useMessengerStore } from '@/stores/messenger.js'
 import { useCallStore } from '@/stores/call.js'
@@ -30,13 +32,11 @@ export function getSocket() {
 }
 
 export function updateSocketAuth(token) {
-  if (socket) {
-    socket.auth = { token }
-  }
+  socket?.setToken(token)
 }
 
 /* Подтягивает состояние мессенджера с сервера. Используется при reconnect
-   сокета и при возврате вкладки в фокус — закрывает дыру, если событие
+   сокета и при возврате после долгой скрытости — закрывает дыру, если событие
    message:new/message:deleted/conversation:* потерялось при polling-обрыве
    или пока вкладка была в фоне. */
 function resyncMessenger() {
@@ -44,7 +44,7 @@ function resyncMessenger() {
   resyncPromise = (async () => {
     try {
       const messenger = useMessengerStore()
-      await messenger.fetchConversations()
+      await messenger.resyncConversations()
       if (messenger.activeConversationId) {
         await messenger.fetchMessages(messenger.activeConversationId)
       }
@@ -76,6 +76,8 @@ function markActiveReadOnFocus() {
    На мобильных дисконнект при сворачивании/блокировке приходит с задержкой
    или теряется, поэтому явный сигнал даёт точный last_seen и честный «в сети». */
 function emitVisibility(visible) {
+  // Фокус без смены видимости (alt-tab на столе) — не событие для сервера.
+  if (visible && heartbeatTimer) return
   if (socket?.connected) {
     try { socket.emit('presence:visibility', { visible }) } catch {}
   }
@@ -106,23 +108,52 @@ function stopHeartbeat() {
   }
 }
 
+/* Пересинхронизация — только когда события могли потеряться: после обрыва
+   (её делает обработчик connect) и после долгой скрытости — мобильный браузер
+   замораживает фоновую вкладку, и «подключённый» сокет мог молча пропустить
+   кадры. Возврат фокуса при живом сокете (alt-tab на столе) ничего не теряет,
+   а стоил четыре запроса на каждое переключение окна. */
+const RESYNC_AFTER_HIDDEN_MS = 30_000
+let hiddenAt = 0
+
+/* Сон сокета Android-обёртки в фоне. Пинги шлюза каждые 25 с будят радио
+   телефона, хотя свёрнутому приложению события и так приходят пушами: скрытая
+   вкладка для presence офлайн, и pushsvc шлёт такому получателю FCM (звонок —
+   тоже). Возврат будит сокет, а обработчик connect сверяет пропущенное, в том
+   числе звонок, который ещё звонит. Рабочему столу сон не положен: в трее
+   Electron события доходят только через сокет. */
+const SLEEP_AFTER_HIDDEN_MS = 3 * 60_000
+let sleepTimer = null
+
+function scheduleSleep(visible) {
+  if (!isNativeApp()) return
+  clearTimeout(sleepTimer)
+  sleepTimer = null
+  if (visible) {
+    socket?.wake()
+    return
+  }
+  sleepTimer = setTimeout(() => socket?.sleep(), SLEEP_AFTER_HIDDEN_MS)
+}
+
 function installVisibilityResync() {
   if (visibilityHookInstalled || typeof document === 'undefined') return
   visibilityHookInstalled = true
   document.addEventListener('visibilitychange', () => {
     const visible = document.visibilityState === 'visible'
     emitVisibility(visible)
-    if (visible && socket?.connected) {
-      resyncMessenger()
-      markActiveReadOnFocus()
+    scheduleSleep(visible)
+    if (!visible) {
+      hiddenAt = Date.now()
+      return
     }
+    if (!socket?.connected) return
+    if (hiddenAt && Date.now() - hiddenAt > RESYNC_AFTER_HIDDEN_MS) resyncMessenger()
+    markActiveReadOnFocus()
   })
   window.addEventListener('focus', () => {
     emitVisibility(true)
-    if (socket?.connected) {
-      resyncMessenger()
-      markActiveReadOnFocus()
-    }
+    if (socket?.connected) markActiveReadOnFocus()
   })
   // pagehide — последний надёжный момент на мобильных, чтобы пометить «ушёл».
   window.addEventListener('pagehide', () => emitVisibility(false))
@@ -148,7 +179,20 @@ export function connectSocket() {
     ? `ws://${window.location.hostname}:8096/ws`
     : (window.location.protocol === 'https:' ? 'wss://' : 'ws://')
       + window.location.host + '/ws'
-  socket = new GatewaySocket(target, { auth: { token: auth.token } })
+  socket = new GatewaySocket(target, {
+    auth: { token: auth.token },
+    // Протухший access: обновляем так же, как HTTP-клиент на 401. Сессию
+    // отозвали (4xx) — выходим, иначе сокет пробовал бы вечно.
+    refreshAuth: async () => {
+      try {
+        return (await refreshSession()).access_token
+      } catch (e) {
+        const status = e?.status ?? 0
+        if (status >= 400 && status < 500) useAuthStore().clearAuth()
+        throw e
+      }
+    },
+  })
 
   installVisibilityResync()
 
@@ -203,6 +247,8 @@ export function connectSocket() {
 
 export function disconnectSocket() {
   stopHeartbeat()
+  clearTimeout(sleepTimer)
+  sleepTimer = null
   resyncPromise = null
   if (socket) {
     socket.disconnect()

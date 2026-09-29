@@ -1,10 +1,10 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useThemeStore } from './theme.js'
 
 /* Личная тема читается из localStorage при СОЗДАНИИ стора — поэтому ключи
    ставим до freshStore(). init() не зовём: он вешает слушателя системной
-   темы и тик расписания, а палитру всё равно применяют setAuthPreview/setMode. */
+   темы и таймер расписания, а палитру всё равно применяют setAuthPreview/setMode. */
 function freshStore() {
   setActivePinia(createPinia())
   return useThemeStore()
@@ -67,5 +67,35 @@ describe('оформление экранов входа и примерка н�
     theme.setMode('dark')
     expect(localStorage.getItem('gw_theme')).toBe('ocean')
     expect(localStorage.getItem('gw_theme_mode')).toBe('dark')
+  })
+})
+
+describe('тёмная тема по расписанию', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    vi.useFakeTimers()
+  })
+  afterEach(() => vi.useRealTimers())
+
+  it('без режима расписания таймеров нет', () => {
+    const spy = vi.spyOn(globalThis, 'setTimeout')
+    const theme = freshStore()
+    theme.setMode('light')
+    theme.init()
+    expect(spy.mock.calls.filter(([, ms]) => ms > 1000)).toHaveLength(0)
+    spy.mockRestore()
+  })
+
+  it('переключается ровно на границе расписания', () => {
+    vi.setSystemTime(new Date(2026, 8, 29, 19, 58, 30))
+    const theme = freshStore()
+    theme.setSchedule('20:00', '07:00')
+    theme.setMode('schedule')
+    theme.init()
+    expect(theme.dark).toBe(false)
+    vi.advanceTimersByTime(60_000)
+    expect(theme.dark).toBe(false)
+    vi.advanceTimersByTime(31_000)
+    expect(theme.dark).toBe(true)
   })
 })

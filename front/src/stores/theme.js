@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, watch } from 'vue'
 import {
   storageGet, storageGetJSON, storageSet, storageSetJSON,
 } from '@/utils/storage.js'
@@ -482,8 +482,32 @@ export const useThemeStore = defineStore('theme', () => {
     const onSystemChange = () => { if (authPreview.value || mode.value === 'system') applyDark() }
     if (systemDarkMq?.addEventListener) systemDarkMq.addEventListener('change', onSystemChange)
     else systemDarkMq?.addListener?.(onSystemChange)
-    // Тик расписания: проверяем наступление времени переключения раз в полминуты.
-    setInterval(() => { if (mode.value === 'schedule') applyDark() }, 30000)
+    // Расписание: таймер ровно до ближайшего переключения, и только в этом
+    // режиме (раньше тикал раз в полминуту всегда). Спящий ноутбук и
+    // замороженная вкладка откладывают таймер — возврат пересчитывает сразу.
+    watch([mode, () => schedule.value.from, () => schedule.value.to], planScheduleSwitch, { immediate: true })
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden || mode.value !== 'schedule') return
+      applyDark()
+      planScheduleSwitch()
+    })
+  }
+
+  let scheduleTimer = null
+  function planScheduleSwitch() {
+    clearTimeout(scheduleTimer)
+    scheduleTimer = null
+    if (mode.value !== 'schedule') return
+    const now = new Date()
+    const cur = now.getHours() * 60 + now.getMinutes()
+    const toMin = (hhmm) => { const [h, m] = hhmm.split(':').map(Number); return h * 60 + m }
+    const wait = Math.min(...[schedule.value.from, schedule.value.to]
+      .map((b) => ((toMin(b) - cur + 1440) % 1440) || 1440))
+    const ms = wait * 60_000 - now.getSeconds() * 1000 - now.getMilliseconds()
+    scheduleTimer = setTimeout(() => {
+      applyDark()
+      planScheduleSwitch()
+    }, ms + 500)
   }
 
   return {

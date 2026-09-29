@@ -18,9 +18,9 @@
       type="button"
       class="company-button"
       :class="{ open, compact }"
-      @click="toggle"
       :aria-expanded="open"
       :title="activeLabel || placeholder"
+      @click="toggle"
     >
       <span class="material-symbols-outlined company-button-ico">business_center</span>
       <!-- Компактный вид — только значок: в узкой боковой панели название
@@ -46,9 +46,9 @@
             <button
               class="company-popover-close"
               type="button"
-              @click="close"
               title="Закрыть"
               aria-label="Закрыть"
+              @click="close"
             >
               <span class="material-symbols-outlined">close</span>
             </button>
@@ -67,9 +67,9 @@
               v-if="query"
               class="company-popover-search-clear"
               type="button"
-              @click="query = ''"
               title="Очистить"
               aria-label="Очистить"
+              @click="query = ''"
             >
               <span class="material-symbols-outlined">close</span>
             </button>
@@ -141,7 +141,7 @@ import { useCompaniesStore } from '@/stores/companies.js'
 defineOptions({ inheritAttrs: false })
 
 const props = defineProps({
-  modelValue: { default: undefined }, // если передан — controlled mode (не трогает companies.activeCompanyId)
+  modelValue: { type: [Number, String], default: undefined }, // если передан — controlled mode (не трогает companies.activeCompanyId)
   placeholder: { type: String, default: 'Все компании' },
   /** Кнопка-значок без подписи (узкие панели). */
   compact: { type: Boolean, default: false },

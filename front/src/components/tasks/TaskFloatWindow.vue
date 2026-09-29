@@ -120,7 +120,7 @@
       </div>
 
       <!-- Уголок изменения размера -->
-      <div v-show="!minimized" class="tfw-resize" @pointerdown="onResizeStart" title="Изменить размер"></div>
+      <div v-show="!minimized" class="tfw-resize" title="Изменить размер" @pointerdown="onResizeStart"></div>
     </div>
   </Teleport>
 </template>

@@ -69,3 +69,20 @@ if (typeof globalThis.ResizeObserver === 'undefined') {
     disconnect() {}
   }
 }
+
+// jsdom не умеет IntersectionObserver. Заглушка помнит наблюдателей, а тест
+// сам объявляет пересечение: globalThis.__intersect(el, true).
+if (typeof globalThis.IntersectionObserver === 'undefined') {
+  const observers = new Set()
+  globalThis.IntersectionObserver = class {
+    constructor(cb) { this.cb = cb; this.els = new Set(); observers.add(this) }
+    observe(el) { this.els.add(el) }
+    unobserve(el) { this.els.delete(el) }
+    disconnect() { this.els.clear() }
+  }
+  globalThis.__intersect = (el, isIntersecting) => {
+    for (const o of observers) {
+      if (o.els.has(el)) o.cb([{ target: el, isIntersecting }])
+    }
+  }
+}

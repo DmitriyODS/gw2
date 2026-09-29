@@ -6,7 +6,7 @@
         <span class="reply-author">Редактирование</span>
         <span class="reply-text">{{ editingMessage.text || '' }}</span>
       </div>
-      <button class="reply-cancel" @click="$emit('cancel-edit')" title="Отменить">
+      <button class="reply-cancel" title="Отменить" @click="$emit('cancel-edit')">
         <span class="material-symbols-outlined">close</span>
       </button>
     </div>
@@ -17,7 +17,7 @@
         <span class="reply-author">{{ replyTo.sender_fio || replyAuthor || 'Ответ' }}</span>
         <span class="reply-text">{{ replyPreview }}</span>
       </div>
-      <button class="reply-cancel" @click="$emit('cancel-reply')" title="Отменить">
+      <button class="reply-cancel" title="Отменить" @click="$emit('cancel-reply')">
         <span class="material-symbols-outlined">close</span>
       </button>
     </div>
@@ -26,14 +26,14 @@
       <div v-if="rec.active" class="pending-att pending-rec">
         <span class="rec-dot" aria-hidden="true"></span>
         <span class="pending-name">Запись экрана · {{ recTime }}</span>
-        <button class="remove-att" @click="stopScreencast" title="Остановить запись">
+        <button class="remove-att" title="Остановить запись" @click="stopScreencast">
           <span class="material-symbols-outlined">stop</span>
         </button>
       </div>
       <div v-if="attachedTask" class="pending-att pending-task">
         <span class="material-symbols-outlined att-ico">task</span>
         <span class="pending-name">{{ attachedTask.name }}</span>
-        <button class="remove-att" @click="attachedTask = null" title="Убрать">
+        <button class="remove-att" title="Убрать" @click="attachedTask = null">
           <span class="material-symbols-outlined">close</span>
         </button>
       </div>
@@ -46,7 +46,7 @@
           <span class="material-symbols-outlined att-ico">{{ iconFor(p.mime_type) }}</span>
           <span class="pending-name">{{ p.file_name }}</span>
         </template>
-        <button class="remove-att" @click="removePending(p._key)" title="Убрать">
+        <button class="remove-att" title="Убрать" @click="removePending(p._key)">
           <span class="material-symbols-outlined">close</span>
         </button>
       </div>
@@ -139,9 +139,9 @@
       <button
         class="send-btn"
         :disabled="!canSend"
+        :title="isTouchDevice ? 'Отправить' : 'Отправить (Enter)'"
         @mousedown.prevent
         @click="submit"
-        :title="isTouchDevice ? 'Отправить' : 'Отправить (Enter)'"
       >
         <span class="material-symbols-outlined">send</span>
       </button>
@@ -155,7 +155,8 @@
           :style="mdToolbar.style"
           @mousedown.prevent
         >
-          <button v-for="t in MD_TOOLS" :key="t.key" class="md-tool"
+          <button
+v-for="t in MD_TOOLS" :key="t.key" class="md-tool"
                   :title="t.label"
                   @click="applyMarkdown(t)">
             <span class="material-symbols-outlined">{{ t.icon }}</span>
@@ -234,7 +235,7 @@ function detectMention() {
   if (!conv?.is_group || !el) { mention.value.open = false; return }
   const caret = el.selectionStart ?? text.value.length
   const before = text.value.slice(0, caret)
-  const m = before.match(/(^|\s)@([\wа-яё.\-]*)$/i)
+  const m = before.match(/(^|\s)@([\wа-яё.-]*)$/i)
   if (!m) { mention.value.open = false; return }
   const query = m[2].toLowerCase()
   const members = messenger.groupMembers(conv.id).filter((mm) => {

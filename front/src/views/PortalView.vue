@@ -149,7 +149,6 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import ProgressSpinner from 'primevue/progressspinner'
 import BrandLoader from '@/components/common/BrandLoader.vue'
 import { useAuthStore } from '@/stores/auth.js'
 import { usePortalStore } from '@/stores/portal.js'

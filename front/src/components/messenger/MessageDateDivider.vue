@@ -9,7 +9,7 @@ const rootEl = ref(null)
 </script>
 
 <template>
-  <div class="msg-date-divider" ref="rootEl">
+  <div ref="rootEl" class="msg-date-divider">
     <button type="button" class="msg-date-pill" @click="emit('jump', rootEl)">{{ label }}</button>
   </div>
 </template>
@@ -32,9 +32,9 @@ const rootEl = ref(null)
   cursor: pointer;
   padding: 3px 12px;
   border-radius: var(--radius-full);
+  /* Без backdrop-filter: плашка липкая, и размытие под ней пересчитывалось
+     на каждом кадре прокрутки. Плотного тона достаточно. */
   background: var(--acrylic-bg-strong);
-  -webkit-backdrop-filter: var(--acrylic-blur);
-  backdrop-filter: var(--acrylic-blur);
   border: 1px solid var(--acrylic-border);
   box-shadow: var(--glass-edge);
   font-size: 12px;

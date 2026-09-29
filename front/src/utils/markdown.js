@@ -54,16 +54,20 @@ function autoLink(text) {
 }
 
 // inline-парсер — на уже экранированной строке. Готовые HTML-фрагменты
-// (код, картинки, ссылки) прячутся в слоты \x00N\x00 — их не трогают ни
-// остальные замены, ни автолинки; \x00 в экранированном тексте невозможен.
+// (код, картинки, ссылки) прячутся в слоты «метка N метка» — их не трогают ни
+// остальные замены, ни автолинки. Метка — символ Private Use Area; из входа
+// она вычищается, поэтому подделать ссылку на слот текстом нельзя.
+const SLOT = '\uE000'
+const SLOT_RE = new RegExp(`${SLOT}(\\d+)${SLOT}`, 'g')
+
 function parseInline(text) {
   const slots = []
   const stash = (html) => {
     slots.push(html)
-    return `\x00${slots.length - 1}\x00`
+    return `${SLOT}${slots.length - 1}${SLOT}`
   }
 
-  let s = text.replace(/`([^`\n]+)`/g, (_, code) => stash(`<code class="md-code">${code}</code>`))
+  let s = text.replaceAll(SLOT, '').replace(/`([^`\n]+)`/g, (_, code) => stash(`<code class="md-code">${code}</code>`))
 
   s = s.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (_, alt, url) =>
     stash(`<img class="md-img" src="${escapeAttr(safeUrl(url))}" alt="${escapeAttr(alt)}" loading="lazy">`))
@@ -93,7 +97,7 @@ function parseInline(text) {
 
   s = autoLink(s)
 
-  return s.replace(/\x00(\d+)\x00/g, (_, idx) => slots[+idx])
+  return s.replace(SLOT_RE, (_, idx) => slots[+idx])
 }
 
 // Собирает <ul>/<ol> из строк-элементов; чек-листы — <li class="md-task">.

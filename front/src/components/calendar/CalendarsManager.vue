@@ -194,7 +194,7 @@
             Условие можно повесить на другое поле-галочку или список выбора. Сначала добавьте такое поле и сохраните календарь.
           </span>
           <template v-else-if="draft.visible_field_id">
-            <span class="fd-hint" v-if="conditionSource?.type === 'checkbox'">
+            <span v-if="conditionSource?.type === 'checkbox'" class="fd-hint">
               Поле будет видно, когда галочка «{{ conditionSource.label }}» отмечена.
             </span>
             <div v-else-if="conditionSource?.type === 'select'" class="fd-cond-val">

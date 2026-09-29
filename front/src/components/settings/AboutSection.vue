@@ -12,7 +12,7 @@
       <div class="ab-frost" aria-hidden="true" />
 
       <div class="ab-brand">
-        <Logo :size="64" />
+        <BrandLogo :size="64" />
         <h3 class="ab-brand-name">
           <span>Groove Work</span>
           <span v-if="majorVersion" class="ab-brand-major">{{ majorVersion }}</span>
@@ -153,7 +153,7 @@ import { useNotificationsStore } from '@/stores/notifications.js'
 import { useAppVersion } from '@/composables/useAppVersion.js'
 import { tapBuildNumber } from '@/utils/devTools.js'
 import { useAppDownloads } from '@/composables/useAppDownloads.js'
-import Logo from '@/components/common/Logo.vue'
+import BrandLogo from '@/components/common/BrandLogo.vue'
 import AppRow from '@/components/ui/AppRow.vue'
 import { WAVE_PATH } from '@/utils/wavePath.js'
 

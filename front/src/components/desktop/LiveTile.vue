@@ -1,5 +1,5 @@
 <template>
-  <span class="lt" :class="{ wide, dense }">
+  <span ref="rootEl" class="lt" :class="{ wide, dense }" :style="{ '--lt-delay': `${delay}ms` }">
     <!-- Стопка граней: видна одна, смена — вертикальным «переворотом», как у
          живых плиток Metro. -->
     <span class="lt-stack">
@@ -19,7 +19,8 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
+import { TILE_PERIOD, useTileClock } from '@/composables/useTileClock.js'
 
 const props = defineProps({
   title: { type: String, required: true },
@@ -37,9 +38,11 @@ const props = defineProps({
   paused: { type: Boolean, default: false },
 })
 
-const PERIOD = 5000
-// Небольшой разбег, чтобы плитки переворачивались вразнобой, а не строем.
+// Разбег, чтобы плитки переворачивались вразнобой, а не строем. Часы у всех
+// общие (useTileClock), поэтому разбег — задержка самой анимации, в пределах
+// периода с запасом на её длительность.
 const STAGGER = 400
+const delay = computed(() => (props.order * STAGGER) % (TILE_PERIOD - 1000))
 
 // Кадр 0 — обычная плитка (иконка), дальше грани с данными.
 const step = ref(0)
@@ -50,41 +53,22 @@ const reduced = typeof window !== 'undefined' && window.matchMedia
   ? window.matchMedia('(prefers-reduced-motion: reduce)').matches
   : false
 
-let timer = null
+const rootEl = ref(null)
+const { beat, shown } = useTileClock(rootEl)
 
-function stop() {
-  clearTimeout(timer)
-  timer = null
-}
-
-function schedule(delay) {
-  stop()
-  timer = setTimeout(() => {
-    step.value = (step.value + 1) % frames.value
-    schedule(PERIOD)
-  }, delay)
-}
-
-/* Крутим, только когда есть что показывать и никто не мешает.
-   Данные показываем СРАЗУ: меню «Пуск» открывается заново при каждом клике, и
-   ждать первого переворота пользователю не приходится. При «уменьшить
+/* Данные показываем СРАЗУ: меню «Пуск» открывается заново при каждом клике, и
+   ждать первого переворота пользователю не приходится. Дальше крутим по общим
+   часам, только когда плитка на экране и никто не мешает. При «уменьшить
    движение» первая грань просто остаётся статичной. */
-watch(
-  () => [frames.value, props.paused],
-  () => {
-    stop()
-    if (frames.value < 2) {
-      step.value = 0
-      return
-    }
-    if (step.value === 0) step.value = 1
-    if (reduced) return
-    if (!props.paused) schedule(PERIOD + props.order * STAGGER)
-  },
-  { immediate: true },
-)
+watch(frames, (n) => {
+  if (n < 2) step.value = 0
+  else if (step.value === 0 || step.value >= n) step.value = 1
+}, { immediate: true })
 
-onBeforeUnmount(stop)
+watch(beat, () => {
+  if (reduced || props.paused || !shown.value || frames.value < 2) return
+  step.value = (step.value + 1) % frames.value
+})
 </script>
 
 <style scoped>
@@ -186,6 +170,7 @@ onBeforeUnmount(stop)
 .lt-flip-enter-active,
 .lt-flip-leave-active {
   transition: opacity 0.28s ease, translate 0.36s cubic-bezier(0.2, 0, 0, 1);
+  transition-delay: var(--lt-delay, 0ms);
 }
 
 .lt-flip-enter-from {

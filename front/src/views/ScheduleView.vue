@@ -141,8 +141,8 @@
         hint="Две недели — это числитель и знаменатель. Цикл можно изменить позже."
       >
         <Select
-          :input-id="id"
           v-model="createForm.cycle_weeks"
+          :input-id="id"
           :options="cycleOptions"
           option-label="label"
           option-value="value"
@@ -440,7 +440,6 @@ function dayMonth(date) {
   return `${String(d.getUTCDate()).padStart(2, '0')}.${String(d.getUTCMonth() + 1).padStart(2, '0')}`
 }
 
-function dayNumber(weekday) { return addDays(store.monday, weekday).getUTCDate() }
 function isToday(weekday) { return dateKey(addDays(store.monday, weekday)) === dateKey(new Date()) }
 
 async function openSchedule(id) {

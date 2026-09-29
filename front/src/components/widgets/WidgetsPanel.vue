@@ -8,7 +8,7 @@
     <!-- ── Шапка: марка, ассистент, уведомления и сворачивание ── -->
     <header class="wp-head">
       <button class="wp-brand" type="button" title="О приложении" @click="launchPath('/settings?section=about')">
-        <Logo :size="30" />
+        <BrandLogo :size="30" />
       </button>
 
       <div class="wp-head-tools">
@@ -50,7 +50,7 @@
     <!-- Идёт работа: чип активного юнита живёт здесь — панели задач с ним больше нет. -->
     <button v-if="unit" class="wp-unit" type="button" title="Идёт работа — открыть юнит" @click="expand">
       <span class="material-symbols-outlined">timer</span>
-      <span v-if="!collapsed" class="wp-unit-clock">{{ clock }}</span>
+      <ElapsedClock v-if="!collapsed" class="wp-unit-clock" :start="unit?.datetime_start" />
     </button>
 
     <!-- Два вида: избранное (закреплённые) и все разделы по категориям.
@@ -252,7 +252,7 @@
  * Раскладка (свои разделы, порядок, переносы, свёрнутость) — своя, отдельная
  * от «Пуска» рабочего стола: панель узкая, и порядок в ней другой.
  */
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, reactive, ref } from 'vue'
 import InputText from 'primevue/inputtext'
 import { useAuthStore } from '@/stores/auth.js'
 import { useDesktopStore } from '@/stores/desktop.js'
@@ -264,7 +264,8 @@ import { useTasksStore } from '@/stores/tasks.js'
 import { usePetsStore } from '@/stores/pets.js'
 import { useUnitsStore } from '@/stores/units.js'
 import { useActiveUnit } from '@/composables/useActiveUnit.js'
-import { useElapsed } from '@/composables/useElapsed.js'
+import { useMinuteClock } from '@/composables/useMinuteClock.js'
+import ElapsedClock from '@/components/common/ElapsedClock.vue'
 import { useDesktopNotifications } from '@/composables/useDesktopNotifications.js'
 import { useNotifyMute } from '@/composables/useNotifyMute.js'
 import { useScreenLock } from '@/composables/useScreenLock.js'
@@ -274,7 +275,7 @@ import { menuGroups } from '@/desktop/apps.js'
 import { tileFaces } from '@/desktop/liveTiles.js'
 import { avatarUrl } from '@/utils/pets.js'
 import { shortFio } from '@/utils/people.js'
-import Logo from '@/components/common/Logo.vue'
+import BrandLogo from '@/components/common/BrandLogo.vue'
 import HolaIcon from '@/components/common/HolaIcon.vue'
 import CompanySelect from '@/components/common/CompanySelect.vue'
 import ContextMenu from '@/components/common/ContextMenu.vue'
@@ -316,7 +317,6 @@ const { isSuperAdmin, hasActiveCompany } = usePermission()
 const { settings } = useCompanySettings()
 
 const unit = computed(() => units.activeUnit)
-const { clock } = useElapsed(() => unit.value?.datetime_start)
 
 const groups = computed(() => menuGroups({
   hasCompany: hasActiveCompany(),
@@ -625,11 +625,7 @@ function onMenuSelect(action) {
 }
 
 /* ── Часы ──────────────────────────────────────────────────── */
-const now = ref(new Date())
-let timer = null
-
-onMounted(() => { timer = setInterval(() => { now.value = new Date() }, 10000) })
-onBeforeUnmount(() => clearInterval(timer))
+const now = useMinuteClock()
 
 const time = computed(() => now.value.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }))
 const date = computed(() => now.value.toLocaleDateString('ru-RU', { day: '2-digit', month: 'short' }))

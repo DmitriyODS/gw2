@@ -119,9 +119,20 @@ function onMqChange(e) {
 }
 
 async function expand() {
-  // Плавающее поле встаёт по вертикали на уровне кнопки-лупы.
+  // Плавающее поле встаёт по вертикали на уровне кнопки-лупы, а по горизонтали —
+  // в границах шапки своей панели: поле телепортировано в body, и без этого на
+  // рабочем столе оно растягивалось во всю ширину экрана поверх окна.
   const rect = wrapRef.value?.getBoundingClientRect()
-  floatStyle.value = { top: `${Math.max(8, Math.round(rect?.top ?? 12))}px` }
+  const box = (wrapRef.value?.closest('.page-head, .page-panel') ?? document.documentElement)
+    .getBoundingClientRect()
+  const inset = 8
+  const left = Math.max(inset, Math.round(box.left + inset))
+  const right = Math.max(inset, Math.round(window.innerWidth - box.right + inset))
+  floatStyle.value = {
+    top: `${Math.max(inset, Math.round(rect?.top ?? 12))}px`,
+    left: `${left}px`,
+    right: `${right}px`,
+  }
   expanded.value = true
   await nextTick()
   inputRef.value?.focus()

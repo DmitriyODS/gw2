@@ -54,7 +54,7 @@
       @confirm="applyWallpaper"
       @cancel="wallpaperOpen = false"
     >
-      <BackgroundEditor :recipe="wallpaper" :upload-fn="uploadFn" preview="desktop" :presets="WALLPAPERS" />
+      <BackgroundEditor :recipe="wallpaper" :upload-fn="uploadFn" preview="desktop" :presets="WALLPAPERS" @update:recipe="(r) => Object.assign(wallpaper, r)" />
     </AppDialog>
 
     <!-- Задание и смена пин-кода. -->

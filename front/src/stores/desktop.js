@@ -107,8 +107,17 @@ export const useDesktopStore = defineStore('desktop', () => {
       mode: 'normal', // 'normal' | 'max' | 'snap'
       snap: null,
       minimized: false,
+      // Восстановленное из сессии окно спит, пока его не покажут: раздел
+      // монтируется при первом показе (см. wake), а не весь стол разом.
+      dormant: false,
       z: ++zTop,
     })
+  }
+
+  /** Окно впервые на экране — пора монтировать раздел. */
+  function wake(id) {
+    const win = windows.value.find((w) => w.id === id)
+    if (win?.dormant) win.dormant = false
   }
 
   /* ── Открытие и навигация ──────────────────────────────────── */
@@ -422,6 +431,7 @@ export const useDesktopStore = defineStore('desktop', () => {
       win.mode = s.mode === 'max' || s.mode === 'snap' ? s.mode : 'normal'
       win.snap = s.snap || null
       win.minimized = !!s.minimized
+      win.dormant = true
       if (win.mode === 'max') Object.assign(win, zoneRect('max'))
       else if (win.mode === 'snap' && win.snap) Object.assign(win, rectForZone(win.snap, area))
       windows.value.push(win)
@@ -454,7 +464,7 @@ export const useDesktopStore = defineStore('desktop', () => {
     area, screen, taskbarRect, bellCenter, fullscreen, taskbarPeek, zoneRect,
     sideId, side, split, splitRatio, openSide, closeSide, swapSides, setSplitRatio,
     byId, open, openApp, navigate, back, canGoBack,
-    focus, close, minimize, restore, toggleFromTaskbar,
+    focus, close, minimize, restore, toggleFromTaskbar, wake,
     maximize, unmaximize, toggleMaximize, snapTo, setRect, setPosition,
     setArea, setScreen, restoreSession, closeAll,
   }

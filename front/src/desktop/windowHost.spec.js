@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { defineComponent, h, nextTick, ref } from 'vue'
+import { h, nextTick, ref } from 'vue'
 import { mount } from '@vue/test-utils'
 import { provideWindowHost, useModalHost } from './windowHost.js'
 
@@ -8,21 +8,21 @@ import { provideWindowHost, useModalHost } from './windowHost.js'
 // глобальному плавающему виджету.
 const seen = []
 
-const Modal = defineComponent({
+const Modal = {
   setup() {
     const { host, inWindow } = useModalHost()
     seen.push({ host, inWindow })
     return () => h('div')
   },
-})
+}
 
-const Window = defineComponent({
+const Window = {
   setup() {
     const body = ref(null)
     provideWindowHost(body)
     return () => h('section', { ref: body }, [h(Modal)])
   },
-})
+}
 
 describe('хост модалок окна', () => {
   it('вне окна модалка уходит в body', () => {
@@ -42,12 +42,12 @@ describe('хост модалок окна', () => {
 
   it('без элемента цель — body: телепорту всегда есть куда целиться', () => {
     seen.length = 0
-    const empty = defineComponent({
+    const empty = {
       setup() {
         provideWindowHost(ref(null))
         return () => h(Modal)
       },
-    })
+    }
     mount(empty)
     expect(seen[0].host.value).toBe('body')
     expect(seen[0].inWindow.value).toBe(false)

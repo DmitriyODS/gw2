@@ -10,7 +10,7 @@
     <div class="pr-top-wrap" :class="{ stuck }">
     <header class="pr-top">
       <RouterLink to="/" class="pr-brand" aria-label="Groove Work">
-        <Logo :size="26" />
+        <BrandLogo :size="26" />
         <span class="pr-wordmark">
           <span class="wm-groove">Groove</span>
           <span class="wm-work">Work</span>
@@ -232,7 +232,7 @@
 <script setup>
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { LEGAL_CONSENT_VISIBLE } from '@/utils/release.js'
-import Logo from '@/components/common/Logo.vue'
+import BrandLogo from '@/components/common/BrandLogo.vue'
 import EmojiGlyph from '@/components/common/EmojiGlyph.vue'
 import { useAppDownloads } from '@/composables/useAppDownloads.js'
 

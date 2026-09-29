@@ -15,15 +15,15 @@
   >
     <label class="ar-row">
       <span>Управлять участниками</span>
-      <input type="checkbox" v-model="manageMembers" />
+      <input v-model="manageMembers" type="checkbox" />
     </label>
     <label class="ar-row">
       <span>Менять название и аватар</span>
-      <input type="checkbox" v-model="editInfo" />
+      <input v-model="editInfo" type="checkbox" />
     </label>
     <label class="ar-row">
       <span>Закреплять сообщения</span>
-      <input type="checkbox" v-model="pinMessages" />
+      <input v-model="pinMessages" type="checkbox" />
     </label>
   </AppDialog>
 </template>

@@ -14,6 +14,8 @@ export const getBoards = (params = {}, options = {}) =>
   apiRequest(`/boards?${qs(params)}`, options)
 
 export const getBoard = (id) => apiRequest(`/boards/${id}`)
+// Сводка живой плитки: { total, latest: {id, title} | null }.
+export const getBoardsSummary = () => apiRequest('/boards/summary')
 
 export const createBoard = (title = '', folderId = null) =>
   apiRequest('/boards', { method: 'POST', body: { title, folder_id: folderId } })

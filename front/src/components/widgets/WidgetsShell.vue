@@ -107,6 +107,8 @@ const { wallpaper, boot } = useShellCore({
      предыдущему разделу, как в обычном приложении с боковой навигацией. */
   navigate: 'push',
   platform: 'widgets',
+  // Свёрнутая полоска — одни значки, сводок в ней нет.
+  tilesVisible: () => !collapsed.value,
   onHome: () => { desktop.startOpen = true },
 })
 

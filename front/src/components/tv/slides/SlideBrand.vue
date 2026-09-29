@@ -83,12 +83,15 @@ const quote = ref(BRAND_QUOTES[Math.floor(Math.random() * BRAND_QUOTES.length)])
   width: clamp(96px, 14vmin, 220px);
   height: clamp(96px, 14vmin, 220px);
   border-radius: 50%;
+  /* Свечение статично, дышит только масштаб: анимация filter перерисовывала
+     логотип каждый кадр, а transform отдаётся композитору. */
+  filter: drop-shadow(0 0 24px color-mix(in oklch, var(--color-primary) 45%, transparent));
   animation: tv-brand-pulse 3.6s ease-in-out infinite;
 }
 
 @keyframes tv-brand-pulse {
-  0%, 100% { transform: scale(1); filter: drop-shadow(0 0 18px color-mix(in oklch, var(--color-primary) 35%, transparent)); }
-  50%      { transform: scale(1.04); filter: drop-shadow(0 0 32px color-mix(in oklch, var(--color-primary) 55%, transparent)); }
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.04); }
 }
 
 .tv-brand-big-name {
@@ -152,12 +155,13 @@ const quote = ref(BRAND_QUOTES[Math.floor(Math.random() * BRAND_QUOTES.length)])
   font-size: clamp(22px, 2.6vmin, 30px);
   font-variation-settings: 'FILL' 1;
   color: var(--color-tertiary);
+  filter: drop-shadow(0 0 9px color-mix(in oklch, var(--color-tertiary) 55%, transparent));
   animation: tv-ai-fact-pulse 2.4s ease-in-out infinite;
 }
 
 @keyframes tv-ai-fact-pulse {
-  0%, 100% { transform: scale(1); filter: drop-shadow(0 0 6px color-mix(in oklch, var(--color-tertiary) 45%, transparent)); }
-  50%      { transform: scale(1.06); filter: drop-shadow(0 0 12px color-mix(in oklch, var(--color-tertiary) 65%, transparent)); }
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.06); }
 }
 
 .tv-ai-fact-text {

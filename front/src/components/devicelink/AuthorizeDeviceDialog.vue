@@ -6,7 +6,7 @@
     subtitle="Введите код с другого устройства или отсканируйте его QR."
     :busy="loading"
     :actions="dialogActions"
-    @update:modelValue="close"
+    @update:model-value="close"
     @confirm="onConfirm"
   >
     <div v-if="done" class="ad-done">

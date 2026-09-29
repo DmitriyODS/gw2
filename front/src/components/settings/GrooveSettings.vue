@@ -30,7 +30,7 @@
               </small>
             </span>
           </span>
-          <input type="checkbox" v-model="enabled" class="switch" />
+          <input v-model="enabled" type="checkbox" class="switch" />
         </label>
 
         <p class="hint">{{ summary }}</p>

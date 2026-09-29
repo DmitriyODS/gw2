@@ -62,7 +62,7 @@
             <span
               class="rs-cell-grip"
               title="Потяните, чтобы изменить ширину"
-              @pointerdown.stop.prevent="startResize(i, $event)"
+              @pointerdown.stop.prevent="startResize(i)"
             />
           </div>
         </div>
@@ -294,7 +294,7 @@ function setOptions(f, raw) {
 const gridEl = ref(null)
 const resizing = ref(null)
 
-function startResize(index, e) {
+function startResize(index) {
   const grid = gridEl.value
   if (!grid) return
   const rect = grid.getBoundingClientRect()

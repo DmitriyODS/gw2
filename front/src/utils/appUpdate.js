@@ -5,8 +5,8 @@
    1. Service worker — периодический registration.update(): браузер сам
       проверяет sw.js только при навигациях, а установленная PWA живёт без
       них днями.
-   2. Версия продукта — лёгкий поллинг /api/changelog (versions[0].version,
-      статика nginx с Cache-Control: no-cache). Базовая версия фиксируется
+   2. Выпуск — лёгкий поллинг /api/changelog (пара «версия·сборка» плоского
+      объекта выпуска, статика nginx с Cache-Control: no-cache). Базовая версия фиксируется
       первым успешным ответом сессии; при её смене — уведомление и мягкая
       перезагрузка, когда это безопасно (вкладка ушла в фон). Перезагрузка —
       максимум одна за сессию, а после неё базовой становится уже новая
@@ -46,13 +46,13 @@ export function installAppUpdateWatcher({ onUpdateAvailable, canReload } = {}) {
 
   async function checkVersion() {
     lastCheckAt = Date.now()
-    let latest = null
+    let data
     try {
-      const data = await changelogApi.get()
-      latest = data?.versions?.[0]?.version ?? null
+      data = await changelogApi.get()
     } catch {
       return // сеть недоступна — проверим в следующий раз
     }
+    const latest = data?.version ? `${data.version}·${data.build ?? ''}` : null
     if (!latest) return
     if (!baseline) {
       baseline = latest

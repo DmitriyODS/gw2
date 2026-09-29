@@ -5,25 +5,14 @@
    чтобы не таскать mp3 в репозитории. Браузеры запрещают звук до первого
    user gesture — первые попытки до клика тихо проглатываются. */
 
+import { playSound, unlockAudio } from '@/utils/audio.js'
+
 let warned = false
-let audioCtx = null
 let unlockInstalled = false
 // Открытое сейчас уведомление о звонке (десктоп — конструктор Notification).
 let activeCallNotification = null
 // На SW-варианте тег используется для перезаписи и закрытия.
 const CALL_NOTIF_TAG = 'gw2-call'
-
-function getCtx() {
-  if (audioCtx) return audioCtx
-  try {
-    const Ctx = window.AudioContext || window.webkitAudioContext
-    if (!Ctx) return null
-    audioCtx = new Ctx()
-  } catch {
-    audioCtx = null
-  }
-  return audioCtx
-}
 
 /* Браузеры блокируют Web Audio и (в Safari) Notification.requestPermission до
    первого пользовательского жеста. Вешаем одноразовые слушатели: при первом
@@ -34,10 +23,7 @@ export function installNotifyUnlock() {
   if (unlockInstalled || typeof window === 'undefined') return
   unlockInstalled = true
   const handler = () => {
-    const ctx = getCtx()
-    if (ctx && ctx.state === 'suspended') {
-      ctx.resume().catch(() => {})
-    }
+    unlockAudio()
     // Разрешение просим только пока оно «default». Слушатели снимаем лишь когда
     // вопрос решён (granted/denied) — иначе, если пользователь отмахнулся от
     // первого prompt, уведомления уже не запросятся никогда.
@@ -66,12 +52,9 @@ const TONES = {
 }
 
 function playBeep(kind) {
-  const ctx = getCtx()
-  if (!ctx) return
-  try {
-    if (ctx.state === 'suspended') ctx.resume()
-    const now = ctx.currentTime
-    const tones = TONES[kind] || TONES.message
+  const tones = TONES[kind] || TONES.message
+  const length = Math.max(...tones.map(({ start, dur }) => start + dur)) + 0.02
+  playSound(length, (ctx, now) => {
     tones.forEach(({ freq, start, dur }) => {
       const osc = ctx.createOscillator()
       const gain = ctx.createGain()
@@ -84,7 +67,7 @@ function playBeep(kind) {
       osc.start(now + start)
       osc.stop(now + start + dur + 0.02)
     })
-  } catch {}
+  })
 }
 
 let swRegistration = null

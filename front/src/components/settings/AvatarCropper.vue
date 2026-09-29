@@ -6,7 +6,7 @@
       <label class="upload-btn">
         <span class="material-symbols-outlined">photo_camera</span>
         Выбрать фото
-        <input type="file" accept="image/jpeg,image/png" @change="onFileSelect" style="display:none" />
+        <input type="file" accept="image/jpeg,image/png" style="display:none" @change="onFileSelect" />
       </label>
       <p class="upload-hint">JPG или PNG, не более 10 МБ</p>
     </div>
@@ -56,7 +56,7 @@
           Другое фото
         </button>
         <button class="btn-secondary" @click="$emit('cancel')">Отмена</button>
-        <button class="btn-primary" @click="confirmCrop" :disabled="confirming">
+        <button class="btn-primary" :disabled="confirming" @click="confirmCrop">
           {{ confirming ? 'Сохранение…' : 'Подтвердить' }}
         </button>
       </div>

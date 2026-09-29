@@ -25,11 +25,11 @@ describe('грани живых плиток', () => {
     expect(faces[1]).toMatchObject({ value: 'в 09:30', label: 'Позвонить в банк' })
   })
 
-  it('диск: сколько файлов недавно и какой последний', () => {
+  it('диск: сколько файлов на диске и какой последний', () => {
     const faces = tileFaces('drive', ctx({
       data: { drive: { total: 4, latest: { name: 'смета.xlsx' } } },
     }))
-    expect(faces[0]).toMatchObject({ value: '4', label: 'недавних файла' })
+    expect(faces[0]).toMatchObject({ value: '4', label: 'файла на диске' })
     expect(faces[1]).toMatchObject({ value: 'Последний', label: 'смета.xlsx' })
   })
 
@@ -61,6 +61,14 @@ describe('грани живых плиток', () => {
     }))
     expect(faces[0]).toMatchObject({ value: '7', label: 'сотрудников' })
     expect(faces[1]).toMatchObject({ value: '2', label: 'в сети' })
+  })
+
+  it('сотрудники супер-админа: онлайн — весь presence, без списка id', () => {
+    const faces = tileFaces('employees', ctx({
+      data: { employees: { total: 50, ids: [], allOnline: true } },
+      messenger: { onlineIds: new Set([2, 3, 99]) },
+    }))
+    expect(faces[1]).toMatchObject({ value: '3', label: 'в сети' })
   })
 
   it('сотрудники: никого в сети — грань онлайна не показываем', () => {

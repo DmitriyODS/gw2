@@ -19,7 +19,7 @@
           <span class="material-symbols-outlined">open_in_full</span>
           Показать задачу
         </button>
-        <button class="stop-btn" @click="stop" :disabled="stopping">
+        <button class="stop-btn" :disabled="stopping" @click="stop">
           <span class="material-symbols-outlined">check</span>
           Завершить
         </button>

@@ -3,7 +3,7 @@
 // требующие неподнятых сервисов (calls/gateway-presence/changelog),
 // помечены skip с причиной.
 import { it, expect, beforeAll } from 'vitest'
-import { describeIntegration, uniq } from '../setup/harness.js'
+import { describeIntegration } from '../setup/harness.js'
 import { newCompanyAdmin } from '../setup/factory.js'
 
 import { suggestLogin } from '@/api/auth.js'

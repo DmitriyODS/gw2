@@ -191,7 +191,8 @@ function onDrag(e) {
   const dx = (e.clientX - drag.startX) / k
   const dy = (e.clientY - drag.startY) / k
   const s = drag.start
-  let { x, y, w, h } = s
+  let { w, h } = s
+  let x, y
   const clampX = (v) => Math.min(Math.max(v, 0), base.width)
   const clampY = (v) => Math.min(Math.max(v, 0), base.height)
 

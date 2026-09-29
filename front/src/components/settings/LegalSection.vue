@@ -4,7 +4,8 @@
       title="Ваше согласие"
       :hint="acceptedHint"
     >
-      <AppChip :label="state?.required ? 'Требуется согласие' : 'Принято'"
+      <AppChip
+:label="state?.required ? 'Требуется согласие' : 'Принято'"
                :tone="state?.required ? 'warning' : 'success'" />
     </AppRow>
 

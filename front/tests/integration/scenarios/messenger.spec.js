@@ -330,4 +330,34 @@ describeIntegration('messenger API: папки чатов и фон', () => {
     await api.deleteChatBackground(conv.id)
     await api.deleteChatBackground()
   })
+
+  it('синхронизация списка после сна: первая полная, дальше только изменения', async () => {
+    const a = await newCompanyAdmin('a')
+    const b = await newMember(a, a.companyId, 1, 'b')
+    const c = await newMember(a, a.companyId, 1, 'c')
+
+    a.session.use()
+    const withB = await api.openConversation(b.auth.userId)
+    const withC = await api.openConversation(c.auth.userId)
+    await api.sendMessage(withC.id, { text: 'Старое' })
+
+    const first = await api.syncConversations(0)
+    expect(first.full).toBe(true)
+    expect(first.cursor).toBeGreaterThan(0)
+
+    // Пока «спал»: написал B, а диалог с C удалён у себя.
+    b.session.use()
+    await api.sendMessage(withB.id, { text: 'Ты тут?' })
+    a.session.use()
+    await api.deleteConversation(withC.id, 'me')
+
+    const delta = await api.syncConversations(first.cursor)
+    expect(delta.full).toBe(false)
+    const changed = delta.conversations.map((x) => x.id)
+    expect(changed).toContain(withB.id)
+    expect(changed).not.toContain(withC.id)
+    expect(delta.removed).toContain(withC.id)
+    const item = delta.conversations.find((x) => x.id === withB.id)
+    expect(item.unread_count).toBe(1)
+  })
 })

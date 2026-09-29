@@ -105,7 +105,7 @@
         :aria-label="`Открыть изображение: ${a.name}`"
         @click="openLightbox(a)"
       >
-        <img :src="a.url" :alt="a.name" loading="lazy" />
+        <img :src="a.thumb_url || a.url" :alt="a.name" loading="lazy" />
         <span v-if="hiddenImagesCount && i === visibleImages.length - 1" class="post-image-more">
           +{{ hiddenImagesCount }}
         </span>
@@ -340,6 +340,17 @@ function onDocKeydown(e) {
   if (e.key === 'Escape' && menuOpen.value) menuOpen.value = false
 }
 
+/* Слушатели документа — только пока открыто меню: у каждой карточки ленты
+   они висели постоянно, и в ленте из сотни постов любой клик и клавиша
+   прогоняли сотни обработчиков. */
+function listenDoc(on) {
+  const method = on ? 'addEventListener' : 'removeEventListener'
+  document[method]('mousedown', onDocPointerDown, true)
+  document[method]('touchstart', onDocPointerDown, { passive: true, capture: true })
+  document[method]('keydown', onDocKeydown)
+}
+watch(menuOpen, listenDoc)
+
 // Отметка просмотра: карточка попала в поле зрения — засчитываем один раз
 // и отключаем наблюдатель (стор дедуплицирует запрос на пост в рамках сессии).
 let viewObserver = null
@@ -359,17 +370,12 @@ function observeView() {
 }
 
 onMounted(() => {
-  document.addEventListener('mousedown', onDocPointerDown, true)
-  document.addEventListener('touchstart', onDocPointerDown, { passive: true, capture: true })
-  document.addEventListener('keydown', onDocKeydown)
   measureTruncated()
   observeView()
 })
 
 onBeforeUnmount(() => {
-  document.removeEventListener('mousedown', onDocPointerDown, true)
-  document.removeEventListener('touchstart', onDocPointerDown, true)
-  document.removeEventListener('keydown', onDocKeydown)
+  if (menuOpen.value) listenDoc(false)
   viewObserver?.disconnect()
 })
 

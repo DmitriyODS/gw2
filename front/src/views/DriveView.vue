@@ -25,7 +25,7 @@
     >
       <!-- Крошки — общий компонент проводника (тот же, что в заметках и
            досках): один вид пути во всех разделах с папками. -->
-      <Breadcrumbs
+      <FolderBreadcrumbs
         v-if="store.view === 'files' && !store.search"
         :items="store.path"
         root-label="Мой диск"
@@ -187,7 +187,7 @@ import { computed, defineAsyncComponent, onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import InputText from 'primevue/inputtext'
 import BrandLoader from '@/components/common/BrandLoader.vue'
-import Breadcrumbs from '@/components/common/Breadcrumbs.vue'
+import FolderBreadcrumbs from '@/components/common/FolderBreadcrumbs.vue'
 import ContextMenu from '@/components/common/ContextMenu.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import SearchField from '@/components/common/SearchField.vue'

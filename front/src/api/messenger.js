@@ -4,6 +4,12 @@ import { uploadFileTo } from '@/utils/chunkUpload.js'
 export const listConversations = (options = {}) =>
   apiRequest('/messenger/conversations', options)
 
+// Синхронизация списка: since — курсор прошлого ответа (0 — первая). Ответ
+// { full, conversations, removed, cursor }: при full=true это весь список,
+// иначе только изменившиеся диалоги и ушедшие из списка.
+export const syncConversations = (since, options = {}) =>
+  apiRequest(`/messenger/conversations?since=${since}`, options)
+
 export const openConversation = (userId) =>
   apiRequest('/messenger/conversations', { method: 'POST', body: { user_id: userId } })
 

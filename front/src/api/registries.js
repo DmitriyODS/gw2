@@ -48,6 +48,8 @@ export const getRegistries = (scope = 'all', options = {}) =>
   apiRequest(`/registries?${qs({ scope })}`, options)
 
 export const getRegistry = (id) => apiRequest(`/registries/${id}`)
+// Сводка живой плитки: { total, names: [первые три] }.
+export const getRegistriesSummary = () => apiRequest('/registries/summary')
 
 // Глобальный поиск по записям ВСЕХ доступных реестров (строка Hola): свои,
 // расшаренные лично и расшаренные компаниям — одним запросом.

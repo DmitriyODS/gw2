@@ -47,7 +47,7 @@
           class="w-full"
           :loading="responsiblesLoading"
           filter
-          filterPlaceholder="Поиск сотрудника..."
+          filter-placeholder="Поиск сотрудника..."
           show-clear
         />
       </div>
@@ -97,7 +97,7 @@
           :invalid="!!errors.department_id"
           :loading="depsLoading"
           filter
-          filterPlaceholder="Поиск..."
+          filter-placeholder="Поиск..."
         />
         <span v-if="errors.department_id" class="field-error">{{ errors.department_id }}</span>
       </div>
@@ -106,7 +106,7 @@
         <label class="form-label">Дата поступления <span class="required">*</span></label>
         <DatePicker
           v-model="form.received_at"
-          dateFormat="dd.mm.yy"
+          date-format="dd.mm.yy"
           class="w-full"
           :invalid="!!errors.received_at"
         />
@@ -117,9 +117,9 @@
         <label class="form-label">Дедлайн</label>
         <DatePicker
           v-model="form.deadline"
-          dateFormat="dd.mm.yy"
+          date-format="dd.mm.yy"
           class="w-full"
-          showClear
+          show-clear
         />
       </div>
 
@@ -159,7 +159,7 @@
               :invalid="!!errors.unit_type_id"
               :loading="unitTypesLoading"
               filter
-              filterPlaceholder="Поиск..."
+              filter-placeholder="Поиск..."
             />
             <span v-if="errors.unit_type_id" class="field-error">{{ errors.unit_type_id }}</span>
           </div>

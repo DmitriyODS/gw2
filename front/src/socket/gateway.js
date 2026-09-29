@@ -6,16 +6,26 @@
      'connect') либо {"event": "_error"} и закрывает соединение;
    - дальше события ходят в обе стороны как есть.
 
-   Реконнект встроенный: экспоненциальная задержка 1с → 5с, бесконечно
-   (как прежние опции socket.io-client). emit при отсутствии соединения
-   буферизуется и уходит после повторной авторизации. Слушатели переживают
-   реконнект — повторная регистрация не нужна. */
+   Реконнект встроенный, экспоненциальный: 1 с → 5 с на видимой вкладке и до
+   минуты на скрытой (обёртка в трее всё ещё должна получать события, но
+   долбиться в сервер каждые 5 с ей незачем). Без сети попыток нет вовсе —
+   ждём события `online`; вернулись на вкладку — пробуем сразу.
+   Отказ в авторизации (протух access-токен, а шлюз проверяет его только при
+   входе) сначала обновляет токен через `refreshAuth`, и лишь потом идёт
+   повторная попытка — иначе каждая попытка была бы заведомо отвергнута.
+   emit при отсутствии соединения буферизуется (с потолком) и уходит после
+   повторной авторизации. Слушатели переживают реконнект.
+   Новый токен (refresh, смена активной компании) уходит на живое соединение
+   тем же кадром auth — шлюз пересаживает его в комнату новой компании без
+   переподключения. */
 
 const RECONNECT_MIN_MS = 1000
 const RECONNECT_MAX_MS = 5000
+const RECONNECT_HIDDEN_MAX_MS = 60_000
+const QUEUE_LIMIT = 200
 
 export class GatewaySocket {
-  constructor(url, { auth } = {}) {
+  constructor(url, { auth, refreshAuth } = {}) {
     this.url = url
     this.auth = auth || {}
     this.connected = false
@@ -26,6 +36,27 @@ export class GatewaySocket {
     this._attempt = 0
     this._reconnectTimer = null
     this._manualClose = false
+    this._authFailed = false
+    this._refreshAuth = refreshAuth || null
+    this._waitingOnline = false
+    this._sleeping = false
+
+    this._onOnline = () => {
+      if (!this._waitingOnline || this._sleeping) return
+      this._waitingOnline = false
+      this._attempt = 0
+      this._open()
+    }
+    this._onVisible = () => {
+      // Вернулись на вкладку, а попытка отложена надолго — пробуем сейчас.
+      if (document.hidden || this.connected || !this._reconnectTimer || this._sleeping) return
+      clearTimeout(this._reconnectTimer)
+      this._reconnectTimer = null
+      this._attempt = 0
+      this._open()
+    }
+    window.addEventListener('online', this._onOnline)
+    document.addEventListener('visibilitychange', this._onVisible)
 
     this._open()
   }
@@ -45,11 +76,41 @@ export class GatewaySocket {
       try { this._ws.send(frame) } catch { this._queue.push(frame) }
     } else {
       this._queue.push(frame)
+      if (this._queue.length > QUEUE_LIMIT) this._queue.shift()
     }
+  }
+
+  /** Сменить токен: следующая авторизация пойдёт с ним, а живое соединение
+      получит его сразу. */
+  setToken(token) {
+    this.auth = { token }
+    if (token && this.connected && this._ws?.readyState === WebSocket.OPEN) {
+      try { this._ws.send(JSON.stringify({ event: 'auth', data: { token } })) } catch {}
+    }
+  }
+
+  /** Усыпить: закрыть соединение и не переподключаться до wake(). Слушатели
+      и токен остаются — пробуждение идёт обычным путём авторизации. */
+  sleep() {
+    if (this._manualClose || this._sleeping) return
+    this._sleeping = true
+    clearTimeout(this._reconnectTimer)
+    this._reconnectTimer = null
+    try { this._ws?.close() } catch {}
+  }
+
+  wake() {
+    if (this._manualClose || !this._sleeping) return
+    this._sleeping = false
+    this._attempt = 0
+    this._open()
   }
 
   disconnect() {
     this._manualClose = true
+    this._waitingOnline = false
+    window.removeEventListener('online', this._onOnline)
+    document.removeEventListener('visibilitychange', this._onVisible)
     clearTimeout(this._reconnectTimer)
     this._queue = []
     try { this._ws?.close() } catch {}
@@ -63,7 +124,7 @@ export class GatewaySocket {
   }
 
   _open() {
-    if (this._manualClose) return
+    if (this._manualClose || this._sleeping) return
     let ws
     try {
       ws = new WebSocket(this.url)
@@ -86,6 +147,7 @@ export class GatewaySocket {
       if (frame.event === '_connected') {
         this.connected = true
         this._attempt = 0
+        this._authFailed = false
         // Накопленное за время обрыва — после повторной авторизации.
         const queued = this._queue.splice(0)
         for (const f of queued) {
@@ -95,7 +157,9 @@ export class GatewaySocket {
         return
       }
       if (frame.event === '_error') {
-        this._dispatch('connect_error', new Error(frame.data?.code || 'AUTH_FAILED'))
+        const code = frame.data?.code || 'AUTH_FAILED'
+        if (code === 'AUTH_FAILED') this._authFailed = true
+        this._dispatch('connect_error', new Error(code))
         return
       }
       this._dispatch(frame.event, frame.data)
@@ -117,10 +181,25 @@ export class GatewaySocket {
   }
 
   _scheduleReconnect() {
-    if (this._manualClose || this._reconnectTimer) return
-    const delay = Math.min(RECONNECT_MIN_MS * 2 ** this._attempt, RECONNECT_MAX_MS)
+    if (this._manualClose || this._sleeping || this._reconnectTimer || this._waitingOnline) return
+    if (navigator.onLine === false) {
+      this._waitingOnline = true
+      return
+    }
+    const cap = document.hidden ? RECONNECT_HIDDEN_MAX_MS : RECONNECT_MAX_MS
+    const delay = Math.min(RECONNECT_MIN_MS * 2 ** this._attempt, cap)
     this._attempt += 1
-    this._reconnectTimer = setTimeout(() => {
+    this._reconnectTimer = setTimeout(async () => {
+      if (this._authFailed && this._refreshAuth) {
+        try {
+          const token = await this._refreshAuth()
+          if (token) this.auth = { token }
+          this._authFailed = false
+        } catch {
+          // Сеть или отказ: отказ сервера разлогинит приложение и закроет сокет,
+          // сетевую ошибку переживёт следующая попытка.
+        }
+      }
       this._reconnectTimer = null
       this._open()
     }, delay)

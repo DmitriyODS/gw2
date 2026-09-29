@@ -15,7 +15,7 @@
       aria-label="Пуск"
       @click="desktop.startOpen = !desktop.startOpen"
     >
-      <Logo :size="42" />
+      <BrandLogo :size="42" />
     </button>
 
     <button
@@ -66,7 +66,7 @@
     <div class="tb-right">
       <button v-if="unit" class="tb-unit" type="button" title="Идёт работа — открыть юнит" @click="expand">
         <span class="material-symbols-outlined">timer</span>
-        <span class="tb-unit-clock">{{ clock }}</span>
+        <ElapsedClock class="tb-unit-clock" :start="unit?.datetime_start" />
       </button>
 
       <button
@@ -114,13 +114,14 @@ import { useUnitsStore } from '@/stores/units.js'
 import { useActiveUnit } from '@/composables/useActiveUnit.js'
 import { useDesktopNotifications } from '@/composables/useDesktopNotifications.js'
 import { useNotifyMute } from '@/composables/useNotifyMute.js'
-import { useElapsed } from '@/composables/useElapsed.js'
+import { useMinuteClock } from '@/composables/useMinuteClock.js'
+import ElapsedClock from '@/components/common/ElapsedClock.vue'
 import { useLongPress } from '@/composables/useLongPress.js'
 import { usePermission } from '@/composables/usePermission.js'
 import { useCompanySettings } from '@/composables/useCompanySettings.js'
 import { appById, windowTitle } from '@/desktop/apps.js'
 import { TASKBAR_MARGIN } from '@/desktop/layout.js'
-import Logo from '@/components/common/Logo.vue'
+import BrandLogo from '@/components/common/BrandLogo.vue'
 import HolaIcon from '@/components/common/HolaIcon.vue'
 import ContextMenu from '@/components/common/ContextMenu.vue'
 
@@ -152,7 +153,6 @@ const { isSuperAdmin, hasActiveCompany } = usePermission()
 const { settings } = useCompanySettings()
 
 const unit = computed(() => units.activeUnit)
-const { clock } = useElapsed(() => unit.value?.datetime_start)
 
 function isAvailable(app) {
   return !!app && app.available({
@@ -281,10 +281,7 @@ function openCalendars() {
 }
 
 /* ── Часы ──────────────────────────────────────────────────── */
-const now = ref(new Date())
-let timer = null
-onMounted(() => { timer = setInterval(() => { now.value = new Date() }, 10000) })
-onBeforeUnmount(() => clearInterval(timer))
+const now = useMinuteClock()
 
 const time = computed(() => now.value.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }))
 const date = computed(() => now.value.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: '2-digit' }))

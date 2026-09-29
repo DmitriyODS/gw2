@@ -96,7 +96,7 @@ import { createTag, updateTag, deleteTag } from '@/api/tasks.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { TASK_COLORS } from '@/utils/taskColors.js'
 
-const props = defineProps({
+defineProps({
   modelValue: { type: Boolean, default: false },
   tags: { type: Array, default: () => [] },
 })

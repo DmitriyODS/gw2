@@ -13,7 +13,7 @@
     @confirm="confirm"
   >
     <label v-if="canForAll" class="ds-check" :class="{ active: forAll }">
-      <input type="checkbox" v-model="forAll" />
+      <input v-model="forAll" type="checkbox" />
       <span class="ds-check-box">
         <span class="material-symbols-outlined">{{ forAll ? 'check_box' : 'check_box_outline_blank' }}</span>
       </span>

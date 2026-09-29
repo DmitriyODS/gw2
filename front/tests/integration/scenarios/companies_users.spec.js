@@ -231,4 +231,14 @@ describeIntegration('users API: профиль и доступ', () => {
     const none = await users.getDirectory('заведомо-небывалый-логин')
     expect(none.length).toBe(0)
   })
+
+  it('глобальный каталог — только поиск: без запроса платформу не выдаёт', async () => {
+    const a = await newCompanyAdmin('a')
+    const b = await newCompanyAdmin('b')
+
+    a.session.use()
+    expect(await users.getDirectory('', false, { global: true })).toEqual([])
+    const found = await users.getDirectory(b.login, false, { global: true })
+    expect(found.some((u) => u.id === b.auth.userId)).toBe(true)
+  })
 })

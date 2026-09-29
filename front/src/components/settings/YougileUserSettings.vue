@@ -51,13 +51,15 @@
       <form class="yg-form" @submit.prevent="onConnect">
         <div class="field">
           <label class="lbl" for="yg-login">Логин YouGile (email)</label>
-          <input id="yg-login" class="ctl" type="email" autocomplete="email"
-                 v-model="form.login" :disabled="busy" required />
+          <input
+id="yg-login" v-model="form.login" class="ctl" type="email"
+                 autocomplete="email" :disabled="busy" required />
         </div>
         <div class="field">
           <label class="lbl" for="yg-password">Пароль YouGile</label>
-          <input id="yg-password" class="ctl" type="password" autocomplete="current-password"
-                 v-model="form.password" :disabled="busy" required />
+          <input
+id="yg-password" v-model="form.password" class="ctl" type="password"
+                 autocomplete="current-password" :disabled="busy" required />
         </div>
         <div class="actions">
           <button type="submit" class="btn-filled" :disabled="busy || !canSubmit">
@@ -86,16 +88,18 @@
     </div>
 
     <!-- Диалог сброса ключа: повторно запрашиваем пароль -->
-    <Dialog :visible="showRotate" @update:visible="(v) => v || (showRotate = false)"
-            modal :append-to="host" :pt="{ mask: { class: { 'gw-in-window-mask': inWindow } } }"
-            :closable="!busy" :style="{ width: '420px', maxWidth: 'calc(100vw - 24px)' }"
-            header="Сброс ключа YouGile">
+    <Dialog
+:visible="showRotate" modal
+            :append-to="host" :pt="{ mask: { class: { 'gw-in-window-mask': inWindow } } }" :closable="!busy"
+            :style="{ width: '420px', maxWidth: 'calc(100vw - 24px)' }" header="Сброс ключа YouGile"
+            @update:visible="(v) => v || (showRotate = false)">
       <p class="dlg-text">
         Введите пароль вашего YouGile-аккаунта ещё раз, чтобы выпустить новый ключ.
         Старый ключ будет отозван.
       </p>
-      <input class="ctl" type="password" autocomplete="current-password"
-             v-model="rotatePassword" :disabled="busy"
+      <input
+v-model="rotatePassword" class="ctl" type="password"
+             autocomplete="current-password" :disabled="busy"
              placeholder="Пароль" />
       <template #footer>
         <button class="btn-text" :disabled="busy" @click="showRotate = false">Отмена</button>

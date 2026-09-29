@@ -28,7 +28,7 @@
     </div>
 
     <div class="calc-tools">
-      <AppTabs variant="tint" v-model="mode" :tabs="MODES" dense />
+      <AppTabs v-model="mode" variant="tint" :tabs="MODES" dense />
       <button
         class="calc-hist-toggle"
         type="button"

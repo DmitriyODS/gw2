@@ -17,11 +17,11 @@
       :show-gridlines="false"
       :pt="ptOverrides"
       size="small"
+      :row-class="rowClass"
+      :reorderable-columns="false"
       @row-click="onRowClick"
       @sort="onSort"
       @row-reorder="onRowReorder"
-      :row-class="rowClass"
-      :reorderable-columns="false"
     >
       <template #empty>
         <slot name="empty">
@@ -45,7 +45,7 @@
 import DataTable from 'primevue/datatable'
 import BrandLoader from '@/components/common/BrandLoader.vue'
 
-const props = defineProps({
+defineProps({
   value: { type: Array, default: () => [] },
   loading: { type: Boolean, default: false },
   dataKey: { type: String, default: 'id' },

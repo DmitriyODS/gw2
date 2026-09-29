@@ -47,9 +47,9 @@
         <button
           v-if="exportFn"
           class="w-tool"
-          @click="handleExport"
           title="Скачать XLSX"
           aria-label="Скачать XLSX"
+          @click="handleExport"
         >
           <span class="material-symbols-outlined">download</span>
         </button>

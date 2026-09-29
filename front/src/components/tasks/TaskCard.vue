@@ -24,16 +24,16 @@
             :href="task.link_yougile"
             target="_blank"
             rel="noopener"
-            @click.stop
             title="Открыть карточку в YouGile"
+            @click.stop
           >
             <span class="material-symbols-outlined">sync_alt</span>
           </a>
           <button
             class="card-action-btn favorite-btn"
             :class="{ 'is-fav': task.is_favorite }"
-            @click.stop="$emit('toggle-favorite', task)"
             :title="task.is_favorite ? 'Убрать из избранного' : 'Добавить в избранное'"
+            @click.stop="$emit('toggle-favorite', task)"
           >
             <span class="material-symbols-outlined" :class="{ filled: task.is_favorite }">
               {{ task.is_favorite ? 'favorite' : 'favorite_border' }}

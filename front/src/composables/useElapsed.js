@@ -1,18 +1,41 @@
-import { ref, computed, unref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, unref, watch, onMounted, onUnmounted } from 'vue'
 
 /**
  * Живой счётчик времени от момента `start` (ISO-строка/Date; ref/getter/значение).
- * Тикает раз в секунду, чистит интервал при размонтировании.
+ * Тикает раз в секунду, только пока `start` задан и вкладка видима (возврат на
+ * вкладку сразу пересчитывает); чистит интервал при размонтировании.
  * Отдаёт и развёрнутый текст («1 ч 45 мин 32 сек»), и компактные часы («01:45:32»).
+ *
+ * Тик перерисовывает всё, что читает результат, — поэтому в больших панелях
+ * счётчик держит отдельный маленький компонент (`ElapsedClock`).
  */
 export function useElapsed(start) {
   const tick = ref(0)
   let timer = null
 
-  onMounted(() => { timer = setInterval(() => { tick.value++ }, 1000) })
-  onUnmounted(() => { if (timer) clearInterval(timer) })
-
   const getStart = () => (typeof start === 'function' ? start() : unref(start))
+
+  function sync() {
+    const run = !!getStart() && !document.hidden
+    if (run && !timer) {
+      tick.value++
+      timer = setInterval(() => { tick.value++ }, 1000)
+    } else if (!run && timer) {
+      clearInterval(timer)
+      timer = null
+    }
+  }
+
+  watch(getStart, sync)
+  onMounted(() => {
+    sync()
+    document.addEventListener('visibilitychange', sync)
+  })
+  onUnmounted(() => {
+    clearInterval(timer)
+    timer = null
+    document.removeEventListener('visibilitychange', sync)
+  })
 
   const seconds = computed(() => {
     tick.value // зависимость для пересчёта раз в секунду

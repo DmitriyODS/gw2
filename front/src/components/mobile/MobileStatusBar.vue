@@ -9,7 +9,7 @@
 
     <button v-if="unit" class="msb-unit" type="button" title="Идёт работа — открыть юнит" @click="expand">
       <span class="material-symbols-outlined">timer</span>
-      <span class="msb-clock">{{ clock }}</span>
+      <ElapsedClock class="msb-clock" :start="unit?.datetime_start" />
     </button>
 
     <button
@@ -53,7 +53,7 @@ import { useUnitsStore } from '@/stores/units.js'
 import { useActiveUnit } from '@/composables/useActiveUnit.js'
 import { useDesktopNotifications } from '@/composables/useDesktopNotifications.js'
 import { useNotifyMute } from '@/composables/useNotifyMute.js'
-import { useElapsed } from '@/composables/useElapsed.js'
+import ElapsedClock from '@/components/common/ElapsedClock.vue'
 import { useLongPress } from '@/composables/useLongPress.js'
 import CompanySelect from '@/components/common/CompanySelect.vue'
 import ContextMenu from '@/components/common/ContextMenu.vue'
@@ -66,7 +66,6 @@ const { count: alerts } = useDesktopNotifications()
 const { muted: notifyMuted, untilLabel: muteUntilLabel, mute, unmute } = useNotifyMute()
 
 const unit = computed(() => units.activeUnit)
-const { clock } = useElapsed(() => unit.value?.datetime_start)
 
 const avatarSrc = computed(() => {
   const user = auth.user

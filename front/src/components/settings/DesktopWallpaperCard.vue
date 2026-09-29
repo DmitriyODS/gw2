@@ -4,7 +4,7 @@
     title="Обои рабочего стола"
     hint="Готовый комплект, своя картинка, градиент или узор под окнами. Оформление личное и синхронизируется на всех ваших устройствах."
   >
-    <BackgroundEditor :recipe="recipe" :upload-fn="uploadFn" preview="desktop" :presets="WALLPAPERS" />
+    <BackgroundEditor :recipe="recipe" :upload-fn="uploadFn" preview="desktop" :presets="WALLPAPERS" @update:recipe="(r) => Object.assign(recipe, r)" />
 
     <section v-if="prefs.wallpapers.length" class="dw-history">
       <h4 class="dw-history-title">Недавние картинки</h4>

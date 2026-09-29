@@ -44,7 +44,7 @@
       </button>
     </Transition>
 
-    <Taskbar />
+    <DesktopTaskbar />
     <Transition name="sm">
       <StartMenu v-if="desktop.startOpen" />
     </Transition>
@@ -78,7 +78,7 @@ import {
 import ContextMenu from '@/components/common/ContextMenu.vue'
 import ChatBackgroundLayer from '@/components/common/ChatBackgroundLayer.vue'
 import AppWindow from './AppWindow.vue'
-import Taskbar from './Taskbar.vue'
+import DesktopTaskbar from './DesktopTaskbar.vue'
 
 /* Всплывающие панели стола — ленивыми чанками: до первого открытия они не
    нужны, а статически тянули в первый кадр «Пуск», поиск Hola и выпадашку
@@ -98,6 +98,7 @@ const { wallpaper, boot } = useShellCore({
     return win && !win.minimized ? win.path : '/home'
   },
   barHeight: TASKBAR_HEIGHT,
+  tilesVisible: () => desktop.startOpen,
 })
 
 // Мобильная обёртка и старые браузеры без Fullscreen API кнопку не показывают.

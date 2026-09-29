@@ -17,7 +17,7 @@
       </div>
       <div class="card-actions">
         <label class="toggle">
-          <input type="checkbox" :checked="settings?.enabled" @change="onToggleEnabled($event)" :disabled="busy || !canEnable" />
+          <input type="checkbox" :checked="settings?.enabled" :disabled="busy || !canEnable" @change="onToggleEnabled($event)" />
           <span>{{ settings?.enabled ? 'Включено' : 'Выключено' }}</span>
         </label>
       </div>
@@ -34,16 +34,19 @@
       <form class="yg-form" @submit.prevent="onAdminLookup">
         <div class="field">
           <label class="lbl">Логин YouGile (email)</label>
-          <input class="ctl" type="email" autocomplete="email"
-                 v-model="adminForm.login" :disabled="busy" required />
+          <input
+v-model="adminForm.login" class="ctl" type="email"
+                 autocomplete="email" :disabled="busy" required />
         </div>
         <div class="field">
           <label class="lbl">Пароль YouGile</label>
-          <input class="ctl" type="password" autocomplete="current-password"
-                 v-model="adminForm.password" :disabled="busy" required />
+          <input
+v-model="adminForm.password" class="ctl" type="password"
+                 autocomplete="current-password" :disabled="busy" required />
         </div>
         <div class="actions">
-          <button class="btn-filled" type="submit"
+          <button
+class="btn-filled" type="submit"
                   :disabled="busy || !adminForm.login || !adminForm.password">
             Получить список компаний
           </button>
@@ -54,7 +57,8 @@
       <div v-if="ygCompanies.length" class="picker">
         <div class="picker-lbl">Выберите компанию YouGile:</div>
         <div class="picker-list">
-          <button v-for="c in ygCompanies" :key="c.id" class="picker-item"
+          <button
+v-for="c in ygCompanies" :key="c.id" class="picker-item"
                   :class="{ active: pickedCompanyId === c.id }"
                   :disabled="busy" @click="pickCompany(c)">
             <span class="material-symbols-outlined">domain</span>
@@ -86,7 +90,7 @@
             :disabled="busy || projectsLoading"
             :loading="projectsLoading"
             filter
-            filterPlaceholder="Поиск..."
+            filter-placeholder="Поиск..."
             show-clear
             @update:model-value="onPickProject"
           />
@@ -103,7 +107,7 @@
             :disabled="busy || boardsLoading || !settings?.yg_project_id"
             :loading="boardsLoading"
             filter
-            filterPlaceholder="Поиск..."
+            filter-placeholder="Поиск..."
             show-clear
             @update:model-value="onPickBoard"
           />
@@ -123,7 +127,7 @@
             :disabled="busy || columnsLoading || !settings?.yg_board_id"
             :loading="columnsLoading"
             filter
-            filterPlaceholder="Поиск..."
+            filter-placeholder="Поиск..."
             show-clear
             @update:model-value="onPickCompleted"
           />

@@ -4,6 +4,10 @@ import { apiRequest } from './client.js'
 
 // Список ВСЕХ пользователей платформы — только для супер-админа.
 export const getUsers = () => apiRequest('/users')
+// Сводка живой плитки супер-админа: { total, active }.
+export const getUsersSummary = () => apiRequest('/users/summary')
+// Сотрудники активной компании для плитки: { total, ids }.
+export const getDirectorySummary = () => apiRequest('/users/directory/summary')
 
 export const createUser = (data) => apiRequest('/users', { method: 'POST', body: data })
 

@@ -9,7 +9,7 @@
     @update:model-value="$emit('update:modelValue', $event)"
     @confirm="apply"
   >
-    <BackgroundEditor :recipe="recipe" :upload-fn="uploadFn" />
+    <BackgroundEditor :recipe="recipe" :upload-fn="uploadFn" @update:recipe="(r) => Object.assign(recipe, r)" />
 
     <p class="pbg-hint">
       Оформление личное и синхронизируется на всех ваших устройствах — коллеги

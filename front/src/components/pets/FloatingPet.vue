@@ -102,16 +102,11 @@ function onBubbleTap() {
   modalOpen.value = true
 }
 
+// Дата «сегодня» — ЛОКАЛЬНАЯ: toISOString дал бы UTC и ложный «голодный»
+// пузырь ночью в поясах восточнее Гринвича.
 function todayKey() {
   const d = new Date()
   return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`
-}
-
-// Дата «сегодня» — ЛОКАЛЬНАЯ в обеих проверках (toISOString дал бы UTC и
-// ложный «голодный» пузырь ночью в поясах восточнее Гринвича).
-function localDateISO() {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 function checkHungry(p) {

@@ -210,12 +210,12 @@
     <Dialog
       v-if="showCustomDialog"
       :visible="showCustomDialog"
-      @update:visible="closeCustomDialog"
       modal
       :append-to="host"
       :pt="{ mask: { class: { 'gw-in-window-mask': inWindow } } }"
       header="Свой период"
       :style="{ width: '380px', maxWidth: '95vw' }"
+      @update:visible="closeCustomDialog"
     >
       <div class="custom-range-picker">
         <DatePicker
@@ -240,9 +240,9 @@
       <button
         class="rail-reset"
         :disabled="!hasActiveFilters"
-        @click="tasksStore.resetFilters()"
         title="Сбросить сортировку и фильтры"
         aria-label="Сбросить сортировку и фильтры"
+        @click="tasksStore.resetFilters()"
       >
         <span class="material-symbols-outlined">restart_alt</span>
         <span class="reset-btn-label">Сбросить всё</span>

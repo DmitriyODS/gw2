@@ -25,13 +25,13 @@
           <span>{{ unit.datetime_end ? `Окончен: ${formatFullDate(unit.datetime_end)}` : 'В работе' }}</span>
         </div>
         <div class="unit-actions">
-          <button v-if="canClone" class="icon-btn" @click.stop="$emit('clone', unit)" title="Начать новый юнит с тем же названием и типом">
+          <button v-if="canClone" class="icon-btn" title="Начать новый юнит с тем же названием и типом" @click.stop="$emit('clone', unit)">
             <span class="material-symbols-outlined">restart_alt</span>
           </button>
-          <button v-if="canEdit" class="icon-btn" @click.stop="$emit('edit', unit)" title="Редактировать">
+          <button v-if="canEdit" class="icon-btn" title="Редактировать" @click.stop="$emit('edit', unit)">
             <span class="material-symbols-outlined">edit</span>
           </button>
-          <button v-if="canDelete" class="icon-btn danger" @click.stop="$emit('delete', unit)" title="Удалить">
+          <button v-if="canDelete" class="icon-btn danger" title="Удалить" @click.stop="$emit('delete', unit)">
             <span class="material-symbols-outlined">delete</span>
           </button>
         </div>

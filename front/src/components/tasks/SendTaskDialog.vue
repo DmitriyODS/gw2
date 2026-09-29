@@ -49,7 +49,7 @@
           <div class="sendtask-name">{{ picked.fio }}</div>
           <div class="sendtask-meta">@{{ picked.login }}</div>
         </div>
-        <button class="picked-change" @click="picked = null" :disabled="sending" title="Выбрать другого">
+        <button class="picked-change" :disabled="sending" title="Выбрать другого" @click="picked = null">
           <span class="material-symbols-outlined">person_remove</span>
         </button>
       </div>

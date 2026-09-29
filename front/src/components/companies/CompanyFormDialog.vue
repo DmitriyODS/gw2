@@ -46,7 +46,7 @@
                 <small>Канбан-режим, цветные теги этапов в карточках</small>
               </span>
             </span>
-            <input type="checkbox" v-model="form.settings.uses_stages" class="switch" />
+            <input v-model="form.settings.uses_stages" type="checkbox" class="switch" />
           </label>
           <label class="switch-row">
             <span class="switch-text">
@@ -55,7 +55,7 @@
                 <small>Импорт/экспорт карточек, бейдж и кнопки в задачах. Если выключено — остаётся обычное поле «Ссылка на YouGile»</small>
               </span>
             </span>
-            <input type="checkbox" v-model="form.settings.uses_yougile" class="switch" />
+            <input v-model="form.settings.uses_yougile" type="checkbox" class="switch" />
           </label>
           <label class="switch-row">
             <span class="switch-text">
@@ -64,7 +64,7 @@
                 <small>Кнопки звонка в мессенджере и профилях</small>
               </span>
             </span>
-            <input type="checkbox" v-model="form.settings.uses_calls" class="switch" />
+            <input v-model="form.settings.uses_calls" type="checkbox" class="switch" />
           </label>
           <label class="switch-row">
             <span class="switch-text">
@@ -73,7 +73,7 @@
                 <small>Геймификация: питомцы-Грувики, лента активности, кудосы и рейды</small>
               </span>
             </span>
-            <input type="checkbox" v-model="form.settings.uses_groove" class="switch" />
+            <input v-model="form.settings.uses_groove" type="checkbox" class="switch" />
           </label>
         </div>
       </div>

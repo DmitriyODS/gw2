@@ -40,7 +40,7 @@
       >
         <span class="tec-circle" :style="{ background: vars[key] }">
           <span class="material-symbols-outlined">edit</span>
-          <input type="color" v-model="vars[key]" @input="preview" />
+          <input v-model="vars[key]" type="color" @input="preview" />
         </span>
         <span class="tec-text">
           <span class="tec-name">{{ label.title }}</span>

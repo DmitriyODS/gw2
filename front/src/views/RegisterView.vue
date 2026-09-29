@@ -24,7 +24,7 @@
             placeholder="Фамилия Имя Отчество"
             autocomplete="name"
             :disabled="loading"
-            @update:modelValue="onFioInput"
+            @update:model-value="onFioInput"
           />
           <AuthField
             v-model="form.login"
@@ -32,7 +32,7 @@
             placeholder="подставим из ФИО"
             autocomplete="username"
             :disabled="loading"
-            @update:modelValue="loginTouched = true"
+            @update:model-value="loginTouched = true"
           />
           <AuthField
             v-model="form.email"
@@ -105,7 +105,7 @@
         size="md"
         title="Фото профиля"
         subtitle="Выберите снимок и обрежьте его под аватар."
-        @update:modelValue="cropping = false"
+        @update:model-value="cropping = false"
       >
         <AvatarCropper @cropped="onCropped" @cancel="cropping = false" />
       </AppDialog>

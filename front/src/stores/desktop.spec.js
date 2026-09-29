@@ -137,6 +137,20 @@ describe('оконный менеджер', () => {
     expect(appById('tasks').available({ hasCompany: false, isSuperAdmin: true, settings: {} })).toBe(false)
   })
 
+  it('восстановленные окна спят до первого показа, новые — нет', () => {
+    const desktop = freshStore()
+    desktop.open('/notes')
+    desktop.open('/boards')
+
+    const restored = freshStore()
+    restored.restoreSession(() => true)
+    expect(restored.windows.every((w) => w.dormant)).toBe(true)
+    const [first] = restored.windows
+    restored.wake(first.id)
+    expect(first.dormant).toBe(false)
+    expect(restored.open('/drive').dormant).toBe(false)
+  })
+
   it('закрытие последнего окна снимает фокус', () => {
     const desktop = freshStore()
     const win = desktop.open('/tasks')

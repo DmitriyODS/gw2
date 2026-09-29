@@ -80,7 +80,6 @@ export const GRADIENT_PRESETS = [
 ]
 
 const rand = (min, max) => min + Math.random() * (max - min)
-const pickOne = (arr) => arr[Math.floor(Math.random() * arr.length)]
 
 /* Случайная композиция пятен — якорятся к краям, центр остаётся спокойным. */
 export function randomGradientBlobs() {

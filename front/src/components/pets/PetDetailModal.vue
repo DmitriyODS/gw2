@@ -27,13 +27,13 @@
                 @keyup.enter="saveName"
                 @keyup.esc="renaming = false"
               />
-              <button class="pdm-icon-btn" type="button" @click="saveName" aria-label="Сохранить имя">
+              <button class="pdm-icon-btn" type="button" aria-label="Сохранить имя" @click="saveName">
                 <span class="material-symbols-outlined">check</span>
               </button>
             </template>
             <template v-else>
               <h2 class="pdm-name">{{ pet?.name }}</h2>
-              <button class="pdm-icon-btn" type="button" @click="startRename" aria-label="Переименовать">
+              <button class="pdm-icon-btn" type="button" aria-label="Переименовать" @click="startRename">
                 <span class="material-symbols-outlined">edit</span>
               </button>
             </template>

@@ -7,7 +7,7 @@
    получают метку кадра, «калька» показывает соседние, а готовое уезжает
    видеофайлом. Всё это — свойства той же сцены, поэтому отдельного хранилища
    у анимации нет. */
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import InputText from 'primevue/inputtext'
 import AppPage from '@/components/ui/AppPage.vue'
@@ -41,7 +41,10 @@ const { downloadBoard } = useBoardDownload()
 const boardId = computed(() => Number(route.params.id))
 
 const board = ref(null)
-const scene = ref(emptyScene())
+/* Сцена неизменяема: каждая правка — новый объект (onSceneUpdate, ops соавторов,
+   undo). Поэтому shallowRef: глубокие прокси над тысячами точек штрихов
+   замедляли отрисовку, а глубокие watch обходили всю сцену на каждую правку. */
+const scene = shallowRef(emptyScene())
 const title = ref('')
 const loading = ref(true)
 const saving = ref(false)
@@ -97,6 +100,7 @@ const me = computed(() => ({ id: auth.userId, fio: auth.user?.fio || '' }))
 const zoom = computed(() => canvasRef.value?.camera?.scale || 1)
 const background = computed(() => normalizeScene(scene.value).background)
 const frames = computed(() => normalizeScene(scene.value).animation?.frames || [])
+const fps = computed(() => normalizeScene(scene.value).animation?.fps || 12)
 // Панель свойств и дерево слоёв показывают ТЕ ЖЕ объекты, что выделены на
 // холсте: выделение живёт в холсте, наружу приходит списком id.
 const selectedObjects = computed(() => {
@@ -735,7 +739,7 @@ watch(title, () => {
     <ExportAnimationDialog
       v-model="exportOpen"
       :frames="frames"
-      :fps="normalizeScene(scene).animation?.fps || 12"
+      :fps="fps"
       :busy="exportingVideo"
       :progress="exportProgress"
       @export="exportAnimation"

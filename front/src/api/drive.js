@@ -56,6 +56,8 @@ export function uploadFile(file, folderId = null, { onProgress, signal } = {}) {
 }
 
 export const getFile = (id) => apiRequest(`/drive/files/${id}`)
+// Сводка живой плитки: { total, latest: {id, name} | null }.
+export const getDriveSummary = () => apiRequest('/drive/summary')
 
 export const renameFile = (id, name) =>
   apiRequest(`/drive/files/${id}`, { method: 'PATCH', body: { name } })

@@ -118,27 +118,27 @@
     <div v-else class="ri-pane">
       <div v-if="loading" class="ri-empty">Загрузка…</div>
       <EmptyState
-        v-else-if="!history.length"
+        v-else-if="!issues.length"
         size="sm"
         icon="history"
         title="Движений не было"
         subtitle="Позиция ни разу не выдавалась."
       />
       <ul v-else class="ri-history">
-        <li v-for="issue in history" :key="issue.id" class="ri-issue">
+        <li v-for="entry in issues" :key="entry.id" class="ri-issue">
           <div class="ri-issue-head">
-            <span class="ri-issue-who">{{ issue.issued_to || issue.holder_name || 'Не указан' }}</span>
-            <span v-if="issue.holder_name" class="ri-issue-phone">
-              отв. {{ issue.holder_name }}<template v-if="issue.holder_phone">, {{ issue.holder_phone }}</template>
+            <span class="ri-issue-who">{{ entry.issued_to || entry.holder_name || 'Не указан' }}</span>
+            <span v-if="entry.holder_name" class="ri-issue-phone">
+              отв. {{ entry.holder_name }}<template v-if="entry.holder_phone">, {{ entry.holder_phone }}</template>
             </span>
             <span class="ri-spacer" />
             <AppChip
-              :label="issue.returned_at ? 'возвращено' : 'на руках'"
-              :tone="issue.returned_at ? 'success' : 'warning'"
+              :label="entry.returned_at ? 'возвращено' : 'на руках'"
+              :tone="entry.returned_at ? 'success' : 'warning'"
             />
           </div>
           <ul class="ri-events">
-            <li v-for="e in issue.events || []" :key="e.id" class="ri-event">
+            <li v-for="e in entry.events || []" :key="e.id" class="ri-event">
               <span class="ri-event-kind">{{ EVENT_LABEL[e.kind] || e.kind }}</span>
               <span class="ri-event-when">{{ when(e.created_at) }}</span>
               <span v-if="e.due_at" class="ri-event-due">до {{ day(e.due_at) }}</span>
@@ -198,7 +198,7 @@ const EVENT_LABEL = { issue: 'Выдано', extend: 'Продлено', return:
 const tab = ref('action')
 const busy = ref(false)
 const loading = ref(false)
-const history = ref([])
+const issues = ref([])
 const action = ref('')
 
 const form = ref({ issued_to: '', holder_name: '', holder_phone: '', comment: '' })
@@ -303,7 +303,7 @@ async function loadHistory() {
   loading.value = true
   try {
     const d = await props.history(props.record.id)
-    history.value = d.issues ?? []
+    issues.value = d.issues ?? []
   } catch (e) {
     emit('error', e?.message || 'Не удалось загрузить историю')
   } finally {

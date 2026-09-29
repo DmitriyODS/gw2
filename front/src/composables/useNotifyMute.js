@@ -6,22 +6,22 @@ import { muteNotifications, notifyMutedUntil, unmuteNotifications } from '@/util
    колокольчик и пункт меню менялись сразу, и настройкам, чтобы тумблер не
    расходился с меню.
 
-   Тишина на срок заканчивается сама: пока она идёт, тикает секундный таймер —
-   по его истечении состояние гаснет без перезагрузки страницы. */
+   Тишина на срок заканчивается сама: один таймер ровно до её конца гасит
+   состояние без перезагрузки страницы. */
+
+// Потолок setTimeout (~24,8 суток): дальше таймер сработал бы сразу.
+const MAX_DELAY = 2 ** 31 - 1
 
 const until = ref(notifyMutedUntil())
 let timer = null
 
 function sync() {
   until.value = notifyMutedUntil()
-  clearInterval(timer)
+  clearTimeout(timer)
   timer = null
-  // Тикать есть смысл только у тишины с концом: «навсегда» само не пройдёт.
+  // Ждать есть смысл только у тишины с концом: «навсегда» само не пройдёт.
   if (until.value !== null && until.value !== Infinity) {
-    timer = setInterval(() => {
-      until.value = notifyMutedUntil()
-      if (until.value === null) { clearInterval(timer); timer = null }
-    }, 1000)
+    timer = setTimeout(sync, Math.min(Math.max(until.value - Date.now(), 0) + 50, MAX_DELAY))
   }
 }
 

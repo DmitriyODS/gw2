@@ -7,7 +7,7 @@
         <div class="task-color-sheet" @click.stop>
           <div class="sheet-header">
             <span class="sheet-title">Цвет задачи</span>
-            <button class="sheet-close" @click="close" aria-label="Закрыть">
+            <button class="sheet-close" aria-label="Закрыть" @click="close">
               <span class="material-symbols-outlined">close</span>
             </button>
           </div>
@@ -28,7 +28,7 @@
 </template>
 
 <script setup>
-import { computed, ref, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
+import { ref, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import TaskColorPicker from '@/components/tasks/TaskColorPicker.vue'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
 

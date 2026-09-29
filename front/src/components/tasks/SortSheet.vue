@@ -29,7 +29,7 @@
 import { useTasksStore } from '@/stores/tasks.js'
 import { TASK_SORTS } from '@/components/tasks/taskSorts.js'
 
-const props = defineProps({
+defineProps({
   visible: {
     type: Boolean,
     default: false

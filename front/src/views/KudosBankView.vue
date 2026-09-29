@@ -311,7 +311,8 @@
                 />
               </div>
               <div v-if="f.status === 'active'" class="kb-fund-ops">
-                <AmountInput :model-value="fundAmounts[f.id]" size="sm" class="kb-fund-input"
+                <AmountInput
+:model-value="fundAmounts[f.id]" size="sm" class="kb-fund-input"
                   @update:model-value="(v) => { fundAmounts[f.id] = v }" />
                 <AppButton
                   variant="filled"
@@ -466,7 +467,6 @@ import AppGrid from '@/components/ui/AppGrid.vue'
 import AppStack from '@/components/ui/AppStack.vue'
 import AppTile from '@/components/ui/AppTile.vue'
 import AppPage from '@/components/ui/AppPage.vue'
-import BrandLoader from '@/components/common/BrandLoader.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import KudosCoin from '@/components/pets/KudosCoin.vue'
 import TransferDialog from '@/components/pets/bank/TransferDialog.vue'

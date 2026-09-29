@@ -158,7 +158,7 @@ function drawTextOnPath(ctx, o, outline, size, color) {
 }
 
 /** Заливка объекта: градиент, если задан, иначе цвет (или ничего). */
-function fillPaint(ctx, o, col, colors) {
+function fillPaint(ctx, o, col) {
   if (o.gradient) {
     const box = objectBounds(o)
     const paint = makeGradient(ctx, o.gradient, box, (key) => col(key))
@@ -170,7 +170,7 @@ function fillPaint(ctx, o, col, colors) {
 
 function fillAndStroke(ctx, o, col, colors, path) {
   path()
-  const paint = fillPaint(ctx, o, col, colors)
+  const paint = fillPaint(ctx, o, col)
   if (paint) {
     ctx.save()
     // Обычная заливка полупрозрачна (за фигурой виден холст), «сплошная»
@@ -222,7 +222,7 @@ export function drawObject(ctx, o, images, colors, outline) {
         break
       }
       if (o.filled || o.gradient) {
-        const paint = fillPaint(ctx, o, col, colors) || stroke
+        const paint = fillPaint(ctx, o, col) || stroke
         ctx.save()
         ctx.globalAlpha = ctx.globalAlpha * (o.solid || o.gradient ? 1 : 0.35)
         ctx.fillStyle = paint
@@ -235,7 +235,7 @@ export function drawObject(ctx, o, images, colors, outline) {
     case OBJ.vector: {
       if (!vectorShape(ctx, o)) break
       if (o.filled || o.gradient) {
-        const paint = fillPaint(ctx, o, col, colors) || stroke
+        const paint = fillPaint(ctx, o, col) || stroke
         ctx.save()
         ctx.globalAlpha = ctx.globalAlpha * (o.solid || o.gradient ? 1 : 0.35)
         ctx.fillStyle = paint
@@ -285,7 +285,7 @@ export function drawObject(ctx, o, images, colors, outline) {
     case OBJ.sticky: {
       const tint = col(o.color || 'amber')
       ctx.globalAlpha = 0.85
-      ctx.fillStyle = fillPaint(ctx, o, col, colors) || tint
+      ctx.fillStyle = fillPaint(ctx, o, col) || tint
       roundRect(ctx, o.x, o.y, o.w, o.h, o.radius ?? 6)
       ctx.fill()
       ctx.globalAlpha = 1

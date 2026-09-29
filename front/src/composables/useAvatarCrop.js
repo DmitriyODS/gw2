@@ -1,4 +1,4 @@
-import { ref, reactive } from 'vue'
+import { ref } from 'vue'
 
 export function useAvatarCrop() {
   const imageDataUrl = ref(null)

@@ -28,6 +28,10 @@ export const exportStatsExtended = (from, to, companyId = null) =>
 export const getStatsProfile = (from, to) =>
   apiRequest('/stats/profile' + qs({ from, to }))
 
+// Сводка живой плитки: { week_hours, week_tasks, today_hours }; даты — в зоне клиента.
+export const getStatsSummary = (weekFrom, today) =>
+  apiRequest('/stats/summary' + qs({ week_from: weekFrom, today }))
+
 export const getStatsUserTasks = (userId, from, to) =>
   apiRequest('/stats/user-tasks' + qs({ userId, from, to }))
 

@@ -8,7 +8,7 @@
  * Раскладка (геометрия окон, панель задач, жесты) остаётся в самих каркасах —
  * она у них разная.
  */
-import { computed, onBeforeUnmount, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import router from '@/router/index.js'
 import { useAuthStore } from '@/stores/auth.js'
@@ -45,6 +45,9 @@ const LIVE_PULSE = 60_000
  *   до стартового экрана).
  * @param {'desktop'|'mobile'} [opts.platform] — чья раскладка «Пуска» у этого
  *   каркаса (desktopPrefs хранит стол и мобилу раздельно).
+ * @param {() => boolean} [opts.tilesVisible] — видны ли сейчас живые плитки
+ *   (открыт «Пуск», показан стартовый экран, развёрнута панель). Сводки
+ *   опрашиваются только пока они на экране.
  */
 export function useShellCore({
   activePath,
@@ -54,6 +57,7 @@ export function useShellCore({
   navigate = 'replace',
   onHome = null,
   platform = 'desktop',
+  tilesVisible = () => true,
 }) {
   const route = useRoute()
   const auth = useAuthStore()
@@ -83,8 +87,10 @@ export function useShellCore({
   })
 
   /* ── Живые плитки ───────────────────────────────────────────
-     Сводки тянем заранее и освежаем по таймеру, поэтому стартовый экран
-     открывается уже с данными. В скрытой вкладке не опрашиваем. */
+     Сводки опрашиваются, только пока плитки на экране и вкладка видима: на
+     столе «Пуск» закрыт почти всё время, на телефоне стартовый экран скрыт
+     открытым разделом, а каждый опрос — полтора десятка запросов. Показ
+     плиток освежает сводки, если они старше TTL стора. */
   /* Опрашиваем только те плитки, которые реально показывают сводку: выключенная
      поимённо живая плитка не должна стоить ни одного запроса. */
   const liveAppIds = computed(() => menuGroups({
@@ -100,8 +106,21 @@ export function useShellCore({
     live.refresh(liveAppIds.value, { force }).catch(() => {})
   }
 
+  const pageVisible = ref(!document.hidden)
+  const booted = ref(false)
+  const polling = computed(() => booted.value && pageVisible.value && tilesVisible()
+    && !!auth.user && prefs.liveTiles)
+
+  watch(polling, (on) => {
+    clearInterval(livePulse)
+    livePulse = null
+    if (!on) return
+    pulseLiveTiles()
+    livePulse = setInterval(() => pulseLiveTiles({ force: true }), LIVE_PULSE)
+  })
+
   function onVisibility() {
-    if (!document.hidden) pulseLiveTiles()
+    pageVisible.value = !document.hidden
   }
 
   /* Ярлык раздела с домашнего экрана телефона в уже запущенном приложении:
@@ -149,7 +168,7 @@ export function useShellCore({
   // уведомлений следующего пользователя не должны наследоваться от прежнего.
   watch(() => auth.user, (user) => {
     if (user) {
-      pulseLiveTiles({ force: true })
+      if (polling.value) pulseLiveTiles({ force: true })
       return
     }
     desktop.closeAll()
@@ -164,7 +183,10 @@ export function useShellCore({
   })
 
   // Сменилась активная компания — прежние сводки уже не про неё.
-  watch(() => auth.companyId, () => { live.reset(); pulseLiveTiles({ force: true }) })
+  watch(() => auth.companyId, () => {
+    live.reset()
+    if (polling.value) pulseLiveTiles({ force: true })
+  })
 
   /** Запуск каркаса: вызывать из onMounted ПОСЛЕ расчёта его геометрии. */
   function boot() {
@@ -184,8 +206,7 @@ export function useShellCore({
     // поднимается один раз за вход, а карточка выпуска ведёт в настройки.
     announceRelease()
 
-    pulseLiveTiles()
-    livePulse = setInterval(() => pulseLiveTiles({ force: true }), LIVE_PULSE)
+    booted.value = true
     document.addEventListener('visibilitychange', onVisibility)
     window.addEventListener('gw:open-path', onOpenPath)
   }

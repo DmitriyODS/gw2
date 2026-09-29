@@ -1,11 +1,7 @@
-<script>
+<script setup>
 // Брендовый лоадер: круг логотипа, внутри которого дрейфуют три волны
 // (как на самом логотипе). Замена стандартному спиннеру на экранах загрузки.
-let uid = 0
-</script>
-
-<script setup>
-import { computed } from 'vue'
+import { computed, useId } from 'vue'
 
 const props = defineProps({
   size: { type: Number, default: 88 },
@@ -18,7 +14,7 @@ const props = defineProps({
   minHeight: { type: Number, default: 240 },
 })
 
-const clipId = `bl-clip-${++uid}`
+const clipId = `bl-clip-${useId()}`
 
 // В блочном режиме размер держит сам svg, а контейнер растягивается и центрирует.
 const rootStyle = computed(() => (props.block

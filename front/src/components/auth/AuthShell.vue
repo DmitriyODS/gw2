@@ -8,7 +8,7 @@
 
     <div class="auth-card" :class="`is-${size}`">
       <header class="auth-brand">
-        <Logo :size="22" class="auth-brand-logo" />
+        <BrandLogo :size="22" class="auth-brand-logo" />
         <span class="auth-brand-name">
           <span class="wm-groove">Groove</span>
           <span class="wm-work">Work</span>
@@ -42,7 +42,7 @@
 <script setup>
 import { computed, onMounted, useAttrs } from 'vue'
 import { useRouter } from 'vue-router'
-import Logo from '@/components/common/Logo.vue'
+import BrandLogo from '@/components/common/BrandLogo.vue'
 import AuthWave from '@/components/auth/AuthWave.vue'
 import { useAppVersion } from '@/composables/useAppVersion.js'
 

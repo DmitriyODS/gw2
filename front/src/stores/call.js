@@ -474,14 +474,19 @@ export const useCallStore = defineStore('call', {
       if (this._checkingRejoin) return
       this._checkingRejoin = true
       try {
-        let call
+        let call, incoming
         try {
-          ({ call } = await getActiveCall())
+          ({ call, incoming } = await getActiveCall())
         } catch { return } // сервер недоступен — не трогаем состояние
-        const live = (call && call.status !== 'ended' && call.status !== 'missed') ? call : null
+        const alive = (c) => (c && c.status !== 'ended' && c.status !== 'missed') ? c : null
+        const live = alive(call)
+        // Звонок, который мне ещё звонит (сервер отдаёт его отдельно: в нём я
+        // не участник, и возвращаться в него — значит принять без спроса).
+        const ringing = alive(incoming)
 
         if (this.phase !== 'idle') {
-          if (!live || live.id !== this.call?.id) {
+          const current = live || ringing
+          if (!current || current.id !== this.call?.id) {
             this.reset()
             if (live) this.rejoinCall = live
           }
@@ -491,6 +496,9 @@ export const useCallStore = defineStore('call', {
           // Сервер не видит за мной живого звонка — баннер «Вернуться» устарел
           // (call:ended мог потеряться, пока не было соединения).
           this.rejoinCall = null
+          // Пока сокет спал (фон, обрыв), call:incoming не дошёл — подхватываем
+          // гудки по сверке.
+          if (ringing) this.handleIncoming(ringing)
           return
         }
         // Живой звонок, в котором мы числимся, — после перезагрузки страницы

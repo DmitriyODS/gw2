@@ -1,7 +1,6 @@
 <template>
   <Dialog
     :visible="modelValue"
-    @update:visible="onVisibleChange"
     modal
     :append-to="host"
     :draggable="false"
@@ -10,6 +9,7 @@
     :close-on-escape="closable"
     :style="rootStyle"
     :pt="rootPt"
+    @update:visible="onVisibleChange"
   >
     <div class="app-dialog" :class="[`tone-${tone}`, `size-${size}`]">
       <!-- Шапка: заголовок с подзаголовком и крестик. Декоративной иконки-плашки

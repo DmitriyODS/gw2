@@ -80,8 +80,8 @@
             <button
               class="card-act"
               title="Написать"
-              @click="writeTo(u)"
               :aria-label="`Написать ${u.fio}`"
+              @click="writeTo(u)"
             >
               <span class="material-symbols-outlined">chat_bubble</span>
             </button>
@@ -89,8 +89,8 @@
               v-if="callsOn"
               class="card-act"
               title="Видеозвонок"
-              @click="callTo(u, 'video')"
               :aria-label="`Видеозвонок: ${u.fio}`"
+              @click="callTo(u, 'video')"
             >
               <span class="material-symbols-outlined">videocam</span>
             </button>
@@ -98,8 +98,8 @@
               v-if="callsOn"
               class="card-act"
               title="Аудиозвонок"
-              @click="callTo(u, 'audio')"
               :aria-label="`Аудиозвонок: ${u.fio}`"
+              @click="callTo(u, 'audio')"
             >
               <span class="material-symbols-outlined">call</span>
             </button>

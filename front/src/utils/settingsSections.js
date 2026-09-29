@@ -13,7 +13,7 @@ import { LEGAL_CONSENT_VISIBLE } from '@/utils/release.js'
 import { devToolsOn } from '@/utils/devTools.js'
 
 export function settingsGroups(ctx = {}) {
-  const { isMobile = false, hasCompany = false, isAdmin = false, isSuperAdmin = false } = ctx
+  const { isSuperAdmin = false } = ctx
   return [
     {
       key: 'personal',

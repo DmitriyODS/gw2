@@ -211,7 +211,7 @@
         </div>
 
         <!-- Крошки (проводник) -->
-        <Breadcrumbs
+        <FolderBreadcrumbs
           v-if="isExplorer"
           :items="store.path"
           :root-label="crumbRootLabel"
@@ -377,7 +377,7 @@
 </template>
 
 <script setup>
-import { computed, defineAsyncComponent, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
 import { useDragItem } from '@/composables/useDragItem.js'
@@ -390,7 +390,7 @@ import EmptyState from '@/components/common/EmptyState.vue'
 import BrandLoader from '@/components/common/BrandLoader.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import TreeView from '@/components/common/TreeView.vue'
-import Breadcrumbs from '@/components/common/Breadcrumbs.vue'
+import FolderBreadcrumbs from '@/components/common/FolderBreadcrumbs.vue'
 import ContextMenu from '@/components/common/ContextMenu.vue'
 import ColorSwatchPicker from '@/components/common/ColorSwatchPicker.vue'
 import ShareDialog from '@/components/notes/ShareDialog.vue'

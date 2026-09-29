@@ -286,7 +286,7 @@ const editorRef = ref(null)
 const findBar = ref(null)
 const {
   open: findOpen, query: findQuery, total: findTotal, current: findCurrent,
-  show: showFind, hide: hideFind, toggle: toggleFind, step: stepFind, onKeydown: onFindKeydown,
+  show: showFind, hide: hideFind, step: stepFind, onKeydown: onFindKeydown,
 } = useNoteFind(editorRef)
 
 const focusFind = () => nextTick(() => findBar.value?.focus())

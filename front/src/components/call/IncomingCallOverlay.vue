@@ -23,10 +23,10 @@
           <p class="incoming-sub">{{ subtitle }}</p>
 
           <div class="incoming-actions">
-            <button class="round-btn decline" @click="$emit('decline')" title="Отклонить">
+            <button class="round-btn decline" title="Отклонить" @click="$emit('decline')">
               <span class="material-symbols-outlined">call_end</span>
             </button>
-            <button class="round-btn accept" @click="$emit('accept')" title="Принять">
+            <button class="round-btn accept" title="Принять" @click="$emit('accept')">
               <span class="material-symbols-outlined">call</span>
             </button>
           </div>

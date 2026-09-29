@@ -1,17 +1,17 @@
 <template>
   <Dialog
     :visible="true"
-    @update:visible="$emit('close')"
     modal
     :append-to="host"
     :closable="false"
     :style="dialogStyle"
     :pt="dialogPt"
+    @update:visible="$emit('close')"
   >
     <div class="task-modal-body" :class="{ 'mobile-layout': isMobile }">
       <!-- ─── Мобильная шапка: M3 Top App Bar ─── -->
       <header v-if="isMobile" class="mobile-topbar">
-        <button class="topbar-icon-btn" @click="$emit('close')" aria-label="Закрыть">
+        <button class="topbar-icon-btn" aria-label="Закрыть" @click="$emit('close')">
           <span class="material-symbols-outlined">arrow_back</span>
         </button>
         <div class="topbar-title-wrap">
@@ -21,8 +21,8 @@
         <button
           class="topbar-icon-btn"
           :class="{ 'is-fav': task.is_favorite }"
-          @click="handleToggleFavorite"
           :aria-label="task.is_favorite ? 'Убрать из избранного' : 'Добавить в избранное'"
+          @click="handleToggleFavorite"
         >
           <span class="material-symbols-outlined" :class="{ filled: task.is_favorite }">
             {{ task.is_favorite ? 'favorite' : 'favorite_border' }}
@@ -31,8 +31,8 @@
         <button
           class="topbar-icon-btn"
           :class="{ active: showMobileMenu }"
-          @click="showMobileMenu = !showMobileMenu"
           aria-label="Дополнительно"
+          @click="showMobileMenu = !showMobileMenu"
         >
           <span class="material-symbols-outlined">more_vert</span>
         </button>
@@ -55,7 +55,7 @@
               <span class="material-symbols-outlined">link</span>
               Скопировать ссылку
             </button>
-            <button class="mm-item" ref="colorBtnRef" @click="onMobileMenuAction('color')">
+            <button ref="colorBtnRef" class="mm-item" @click="onMobileMenuAction('color')">
               <span class="material-symbols-outlined">palette</span>
               Цвет задачи
             </button>
@@ -115,8 +115,8 @@
             <button
               class="icon-btn-round favorite"
               :class="{ 'is-fav': task.is_favorite }"
-              @click="handleToggleFavorite"
               :title="task.is_favorite ? 'Убрать из избранного' : 'Добавить в избранное'"
+              @click="handleToggleFavorite"
             >
               <span class="material-symbols-outlined" :class="{ filled: task.is_favorite }">
                 {{ task.is_favorite ? 'favorite' : 'favorite_border' }}
@@ -124,8 +124,8 @@
             </button>
             <button
               class="icon-btn-round"
-              @click="copySelfLink"
               title="Скопировать ссылку на задачу"
+              @click="copySelfLink"
             >
               <span class="material-symbols-outlined">link</span>
             </button>
@@ -133,8 +133,8 @@
               ref="colorBtnRef"
               class="icon-btn-round"
               :class="{ active: showColorPicker }"
-              @click="showColorPicker = !showColorPicker"
               title="Цвет задачи"
+              @click="showColorPicker = !showColorPicker"
             >
               <span class="material-symbols-outlined">palette</span>
             </button>
@@ -144,10 +144,10 @@
               :value="task.color || null"
               @select="handleSetColor"
             />
-            <button v-if="canEditTask" class="icon-btn-round" @click="showEditForm = true" title="Редактировать">
+            <button v-if="canEditTask" class="icon-btn-round" title="Редактировать" @click="showEditForm = true">
               <span class="material-symbols-outlined">edit</span>
             </button>
-            <button v-if="canDeleteTask" class="icon-btn-round danger" @click="confirmDelete" title="Удалить">
+            <button v-if="canDeleteTask" class="icon-btn-round danger" title="Удалить" @click="confirmDelete">
               <span class="material-symbols-outlined">delete</span>
             </button>
           </div>
@@ -189,14 +189,15 @@
           <!-- Связь есть -->
           <div v-if="task.link_yougile" class="field-value yougile-value">
             <span class="yougile-url">{{ task.link_yougile }}</span>
-            <button class="action-btn-round" @click="copyLink" title="Скопировать ссылку">
+            <button class="action-btn-round" title="Скопировать ссылку" @click="copyLink">
               <span class="material-symbols-outlined">content_copy</span>
             </button>
-            <a :href="task.link_yougile" target="_blank" class="action-btn-round" title="Открыть в новой вкладке">
+            <a :href="task.link_yougile" target="_blank" rel="noopener noreferrer" class="action-btn-round" title="Открыть в новой вкладке">
               <span class="material-symbols-outlined">open_in_new</span>
             </a>
-            <button v-if="yougileAvailable" class="action-btn-round danger"
-                    :disabled="ygBusy" @click="onUnlinkYg" title="Отвязать от YouGile">
+            <button
+v-if="yougileAvailable" class="action-btn-round danger"
+                    :disabled="ygBusy" title="Отвязать от YouGile" @click="onUnlinkYg">
               <span class="material-symbols-outlined">link_off</span>
             </button>
           </div>
@@ -305,8 +306,8 @@
           <button
             v-if="!task.is_archived && canEditTask"
             class="btn-full pill primary-btn"
-            @click="confirmArchive"
             :disabled="actionLoading"
+            @click="confirmArchive"
           >
             <span class="material-symbols-outlined">check_circle</span>
             Завершить задачу
@@ -314,8 +315,8 @@
           <button
             v-if="task.is_archived && canEditTask"
             class="btn-full pill accent-btn"
-            @click="handleRestore"
             :disabled="actionLoading"
+            @click="handleRestore"
           >
             <span class="material-symbols-outlined">unarchive</span>
             Вернуть из архива
@@ -358,7 +359,7 @@
               <span class="material-symbols-outlined">add</span>
               Начать юнит
             </button>
-            <button class="btn-close-round" @click="$emit('close')" title="Закрыть">
+            <button class="btn-close-round" title="Закрыть" @click="$emit('close')">
               <span class="material-symbols-outlined">close</span>
             </button>
           </div>
@@ -558,8 +559,6 @@ const confirmDialog = ref({
   confirmLabel: '',
   onConfirm: () => {}
 })
-
-const isOwnTask = computed(() => props.task.author_id === authStore.user?.id)
 
 // Режим отпуска: правка задач и старт юнитов закрыты (бэкенд отдаёт ON_VACATION).
 const onVacation = computed(() => !!authStore.user?.on_vacation)

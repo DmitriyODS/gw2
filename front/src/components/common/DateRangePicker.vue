@@ -1,12 +1,12 @@
 <template>
   <DatePicker
     :model-value="modelValue"
-    @update:model-value="$emit('update:modelValue', $event)"
     selection-mode="range"
     date-format="dd.mm.yy"
     show-icon
     :show-button-bar="true"
     placeholder="Выберите период"
+    @update:model-value="$emit('update:modelValue', $event)"
   />
 </template>
 

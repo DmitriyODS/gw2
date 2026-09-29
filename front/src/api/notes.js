@@ -14,6 +14,8 @@ export const getNotes = (params = {}, options = {}) =>
   apiRequest(`/notes?${qs(params)}`, options)
 
 export const getNote = (id) => apiRequest(`/notes/${id}`)
+// Сводка живой плитки: { total, latest: {id, title} | null }.
+export const getNotesSummary = () => apiRequest('/notes/summary')
 
 export const createNote = (title = '', folderId = null) =>
   apiRequest('/notes', { method: 'POST', body: { title, folder_id: folderId } })

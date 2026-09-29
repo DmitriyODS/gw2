@@ -7,7 +7,7 @@ import { useDesktopPrefsStore } from '@/stores/desktopPrefs.js'
 import { pushNotification, clearNotificationJournal } from '@/composables/useDesktopNotifications.js'
 import { isNotifyMuted, unmuteNotifications } from '@/utils/systemNotify.js'
 import { useAuthStore } from '@/stores/auth.js'
-import Taskbar from './Taskbar.vue'
+import DesktopTaskbar from './DesktopTaskbar.vue'
 
 function setup() {
   setActivePinia(createPinia())
@@ -17,7 +17,7 @@ function setup() {
   const desktop = useDesktopStore()
   desktop.setScreen({ x: 0, y: 0, w: 1424, h: 904 })
   desktop.setArea({ x: 12, y: 12, w: 1400, h: 800 })
-  const wrapper = mount(Taskbar, {
+  const wrapper = mount(DesktopTaskbar, {
     global: { stubs: { Logo: true, ContextMenu: true, NotificationsPanel: true } },
   })
   return { desktop, wrapper }

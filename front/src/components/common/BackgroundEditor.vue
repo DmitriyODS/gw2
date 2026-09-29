@@ -1,8 +1,9 @@
 <script setup>
 /* Общий редактор оформления фона (чаты мессенджера и лента портала): живой
    предпросмотр + своя картинка с размытием + градиент-пресеты + узор (SVG-фигуры
-   или эмодзи). Правит переданный реактивный `recipe` НА МЕСТЕ (владелец —
-   родитель, он же применяет/сбрасывает). Загрузку картинки делегирует `uploadFn`,
+   или эмодзи). Рецептом владеет родитель: каждая правка приходит к нему НОВЫМ
+   объектом через событие `update:recipe`, он же применяет/сбрасывает.
+   Загрузку картинки делегирует `uploadFn`,
    чтобы каждый раздел грузил в своё хранилище. */
 import { ref, computed } from 'vue'
 import AppButton from '@/components/ui/AppButton.vue'
@@ -17,7 +18,7 @@ import {
 } from '@/utils/chatBackgrounds.js'
 
 const props = defineProps({
-  // Реактивный рабочий рецепт (мутируется на месте).
+  // Рабочий рецепт; правки уходят событием update:recipe.
   recipe: { type: Object, required: true },
   // async (File) => { url }: загрузка картинки в хранилище раздела.
   uploadFn: { type: Function, required: true },
@@ -29,6 +30,17 @@ const props = defineProps({
   presets: { type: Array, default: () => [] },
 })
 
+const emit = defineEmits(['update:recipe'])
+
+/** Правка рецепта: новый объект верхнего уровня, вложенные части — тоже копии. */
+function update(patch) {
+  emit('update:recipe', { ...props.recipe, ...patch })
+}
+const setGradient = (patch) => update({ gradient: { ...props.recipe.gradient, ...patch } })
+const setPattern = (patch) => update({ pattern: { ...props.recipe.pattern, ...patch } })
+const setImage = (patch) => update({ image: { ...props.recipe.image, ...patch } })
+const setSolid = (patch) => update({ solid: { ...props.recipe.solid, ...patch } })
+
 const notif = useNotificationsStore()
 const theme = useThemeStore()
 const uploading = ref(false)
@@ -38,36 +50,32 @@ const gradientPreset = computed(() => props.recipe.gradient.preset)
 const previewRecipe = computed(() => normalizeRecipe(props.recipe))
 
 function pickPreset(key) {
-  props.recipe.gradient.preset = key
-  props.recipe.gradient.blobs = null
+  setGradient({ preset: key, blobs: null })
 }
 
 function generate() {
-  props.recipe.gradient.preset = 'custom'
-  props.recipe.gradient.blobs = randomGradientBlobs()
+  setGradient({ preset: 'custom', blobs: randomGradientBlobs() })
 }
 
 function pickPattern(key) {
-  const p = props.recipe.pattern
-  p.key = key
-  p.emoji = null // фигура и эмодзи взаимоисключимы
+  const p = { ...props.recipe.pattern, key, emoji: null } // фигура и эмодзи взаимоисключимы
   if (key && (!p.alpha || p.alpha < 1)) p.alpha = 6
   if (p.alpha > 15) p.alpha = 15 // потолок фигуры-узора
   if (key && !p.size) p.size = 128
+  update({ pattern: p })
 }
 
 function pickEmoji(e) {
-  const p = props.recipe.pattern
-  p.emoji = e
-  p.key = null
+  const p = { ...props.recipe.pattern, emoji: e, key: null }
   if (!p.alpha || p.alpha < 8) p.alpha = 14 // цветной эмодзи заметнее
   if (!p.size) p.size = 128
+  update({ pattern: p })
 }
 
 /* Готовые обои хранятся ключом: пути к светлой и тёмной картинке
    пересобираются при чтении настроек, а тёмный режим сам берёт свою. */
 function pickWallpaper(w) {
-  props.recipe.image = { key: w.key, url: w.light, dark: w.dark, blur: 0 }
+  update({ image: { key: w.key, url: w.light, dark: w.dark, blur: 0 } })
 }
 
 function pickImageFile() { fileInput.value?.click() }
@@ -83,7 +91,7 @@ async function onImagePicked(e) {
   uploading.value = true
   try {
     const res = await props.uploadFn(file)
-    props.recipe.image = { url: res.url, blur: props.recipe.image?.blur ?? 12 }
+    update({ image: { url: res.url, blur: props.recipe.image?.blur ?? 12 } })
   } catch (err) {
     notif.error(err?.message || 'Не удалось загрузить картинку')
   } finally {
@@ -91,19 +99,20 @@ async function onImagePicked(e) {
   }
 }
 
-function removeImage() { props.recipe.image = null }
+function removeImage() { update({ image: null }) }
 
 /* Однотонная заливка: цвет — роль токена, поэтому следует теме. Выбор заливки
    гасит градиент — вместе они дают не «ровный цвет», а грязь; вернуть пятна
    можно тут же, кнопкой градиента. */
 function pickSolid(role) {
   if (!role) {
-    props.recipe.solid = null
+    update({ solid: null })
     return
   }
-  props.recipe.solid = { role, amount: props.recipe.solid?.amount ?? 40 }
-  props.recipe.gradient.preset = 'plain'
-  props.recipe.gradient.blobs = null
+  update({
+    solid: { role, amount: props.recipe.solid?.amount ?? 40 },
+    gradient: { ...props.recipe.gradient, preset: 'plain', blobs: null },
+  })
 }
 
 // IMAGE_BLUR_MAX используется в шаблоне (импорт доступен из script setup).
@@ -194,7 +203,7 @@ function patternSwatchStyle(key) {
       </div>
       <div v-if="recipe.image" class="cbg-slider">
         <label>Размытие</label>
-        <Slider v-model="recipe.image.blur" :min="0" :max="IMAGE_BLUR_MAX" class="cbg-slider-ctl" />
+        <Slider :model-value="recipe.image.blur" :min="0" :max="IMAGE_BLUR_MAX" class="cbg-slider-ctl" @update:model-value="(v) => setImage({ blur: v })" />
         <span class="cbg-slider-val">{{ recipe.image.blur }}</span>
       </div>
     </div>
@@ -255,7 +264,7 @@ function patternSwatchStyle(key) {
 
       <div v-if="recipe.solid" class="cbg-slider">
         <label>Насыщённость</label>
-        <Slider v-model="recipe.solid.amount" :min="0" :max="100" class="cbg-slider-ctl" />
+        <Slider :model-value="recipe.solid.amount" :min="0" :max="100" class="cbg-slider-ctl" @update:model-value="(v) => setSolid({ amount: v })" />
         <span class="cbg-slider-val">{{ recipe.solid.amount }}</span>
       </div>
     </div>
@@ -289,12 +298,12 @@ function patternSwatchStyle(key) {
       <template v-if="recipe.pattern.key || recipe.pattern.emoji">
         <div class="cbg-slider">
           <label>Насыщённость</label>
-          <Slider v-model="recipe.pattern.alpha" :min="1" :max="recipe.pattern.emoji ? 30 : 15" class="cbg-slider-ctl" />
+          <Slider :model-value="recipe.pattern.alpha" :min="1" :max="recipe.pattern.emoji ? 30 : 15" class="cbg-slider-ctl" @update:model-value="(v) => setPattern({ alpha: v })" />
           <span class="cbg-slider-val">{{ recipe.pattern.alpha }}</span>
         </div>
         <div class="cbg-slider">
           <label>Размер</label>
-          <Slider v-model="recipe.pattern.size" :min="64" :max="240" :step="8" class="cbg-slider-ctl" />
+          <Slider :model-value="recipe.pattern.size" :min="64" :max="240" :step="8" class="cbg-slider-ctl" @update:model-value="(v) => setPattern({ size: v })" />
           <span class="cbg-slider-val">{{ recipe.pattern.size }}</span>
         </div>
       </template>

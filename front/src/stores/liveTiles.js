@@ -10,19 +10,19 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { getTasks } from '@/api/tasks.js'
-import { getNotes } from '@/api/notes.js'
-import { getBoards } from '@/api/boards.js'
-import { browse as browseDrive } from '@/api/drive.js'
+import { getNotesSummary } from '@/api/notes.js'
+import { getBoardsSummary } from '@/api/boards.js'
+import { getDriveSummary } from '@/api/drive.js'
 import { getUpcoming as getUpcomingReminders } from '@/api/reminders.js'
-import { getRegistries } from '@/api/registries.js'
-import { getForms } from '@/api/forms.js'
+import { getRegistriesSummary } from '@/api/registries.js'
+import { getFormsSummary } from '@/api/forms.js'
 import { getAgenda as getDiaryAgenda } from '@/api/diaries.js'
 import { getAgenda as getScheduleAgenda } from '@/api/schedules.js'
 import { getAgenda as getCalendarAgenda } from '@/api/calendars.js'
 import { getPosts } from '@/api/portal.js'
-import { getStatsProfile } from '@/api/stats.js'
+import { getStatsSummary } from '@/api/stats.js'
 import { listMyCompanies, listCompanies } from '@/api/companies.js'
-import { getDirectory, getUsers } from '@/api/users.js'
+import { getDirectorySummary, getUsersSummary } from '@/api/users.js'
 import { useAuthStore } from '@/stores/auth.js'
 
 const TTL = 60_000
@@ -73,24 +73,13 @@ const SOURCES = {
     return getCalendarAgenda(from.toISOString(), to.toISOString(), 3)
   },
 
-  notes: async () => {
-    const data = await getNotes({})
-    const notes = data.notes ?? []
-    return { total: notes.length, latest: notes[0] || null }
-  },
+  /* Сводки считает сервер (счётчик и последний элемент в SQL): раньше ради
+     числа на плитке раз в минуту тянулся весь список раздела. */
+  notes: () => getNotesSummary(),
 
-  boards: async () => {
-    const data = await getBoards({})
-    const boards = data.boards ?? []
-    return { total: boards.length, latest: boards[0] || null }
-  },
+  boards: () => getBoardsSummary(),
 
-  drive: async () => {
-    // «Недавние» — уже готовая выборка сервиса: свежие файлы сверху.
-    const data = await browseDrive({ view: 'recent' })
-    const files = data.files ?? []
-    return { total: files.length, latest: files[0] || null }
-  },
+  drive: () => getDriveSummary(),
 
   reminders: async () => {
     const data = await getUpcomingReminders(3)
@@ -98,24 +87,9 @@ const SOURCES = {
     return { total: items.length, items }
   },
 
-  forms: async () => {
-    const data = await getForms('all')
-    const items = data.forms ?? []
-    // «Ждут ответа» — назначенные лично, где человек ещё не отвечал: именно
-    // это плитка и должна показывать в первую очередь.
-    const pending = items.filter((f) => f.my_due_at && !f.my_responded)
-    return {
-      total: items.length,
-      pending: pending.length,
-      next: pending.sort((a, b) => new Date(a.my_due_at) - new Date(b.my_due_at))[0] || null,
-      responses: items.reduce((sum, f) => sum + (f.responses || 0), 0),
-    }
-  },
+  forms: () => getFormsSummary(),
 
-  registries: async () => {
-    const items = (await getRegistries()) ?? []
-    return { total: items.length, names: items.slice(0, 3).map((r) => r.name) }
-  },
+  registries: () => getRegistriesSummary(),
 
   portal: async () => {
     const data = await getPosts({ limit: 1 })
@@ -124,15 +98,11 @@ const SOURCES = {
   },
 
   stats: async () => {
-    const today = ymd(new Date())
-    const [week, day] = await Promise.all([
-      getStatsProfile(ymd(startOfWeek(new Date())), today),
-      getStatsProfile(today, today),
-    ])
+    const data = await getStatsSummary(ymd(startOfWeek(new Date())), ymd(new Date()))
     return {
-      weekHours: week?.total_hours ?? 0,
-      weekTasks: week?.tasks_count ?? 0,
-      todayHours: day?.total_hours ?? 0,
+      weekHours: data?.week_hours ?? 0,
+      weekTasks: data?.week_tasks ?? 0,
+      todayHours: data?.today_hours ?? 0,
     }
   },
 
@@ -142,21 +112,16 @@ const SOURCES = {
     return { total: items.length, active: items.filter((c) => c.is_active !== false).length }
   },
 
-  users: async () => {
-    const items = (await getUsers()) ?? []
-    return { total: items.length, active: items.filter((u) => u.is_active).length }
-  },
+  users: () => getUsersSummary(),
 
-  /* Сотрудники активной компании. Отдаём и id — «сколько в сети» плитка
-     считает сама, пересекая их с presence мессенджера: отдельного счётчика
-     онлайна по компании на сервере нет, а общий онлайн платформы для этой
-     плитки соврал бы. */
+  /* Сотрудники активной компании: число и id — «сколько в сети» плитка
+     считает сама, пересекая их с presence (шлюз отдаёт онлайн только круга
+     пользователя). Супер-админу — активные пользователи платформы. */
   employees: async () => {
     const auth = useAuthStore()
-    const items = auth.isSuperAdmin
-      ? ((await getUsers()) ?? []).filter((u) => u.is_active)
-      : ((await getDirectory()) ?? [])
-    return { total: items.length, ids: items.map((u) => u.id) }
+    if (!auth.isSuperAdmin) return getDirectorySummary()
+    const { active } = await getUsersSummary()
+    return { total: active, ids: [], allOnline: true }
   },
 }
 

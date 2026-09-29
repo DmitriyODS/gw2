@@ -95,7 +95,7 @@ import { useNotificationsStore } from '@/stores/notifications.js'
 
 const props = defineProps({
   field: { type: Object, required: true },
-  value: { default: null },
+  value: { type: [String, Number, Boolean, Array, Object], default: null },
 })
 
 const lightbox = ref(false)

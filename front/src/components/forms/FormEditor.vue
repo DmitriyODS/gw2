@@ -11,7 +11,7 @@
       <template #actions>
         <AppButton
           variant="filled" size="sm" icon="save" label="Сохранить"
-          :loading="busy" @click="save"
+          :loading="busy" @click="submit"
         />
         <AppButton variant="text" size="sm" label="Отменить" :disabled="busy" @click="reset" />
       </template>
@@ -135,7 +135,7 @@
       <span class="fe-spacer" />
       <AppButton
         variant="filled" icon="save" label="Сохранить структуру"
-        :disabled="!dirty" :loading="busy" @click="save"
+        :disabled="!dirty" :loading="busy" @click="submit"
       />
     </div>
   </div>
@@ -429,7 +429,7 @@ function payload() {
   }))
 }
 
-async function save() {
+async function submit() {
   if (busy.value) return
   busy.value = true
   try {
@@ -444,7 +444,7 @@ async function save() {
 }
 
 // reset — откат черновика к сохранённому состоянию (уход «не сохранять»).
-defineExpose({ dirty, save, reset })
+defineExpose({ dirty, save: submit, reset })
 </script>
 
 <style scoped>

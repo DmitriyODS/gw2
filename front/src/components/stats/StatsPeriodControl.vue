@@ -7,10 +7,10 @@
         {{ period.displayLabel.value }}
       </div>
       <div class="period-shift">
-        <button class="period-btn" @click="period.shift(-1)" :disabled="!canShift" title="Назад">
+        <button class="period-btn" :disabled="!canShift" title="Назад" @click="period.shift(-1)">
           <span class="material-symbols-outlined">chevron_left</span>
         </button>
-        <button class="period-btn" @click="period.shift(1)" :disabled="!canShift" title="Вперёд">
+        <button class="period-btn" :disabled="!canShift" title="Вперёд" @click="period.shift(1)">
           <span class="material-symbols-outlined">chevron_right</span>
         </button>
       </div>
@@ -61,8 +61,8 @@
       <button
         class="all-time-btn"
         :class="{ active: period.mode.value === 'all' }"
-        @click="period.setAllTime()"
         title="Показать все задачи за весь срок"
+        @click="period.setAllTime()"
       >
         <span class="material-symbols-outlined">all_inclusive</span>
         <span class="all-time-label">Весь срок</span>
@@ -77,7 +77,7 @@ import DatePicker from 'primevue/datepicker'
 import ContextMenu from '@/components/common/ContextMenu.vue'
 import { useStatsPeriod } from '@/composables/useStatsPeriod.js'
 
-const props = defineProps({
+defineProps({
   /** Тесная панель: набор периодов уходит под кнопку. */
   compact: { type: Boolean, default: false },
 })

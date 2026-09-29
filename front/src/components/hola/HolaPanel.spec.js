@@ -277,7 +277,7 @@ describe('Hola: поиск, команды и чат', () => {
     await wrapper.find('.hola-input').setValue('1200*3')
     await flushPromises()
     // Разряды разделяет неразрывный пробел — нормализуем перед сравнением.
-    expect(wrapper.find('.hola-calc-value').text().replace(/ /g, ' ')).toBe('= 3 600')
+    expect(wrapper.find('.hola-calc-value').text().replace(/\u00A0/g, ' ')).toBe('= 3 600')
   })
 
   it('вкладка «Команды» показывает каталог быстрых действий', async () => {

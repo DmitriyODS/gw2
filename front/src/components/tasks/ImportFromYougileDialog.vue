@@ -40,7 +40,7 @@
           :invalid="!!errors.department_id"
           :loading="depsLoading"
           filter
-          filterPlaceholder="Поиск..."
+          filter-placeholder="Поиск..."
         />
         <span v-if="errors.department_id" class="field-error">{{ errors.department_id }}</span>
       </div>
@@ -56,7 +56,7 @@
           class="w-full"
           :loading="responsiblesLoading"
           filter
-          filterPlaceholder="Поиск сотрудника..."
+          filter-placeholder="Поиск сотрудника..."
           show-clear
         />
       </div>

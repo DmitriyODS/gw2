@@ -1,8 +1,7 @@
 import { useAuthStore } from '@/stores/auth'
 import { notifyPlanLimit } from '@/utils/planLimit.js'
 
-let isRefreshing = false
-let refreshQueue = []
+let refreshPromise = null
 
 function anySignal(signals) {
   const list = signals.filter(Boolean)
@@ -40,6 +39,24 @@ async function refreshToken() {
   if (!resp.ok) throw { status: resp.status, error: 'refresh_failed' }
   // Тело несёт и токен, и клеймы сессии (PASETO на клиенте не декодируется).
   return resp.json()
+}
+
+/**
+ * Обновляет access-токен; параллельные вызовы (запросы с 401, сокет с
+ * протухшим токеном) ждут ОДИН запрос /auth/refresh — два одновременных
+ * обновления одной сессии не нужны серверу и гоняются за cookie.
+ * Ошибка сети — `{ status: 0 }`, отказ сервера — его статус.
+ */
+export function refreshSession() {
+  if (!refreshPromise) {
+    refreshPromise = refreshToken()
+      .then((data) => {
+        useAuthStore().applySession(data)
+        return data
+      })
+      .finally(() => { refreshPromise = null })
+  }
+  return refreshPromise
 }
 
 // Тела, которые нельзя сериализовать в JSON: форма, кусок файла, буфер.
@@ -90,25 +107,9 @@ export async function apiRequest(path, options = {}) {
     if (!options._isLogout && (auth.loggingOut || !auth.token)) {
       throw { status: 401, error: 'unauthorized', message: '', silent: true }
     }
-    if (isRefreshing) {
-      return new Promise((resolve, reject) => {
-        refreshQueue.push({ resolve, reject, path, options })
-      })
-    }
-    isRefreshing = true
     try {
-      const data = await refreshToken()
-      auth.applySession(data)
-      isRefreshing = false
-      refreshQueue.forEach(({ resolve, reject, path, options }) => {
-        apiRequest(path, { ...options, _retry: true }).then(resolve).catch(reject)
-      })
-      refreshQueue = []
-      return apiRequest(path, { ...options, _retry: true })
+      await refreshSession()
     } catch (e) {
-      isRefreshing = false
-      refreshQueue.forEach(({ reject }) => reject(new Error('unauthorized')))
-      refreshQueue = []
       // Refresh не ДОШЁЛ до сервера (обрыв сети/таймаут) — сессия не истекла:
       // не разлогиниваем, отдаём сетевую ошибку; access обновится следующим
       // запросом, когда сеть вернётся.
@@ -118,6 +119,7 @@ export async function apiRequest(path, options = {}) {
       auth.clearAuth()
       throw { status: 401, error: 'unauthorized', message: 'Сессия истекла' }
     }
+    return apiRequest(path, { ...options, _retry: true })
   }
 
   // Blob-загрузки (экспорт файлов): при не-OK ответе НЕ отдаём тело как файл

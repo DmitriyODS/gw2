@@ -60,7 +60,6 @@ export const useTasksStore = defineStore('tasks', () => {
   let fetchCtrl = null
 
   watch(filters, () => {
-    // eslint-disable-next-line no-unused-vars
     const { page, per_page, ...toSave } = { ...filters }
     storageSet(STORAGE_KEY, JSON.stringify(toSave))
   }, { deep: true })
@@ -90,6 +89,23 @@ export const useTasksStore = defineStore('tasks', () => {
       })
       myActiveCount.value = data.total ?? 0
     } catch { /* бейдж некритичен — молча пропускаем */ }
+  }
+
+  /* Касается ли событие задачи счётчика «моих активных». Звать ДО применения
+     события к стору: при смене ответственного важен и прежний. События других
+     компаний и чужих задач счётчик не трогают — иначе любое событие приводило
+     к запросу от каждого клиента. Когда в событии нет ни ответственного, ни
+     задачи в сторе (архив/удаление незагруженной задачи), судить не по чему —
+     тогда пересчитываем. */
+  function affectsMyCount(payload) {
+    const auth = useAuthStore()
+    if (payload?.company_id != null && payload.company_id !== auth.companyId) return false
+    const me = auth.userId
+    const hasResponsible = payload && 'responsible_user_id' in payload
+    if (hasResponsible && payload.responsible_user_id === me) return true
+    const known = taskById.value.get(payload?.task_id ?? payload?.id)
+    if (known) return known.responsible_user_id === me
+    return !hasResponsible
   }
 
   // Сокет-события задач приходят сериями — пересчёт с дебаунсом.
@@ -439,7 +455,7 @@ export const useTasksStore = defineStore('tasks', () => {
   return {
     tasks, taskById, total, loading, error, filters, activeTask,
     commentsByTask, newCommentsByTask, contributorsByTask,
-    myActiveCount, fetchMyActiveCount, refreshMyActiveCount,
+    myActiveCount, fetchMyActiveCount, refreshMyActiveCount, affectsMyCount,
     tags, fetchTags,
     fetchTasks, setFilter, setTab, resetFilters, toggleTagFilter, toggleColorFilter, openTask, closeTask,
     upsertTask, patchTask, addTaskFromSocket, removeTask, archiveTask, restoreTask,

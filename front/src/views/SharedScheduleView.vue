@@ -63,7 +63,6 @@
    «своим» и «открытым по ссылке» видом быть не должно. */
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import AppButton from '@/components/ui/AppButton.vue'
 import AppTabs from '@/components/ui/AppTabs.vue'
 import BrandLoader from '@/components/common/BrandLoader.vue'
 import ScheduleSummary from '@/components/schedule/ScheduleSummary.vue'
@@ -94,7 +93,6 @@ const dayLabel = computed(() => {
   const today = dateKey(addDays(monday.value, weekday.value)) === dateKey(new Date())
   return today ? `${name}, сегодня` : name
 })
-const todayWeekday = (new Date().getDay() + 6) % 7
 // Подпись короткая: вкладки делят ширину поровну (см. ScheduleView).
 const dayTabs = computed(() => days.value.map((d) => ({ value: d, label: WEEKDAYS[d].short })))
 

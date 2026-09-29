@@ -15,7 +15,7 @@
     @cancel="$emit('close')"
     @update:model-value="(v) => !v && $emit('close')"
   >
-    <Breadcrumbs :items="path" root-label="Мой диск" root-icon="cloud" @navigate="onCrumb" />
+    <FolderBreadcrumbs :items="path" root-label="Мой диск" root-icon="cloud" @navigate="onCrumb" />
 
     <BrandLoader v-if="loading" block :size="48" :min-height="140" />
 
@@ -37,7 +37,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import BrandLoader from '@/components/common/BrandLoader.vue'
-import Breadcrumbs from '@/components/common/Breadcrumbs.vue'
+import FolderBreadcrumbs from '@/components/common/FolderBreadcrumbs.vue'
 import AppDialog from '@/components/ui/AppDialog.vue'
 import * as api from '@/api/drive.js'
 import { useNotificationsStore } from '@/stores/notifications.js'

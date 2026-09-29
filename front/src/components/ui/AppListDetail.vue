@@ -119,11 +119,13 @@ defineExpose({ narrow })
   min-height: 0;
   padding: 16px;
   overflow: hidden;
-  transition: grid-template-columns 0.22s cubic-bezier(0.2, 0, 0, 1);
 }
 
 /* Колонка отдаёт свою высоту содержимому целиком — оно и решает, где скролл. */
 .ld-col { min-width: 0; min-height: 0; height: 100%; }
+/* Сворачивание списка гасит его прозрачностью, а колонки переключаются сразу:
+   анимация grid-template-columns раскладывала весь раздел на каждом кадре. */
+.ld-list { transition: opacity 0.18s ease; }
 
 /* Лоадер занимает обе колонки сетки — иначе он центрировался бы в первой. */
 .ld-loading {
@@ -149,7 +151,7 @@ defineExpose({ narrow })
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .ld { transition: none; }
+  .ld-list { transition: none; }
 }
 
 /* Узко — один экран: видна ровно одна колонка, вторая снята с потока. Поля

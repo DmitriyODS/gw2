@@ -91,6 +91,8 @@
         :sections="sections"
         :section="filters.section"
         :widths="colWidths"
+        :registry="registry"
+        :can-edit="canEdit"
         empty-hint="Владелец ссылки пока не добавил ни одной записи."
         @update:sort="applySort"
         @update:section="setSection"
@@ -104,8 +106,6 @@
         @toggle-all="toggleAll"
         @select-all-matching="selectAllMatching"
         @clear-selection="clearSelection"
-        :registry="registry"
-        :can-edit="canEdit"
         @manage="openIssue"
       />
     </template>

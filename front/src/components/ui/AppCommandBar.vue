@@ -18,10 +18,10 @@
 
     <AppButton
       v-if="menuCommands.length"
+      ref="moreBtn"
       variant="icon"
       icon="more_horiz"
       :size="size"
-      ref="moreBtn"
       aria-label="Ещё действия"
       title="Ещё действия"
       @click="toggleMenu"

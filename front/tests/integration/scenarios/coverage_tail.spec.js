@@ -6,7 +6,7 @@
    чужой код авторизации не превращается в сессию, а мастер интеграции честно
    говорит, что аккаунт не подключён, вместо пустых списков. */
 import { it, expect } from 'vitest'
-import { describeIntegration, uniq, dbQuery, Session } from '../setup/harness.js'
+import { describeIntegration, dbQuery, Session } from '../setup/harness.js'
 import { registerVerified, newCompanyAdmin } from '../setup/factory.js'
 import * as auth from '@/api/auth.js'
 import * as yougile from '@/api/yougile.js'

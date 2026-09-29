@@ -12,7 +12,7 @@
       aria-label="Пуск"
       @click="toggleStart"
     >
-      <Logo :size="32" />
+      <BrandLogo :size="32" />
     </button>
 
     <div v-if="buttons.length" class="mb-apps">
@@ -55,7 +55,7 @@ import { useLongPress } from '@/composables/useLongPress.js'
 import { usePermission } from '@/composables/usePermission.js'
 import { useCompanySettings } from '@/composables/useCompanySettings.js'
 import { appById, windowTitle } from '@/desktop/apps.js'
-import Logo from '@/components/common/Logo.vue'
+import BrandLogo from '@/components/common/BrandLogo.vue'
 import ContextMenu from '@/components/common/ContextMenu.vue'
 
 const props = defineProps({

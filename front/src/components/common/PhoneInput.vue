@@ -22,8 +22,8 @@
       v-if="display && !disabled"
       type="button"
       class="phone-clear"
-      @click="clear"
       aria-label="Очистить"
+      @click="clear"
     >
       <span class="material-symbols-outlined">close</span>
     </button>

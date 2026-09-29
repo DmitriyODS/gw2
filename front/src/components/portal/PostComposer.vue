@@ -284,7 +284,7 @@ const isImage = (mime) => !!mime?.startsWith('image/')
 const mediaItems = computed(() => [
   ...existingAttachments.value
     .filter((a) => isImage(a.mime) && !removedIds.value.has(a.id))
-    .map((a) => ({ key: 'a' + a.id, url: a.url, name: a.name, attachment: a })),
+    .map((a) => ({ key: 'a' + a.id, url: a.thumb_url || a.url, name: a.name, attachment: a })),
   ...pendingFiles.value
     .filter((f) => isImage(f.type))
     .map((f) => ({ key: 'p' + pendingFiles.value.indexOf(f), url: previewUrl(f), name: f.name, file: f })),

@@ -18,6 +18,8 @@ export const getForms = (scope = 'all', options = {}) =>
   apiRequest(`/forms?${qs({ scope })}`, options)
 
 export const getForm = (id) => apiRequest(`/forms/${id}`)
+// Сводка живой плитки: { total, pending, next: {id, title, due_at} | null, responses }.
+export const getFormsSummary = () => apiRequest('/forms/summary')
 
 // Глобальный поиск по доступным формам (строка Hola).
 export const searchForms = (q, limit = 5, options = {}) =>

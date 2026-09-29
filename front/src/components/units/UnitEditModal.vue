@@ -36,7 +36,7 @@
           class="w-full"
           :invalid="!!errors.unit_type_id"
           filter
-          filterPlaceholder="Поиск..."
+          filter-placeholder="Поиск..."
         />
         <span v-if="errors.unit_type_id" class="field-error">{{ errors.unit_type_id }}</span>
       </div>
@@ -45,13 +45,13 @@
         <label class="form-label">Дата/время начала <span class="required">*</span></label>
         <DatePicker
           v-model="form.datetime_start"
-          showTime
-          hourFormat="24"
-          dateFormat="dd.mm.yy"
+          show-time
+          hour-format="24"
+          date-format="dd.mm.yy"
           placeholder="дд.мм.гггг чч:мм"
-          showIcon
-          iconDisplay="input"
-          :showOnFocus="false"
+          show-icon
+          icon-display="input"
+          :show-on-focus="false"
           :pt="{ pcInputText: { root: { inputmode: 'text' } } }"
           class="w-full"
           :invalid="!!errors.datetime_start"
@@ -64,13 +64,13 @@
         <label class="form-label">Дата/время окончания</label>
         <DatePicker
           v-model="form.datetime_end"
-          showTime
-          hourFormat="24"
-          dateFormat="dd.mm.yy"
+          show-time
+          hour-format="24"
+          date-format="dd.mm.yy"
           placeholder="дд.мм.гггг чч:мм"
-          showIcon
-          iconDisplay="input"
-          :showOnFocus="false"
+          show-icon
+          icon-display="input"
+          :show-on-focus="false"
           :pt="{ pcInputText: { root: { inputmode: 'text' } } }"
           class="w-full"
           :invalid="!!errors.datetime_end"

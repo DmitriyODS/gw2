@@ -282,7 +282,6 @@ function ctxAction(action) {
 }
 
 let longPressTimer = null
-let longPressFired = false
 let pointerStartX = 0
 let pointerStartY = 0
 let pointerActiveId = null
@@ -292,12 +291,10 @@ function onCommentPointerDown(e, c) {
   if (e.button === 2) return
   if (editingId.value === c.id) return
   pointerActiveId = e.pointerId
-  longPressFired = false
   pointerStartX = e.clientX
   pointerStartY = e.clientY
   clearTimeout(longPressTimer)
   longPressTimer = setTimeout(() => {
-    longPressFired = true
     if (navigator.vibrate) {
       try { navigator.vibrate(15) } catch {/* iOS Safari */}
     }
@@ -392,15 +389,15 @@ onBeforeUnmount(() => {
             </span>
             <!-- Hover-кнопки только для устройств с курсором (CSS гасит на тач);
                  на мобильном — long-press открывает контекстное меню. -->
-            <div class="comment-actions" v-if="editingId !== c.id">
-              <button class="ca-btn" @click="copy(c)" title="Скопировать комментарий">
+            <div v-if="editingId !== c.id" class="comment-actions">
+              <button class="ca-btn" title="Скопировать комментарий" @click="copy(c)">
                 <span class="material-symbols-outlined">content_copy</span>
               </button>
               <template v-if="canEdit(c)">
-                <button class="ca-btn" @click="startEdit(c)" title="Редактировать">
+                <button class="ca-btn" title="Редактировать" @click="startEdit(c)">
                   <span class="material-symbols-outlined">edit</span>
                 </button>
-                <button class="ca-btn danger" @click="remove(c)" title="Удалить">
+                <button class="ca-btn danger" title="Удалить" @click="remove(c)">
                   <span class="material-symbols-outlined">delete</span>
                 </button>
               </template>

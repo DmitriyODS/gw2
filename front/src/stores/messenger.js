@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import * as api from '@/api/messenger.js'
 import { useAuthStore } from './auth.js'
 // Циклический импорт (call.js ↔ messenger.js) безопасен: оба стора зовут
@@ -10,6 +10,9 @@ import { useCallStore } from './call.js'
 import { getSocket } from '@/socket/index.js'
 import { normalizeRecipe } from '@/utils/chatBackgrounds.js'
 import { rememberReaction } from '@/utils/reactions.js'
+
+// Страница ленты — столько отдаёт listMessages по умолчанию.
+const PAGE_SIZE = 50
 
 /* Сортировка: закреплённые сверху (по pinned_at desc), затем по
    last_message_at desc. Чистая функция, чтобы переиспользовать после каждого
@@ -79,11 +82,45 @@ export const useMessengerStore = defineStore('messenger', () => {
   const folders = ref([])
   const activeFolderId = ref(null)
   let listSeq = 0
+  // Курсор синхронизации списка: после сна клиента сервер отдаёт только то,
+  // что изменилось с этого момента (0 — полной загрузки ещё не было).
+  let syncCursor = 0
   let supportSeq = 0
   let listCtrl = null
   let supportCtrl = null
   const messagesCtrlByConv = new Map()
   const messagesSeqByConv = new Map()
+
+  /* Память ленты. Приложение живёт днями (десктоп в трее), и без предела кэш
+     копил все открытые чаты со всей прокрученной историей, причём глубоко
+     реактивной. Держим ленты последних KEEP_CONVERSATIONS чатов, а у чата,
+     из которого ушли, — только последнюю страницу: историю вернёт прокрутка. */
+  const KEEP_CONVERSATIONS = 20
+  const recentConversations = []
+
+  function dropMessages(conversationId) {
+    delete messagesByConv.value[conversationId]
+    delete hasMoreHistoryByConv.value[conversationId]
+    messagesSeqByConv.delete(conversationId)
+  }
+
+  function trimHistory(conversationId) {
+    const arr = messagesByConv.value[conversationId]
+    if (!arr || arr.length <= PAGE_SIZE) return
+    messagesByConv.value[conversationId] = arr.slice(-PAGE_SIZE)
+    hasMoreHistoryByConv.value[conversationId] = true
+  }
+
+  watch(activeConversationId, (id, prev) => {
+    if (prev != null && prev !== id) trimHistory(prev)
+    if (id == null) return
+    const at = recentConversations.indexOf(id)
+    if (at >= 0) recentConversations.splice(at, 1)
+    recentConversations.push(id)
+    while (recentConversations.length > KEEP_CONVERSATIONS) {
+      dropMessages(recentConversations.shift())
+    }
+  })
 
   // Индекс по id и в обычных диалогах, и в support-inbox: support-чаты у
   // Администратора системы живут в отдельном списке (своя вкладка), но
@@ -115,9 +152,10 @@ export const useMessengerStore = defineStore('messenger', () => {
     listCtrl = new AbortController()
     loadingList.value = true
     try {
-      const items = await api.listConversations({ signal: listCtrl.signal })
+      const r = await api.syncConversations(0, { signal: listCtrl.signal })
       if (seq !== listSeq) return
-      conversations.value = sortConversations(items)
+      conversations.value = sortConversations(r.conversations ?? [])
+      syncCursor = r.cursor ?? 0
       recomputeUnread()
     } catch (e) {
       if (e?.error !== 'ABORTED') throw e
@@ -127,6 +165,29 @@ export const useMessengerStore = defineStore('messenger', () => {
         loadingList.value = false
       }
     }
+  }
+
+  /* Пересинхронизация после обрыва или сна: только изменившиеся диалоги
+     (у человека с сотнями переписок это десятки килобайт против мегабайта).
+     Сервер сам решает, можно ли дельту: не ручается — присылает весь список. */
+  async function resyncConversations() {
+    if (!syncCursor) return fetchConversations()
+    const seq = ++listSeq
+    const r = await api.syncConversations(syncCursor)
+    if (seq !== listSeq) return
+    if (r.full) {
+      conversations.value = sortConversations(r.conversations ?? [])
+    } else {
+      const byId = new Map(conversations.value.map((c) => [c.id, c]))
+      for (const c of r.conversations ?? []) byId.set(c.id, { ...byId.get(c.id), ...c })
+      for (const id of r.removed ?? []) {
+        byId.delete(id)
+        dropMessages(id)
+      }
+      conversations.value = sortConversations([...byId.values()])
+    }
+    syncCursor = r.cursor ?? syncCursor
+    recomputeUnread()
   }
 
   async function fetchUnreadCount() {
@@ -338,13 +399,13 @@ export const useMessengerStore = defineStore('messenger', () => {
       if (beforeId) {
         messagesByConv.value[conversationId] = [...msgs, ...existing]
         // Если страница вернулась короче лимита (или пустая) — история закончилась.
-        if (msgs.length < 50) {
+        if (msgs.length < PAGE_SIZE) {
           hasMoreHistoryByConv.value[conversationId] = false
         }
       } else {
         messagesByConv.value[conversationId] = msgs
         // Первая загрузка: если меньше лимита — старых сообщений больше нет.
-        hasMoreHistoryByConv.value[conversationId] = msgs.length >= 50
+        hasMoreHistoryByConv.value[conversationId] = msgs.length >= PAGE_SIZE
       }
       return msgs
     } catch (e) {
@@ -444,9 +505,17 @@ export const useMessengerStore = defineStore('messenger', () => {
 
   /* Обработка входящего сообщения (своего эхо или собеседника). */
   function applyIncomingMessage(conversationId, msg, fromMe = false) {
-    const arr = messagesByConv.value[conversationId] || []
-    if (arr.some(m => m.id === msg.id)) return
-    messagesByConv.value[conversationId] = [...arr, msg]
+    /* Ленту дописываем, только если она уже загружена. Иначе кэш получал бы
+       огрызок из одного сообщения: setActive счёл бы чат загруженным, историю
+       не запросил, и открытый чат показывал бы лишь последнее сообщение, а
+       память копила бы ленты чатов, которые никто не открывал. */
+    const arr = messagesByConv.value[conversationId]
+    if (arr) {
+      if (arr.some(m => m.id === msg.id)) return
+      messagesByConv.value[conversationId] = [...arr, msg]
+    } else if (conversationById.value.get(conversationId)?.last_message?.id === msg.id) {
+      return
+    }
 
     // Сообщение дошло — собеседник дописал: гасим «печатает…» сразу,
     // не дожидаясь таймера.
@@ -534,9 +603,7 @@ export const useMessengerStore = defineStore('messenger', () => {
   function applyConversationDeleted(conversationId) {
     conversations.value = conversations.value.filter(c => c.id !== conversationId)
     supportInbox.value = supportInbox.value.filter(c => c.id !== conversationId)
-    delete messagesByConv.value[conversationId]
-    delete hasMoreHistoryByConv.value[conversationId]
-    messagesSeqByConv.delete(conversationId)
+    dropMessages(conversationId)
     messagesCtrlByConv.get(conversationId)?.abort()
     messagesCtrlByConv.delete(conversationId)
     if (activeConversationId.value === conversationId) {
@@ -725,13 +792,16 @@ export const useMessengerStore = defineStore('messenger', () => {
     } catch {}
   }
 
+  /* Правка на месте, а не новый Set/объект: Vue отслеживает has(id) и ключ
+     объекта поштучно, поэтому событие о человеке перерисовывает только тех,
+     кто его показывает. Пересоздание будило все аватары и списки платформы на
+     каждый чужой вход и выход (presence рассылается всем). */
   function applyPresence({ user_id, online, last_seen_at }) {
-    const s = new Set(onlineIds.value)
-    if (online) s.add(user_id)
-    else s.delete(user_id)
-    onlineIds.value = s
-    if (last_seen_at) {
-      lastSeenById.value = { ...lastSeenById.value, [user_id]: last_seen_at }
+    const s = onlineIds.value
+    if (online && !s.has(user_id)) s.add(user_id)
+    else if (!online && s.has(user_id)) s.delete(user_id)
+    if (last_seen_at && lastSeenById.value[user_id] !== last_seen_at) {
+      lastSeenById.value[user_id] = last_seen_at
     }
   }
 
@@ -963,6 +1033,7 @@ export const useMessengerStore = defineStore('messenger', () => {
     typingExpireTimers.clear()
     typingSentAt.clear()
     listSeq = 0
+    syncCursor = 0
     supportSeq = 0
     listCtrl?.abort()
     supportCtrl?.abort()
@@ -987,7 +1058,7 @@ export const useMessengerStore = defineStore('messenger', () => {
     loadingList, loadingMessages, sending, pendingDraft,
     onlineIds, lastSeenById,
     activeConversation, activeMessages, activePinned,
-    fetchConversations, fetchUnreadCount, openWith, openDevChat,
+    fetchConversations, resyncConversations, fetchUnreadCount, openWith, openDevChat,
     fetchSupportInbox, setActive, fetchMessages,
     fetchPinned, pollNewMessages, hasMoreHistory,
     send, forwardMessage, markRead,

@@ -15,10 +15,6 @@ import * as diaries from '@/api/diaries.js'
 import * as tasks from '@/api/tasks.js'
 import * as departments from '@/api/departments.js'
 
-async function expectStatus(promise, status) {
-  await expect(promise).rejects.toMatchObject({ status })
-}
-
 async function expectClientError(promise) {
   const err = await promise.then(() => null, (e) => e)
   expect(err).toBeTruthy()

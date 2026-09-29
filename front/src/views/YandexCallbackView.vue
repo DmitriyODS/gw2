@@ -13,9 +13,9 @@
       <template v-else-if="state === 'select'">
         <p v-if="error" class="yc-error">{{ error }}</p>
         <AppButton
-          class="yc-wide"
           v-for="c in pickerCompanies"
           :key="c.company_id"
+          class="yc-wide"
           :disabled="loading || c.is_active === false"
           @click="pick(c.company_id)"
         >{{ c.company_name }}</AppButton>

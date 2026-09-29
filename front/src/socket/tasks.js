@@ -5,37 +5,20 @@ import { useNotificationsStore } from '@/stores/notifications.js'
 import { pushNotification } from '@/composables/useDesktopNotifications.js'
 
 export function registerTaskSocketHandlers(socket) {
-  // refreshMyActiveCount — бейдж «моих» активных задач в навигации: любое
-  // событие задач могло изменить счётчик (дебаунс внутри стора).
-  socket.on('task:created', (task) => {
+  // Бейдж «моих» активных задач пересчитывается, только если событие его
+  // касается (affectsMyCount — до применения события, дебаунс внутри стора).
+  const onTaskEvent = (apply) => (payload) => {
     const tasks = useTasksStore()
-    tasks.addTaskFromSocket(task)
-    tasks.refreshMyActiveCount()
-  })
+    const mine = tasks.affectsMyCount(payload)
+    apply(tasks, payload)
+    if (mine) tasks.refreshMyActiveCount()
+  }
 
-  socket.on('task:updated', (data) => {
-    const tasks = useTasksStore()
-    tasks.patchTask(data)
-    tasks.refreshMyActiveCount()
-  })
-
-  socket.on('task:archived', ({ task_id, archived_at }) => {
-    const tasks = useTasksStore()
-    tasks.archiveTask(task_id, archived_at)
-    tasks.refreshMyActiveCount()
-  })
-
-  socket.on('task:restored', ({ task_id }) => {
-    const tasks = useTasksStore()
-    tasks.restoreTask(task_id)
-    tasks.refreshMyActiveCount()
-  })
-
-  socket.on('task:deleted', ({ task_id }) => {
-    const tasks = useTasksStore()
-    tasks.removeTask(task_id)
-    tasks.refreshMyActiveCount()
-  })
+  socket.on('task:created', onTaskEvent((tasks, task) => tasks.addTaskFromSocket(task)))
+  socket.on('task:updated', onTaskEvent((tasks, data) => tasks.patchTask(data)))
+  socket.on('task:archived', onTaskEvent((tasks, { task_id, archived_at }) => tasks.archiveTask(task_id, archived_at)))
+  socket.on('task:restored', onTaskEvent((tasks, { task_id }) => tasks.restoreTask(task_id)))
+  socket.on('task:deleted', onTaskEvent((tasks, { task_id }) => tasks.removeTask(task_id)))
 
   socket.on('comment:new', (payload) => {
     useTasksStore().applyCommentSocket('new', payload)

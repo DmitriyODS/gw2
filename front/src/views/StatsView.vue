@@ -158,7 +158,7 @@
               placeholder="Выберите сотрудника"
               class="employee-select"
               filter
-              filterPlaceholder="Поиск..."
+              filter-placeholder="Поиск..."
               :loading="employeesLoading"
               @change="loadUserTasks"
             />
@@ -278,7 +278,6 @@ import {
   getStatsCommon,
   getStatsExtended,
   exportStatsCommon,
-  exportStatsExtended,
   getStatsUserTasks,
   getStatsEmployees,
   getStatsResponsibles,

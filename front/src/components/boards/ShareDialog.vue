@@ -34,7 +34,8 @@
           <li v-for="m in userMembers" :key="'u' + m.user_id" class="ns-member">
             <img class="ns-avatar" :src="avatarOf({ id: m.user_id, avatar_path: m.avatar_path })" :alt="m.fio" />
             <span class="ns-user-fio">{{ m.fio }}</span>
-            <button class="chip-tint ns-access" :class="m.can_edit ? 'chip-tint--warning' : 'chip-tint--primary'"
+            <button
+class="chip-tint ns-access" :class="m.can_edit ? 'chip-tint--warning' : 'chip-tint--primary'"
               type="button" @click="toggleUser(m)">
               <span class="material-symbols-outlined">{{ m.can_edit ? 'edit' : 'visibility' }}</span>
               {{ m.can_edit ? 'Редактирование' : 'Чтение' }}
@@ -60,7 +61,8 @@
         <ul v-if="companyMembers.length" class="ns-members">
           <li v-for="m in companyMembers" :key="'c' + m.company_id" class="ns-member">
             <span class="ns-user-fio">{{ m.company_name }}</span>
-            <button class="chip-tint ns-access" :class="m.can_edit ? 'chip-tint--warning' : 'chip-tint--primary'"
+            <button
+class="chip-tint ns-access" :class="m.can_edit ? 'chip-tint--warning' : 'chip-tint--primary'"
               type="button" @click="toggleCompany(m)">
               <span class="material-symbols-outlined">{{ m.can_edit ? 'edit' : 'visibility' }}</span>
               {{ m.can_edit ? 'Редактирование' : 'Чтение' }}

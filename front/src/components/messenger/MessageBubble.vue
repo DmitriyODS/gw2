@@ -133,7 +133,7 @@
           :class="{ mine: g.mine }"
           @pointerdown.stop
           @pointerup.stop
-          @click.stop="$emit('react', g.emoji)"
+          @click.stop="$emit('react', message, g.emoji)"
         >
           <span class="msg-reaction-emoji">{{ g.emoji }}</span>
           <span v-if="g.count > 1" class="msg-reaction-count">{{ g.count }}</span>
@@ -563,17 +563,15 @@ const joinLabel = computed(() => props.isMine ? 'Вернуться' : 'Прис
   opacity: 0.85;
 }
 
-/* Пузыри — НАСТОЯЩЕЕ матовое стекло, как модалки: полупрозрачный тон +
-   backdrop-filter, который блюрит обои чата (.chat-bg лежит за пузырями внутри
-   backdrop-root панели). -webkit-backdrop-filter ПЕРЕД стандартным — иначе
-   минификатор LightningCSS выкидывает стандартное свойство. Первая строка
+/* Пузыри — плотный полупрозрачный тон БЕЗ backdrop-filter: размытие на каждом
+   пузыре давало сотни проходов blur и композитных слоёв в одной ленте, и
+   прокрутка и ресайз окна вставали колом.
+   Плотности хватает, чтобы текст читался поверх любых обоев. Первая строка
    background — плотный фолбэк для браузеров без color-mix. */
 .msg-bubble {
   max-width: 70%;
   background: var(--color-surface-high);
-  background: color-mix(in oklch, var(--color-surface-high) 58%, transparent);
-  -webkit-backdrop-filter: var(--bubble-blur);
-  backdrop-filter: var(--bubble-blur);
+  background: color-mix(in oklch, var(--color-surface-high) 90%, transparent);
   border: 1px solid var(--acrylic-border);
   box-shadow: var(--glass-edge);
   color: var(--color-text);
@@ -585,17 +583,10 @@ const joinLabel = computed(() => props.isMine ? 'Вернуться' : 'Прис
 
 .msg-row.outgoing .msg-bubble {
   background: var(--color-primary-container);
-  background: color-mix(in oklch, var(--color-primary-container) 62%, transparent);
+  background: color-mix(in oklch, var(--color-primary-container) 92%, transparent);
   color: var(--color-on-primary-container);
   border-top-left-radius: 20px;
   border-top-right-radius: 6px;
-}
-
-/* Браузеры без backdrop-filter (очень старые WebView) — пузыри непрозрачны,
-   иначе за полупрозрачным тоном обои проступят неразмытыми и текст «поплывёт». */
-@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .msg-bubble { background: var(--color-surface-high); }
-  .msg-row.outgoing .msg-bubble { background: var(--color-primary-container); }
 }
 
 .msg-text {
@@ -867,9 +858,24 @@ const joinLabel = computed(() => props.isMine ? 'Вернуться' : 'Прис
 }
 
 .call-msg.live .call-icon {
+  position: relative;
+  isolation: isolate;
   background: var(--color-primary);
   color: var(--color-on-primary);
-  animation: callPulse 1.6s ease-in-out infinite;
+}
+
+/* Кольцо идущего звонка — отдельным слоем на transform/opacity: пульс
+   box-shadow перерисовывал пузырь каждый кадр, пока длится звонок. */
+.call-msg.live .call-icon::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: var(--color-primary);
+  opacity: 0;
+  animation: callPulse 1.6s ease-out infinite;
+  pointer-events: none;
+  z-index: -1;
 }
 
 .call-msg.missed .call-icon {
@@ -886,8 +892,12 @@ const joinLabel = computed(() => props.isMine ? 'Вернуться' : 'Прис
 .call-icon .material-symbols-outlined { font-size: 20px; }
 
 @keyframes callPulse {
-  0%, 100% { box-shadow: 0 0 0 0 color-mix(in oklch, var(--color-primary) 50%, transparent); }
-  50%      { box-shadow: 0 0 0 8px color-mix(in oklch, var(--color-primary) 0%, transparent); }
+  0%   { transform: scale(1); opacity: 0.5; }
+  100% { transform: scale(1.45); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .call-msg.live .call-icon::after { animation: none; }
 }
 
 .call-body {

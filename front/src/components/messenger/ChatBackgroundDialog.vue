@@ -22,7 +22,7 @@
       >Все чаты</button>
     </div>
 
-    <BackgroundEditor :recipe="recipe" :upload-fn="uploadFn" />
+    <BackgroundEditor :recipe="recipe" :upload-fn="uploadFn" @update:recipe="(r) => Object.assign(recipe, r)" />
 
     <p class="cbg-hint">
       Оформление личное и синхронизируется на всех ваших устройствах — собеседник

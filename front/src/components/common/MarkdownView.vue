@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, h } from 'vue'
 import { renderMarkdown } from '@/utils/markdown.js'
 
 const props = defineProps({
@@ -14,8 +14,55 @@ const props = defineProps({
 // — родитель обрабатывает. Компоненты без слушателя событие игнорят.
 const emit = defineEmits(['tag', 'mention'])
 
-const html = computed(() =>
-  renderMarkdown(props.source, { mentions: props.mentions, mentionNames: props.mentionNames }))
+/* Разметка парсера превращается в VNode, а не вставляется innerHTML'ом:
+   <template> разбирает строку инертно (скрипты не исполняются, картинки не
+   грузятся), а наружу проходят только теги и атрибуты, которые парсер умеет
+   порождать. Это второй рубеж поверх экранирования в utils/markdown.js, а Vue
+   при правке текста патчит отличия вместо полной замены содержимого. */
+const TAGS = new Set([
+  'p', 'br', 'strong', 'em', 's', 'code', 'pre', 'a', 'img', 'ul', 'ol', 'li', 'input',
+  'blockquote', 'hr', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'div', 'span',
+  'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+])
+const ATTRS = new Set([
+  'class', 'href', 'target', 'rel', 'src', 'alt', 'loading', 'type', 'disabled', 'checked',
+  'data-tag', 'data-mention',
+])
+const URL_ATTRS = new Set(['href', 'src'])
+const UNSAFE_URL = /^\s*(javascript|vbscript|data):/i
+
+function toVNodes(parent) {
+  const out = []
+  for (const node of parent.childNodes) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      out.push(node.data)
+      continue
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) continue
+    const tag = node.localName
+    const children = toVNodes(node)
+    if (!TAGS.has(tag)) {
+      out.push(...children) // незнакомая обёртка — текст сохраняем, тег нет
+      continue
+    }
+    const attrs = {}
+    for (const { name, value } of node.attributes) {
+      if (!ATTRS.has(name)) continue
+      if (URL_ATTRS.has(name) && UNSAFE_URL.test(value)) continue
+      attrs[name] = name === 'disabled' || name === 'checked' ? true : value
+    }
+    out.push(h(tag, attrs, children.length ? children : undefined))
+  }
+  return out
+}
+
+const tree = computed(() => {
+  const tpl = document.createElement('template')
+  tpl.innerHTML = renderMarkdown(props.source, { mentions: props.mentions, mentionNames: props.mentionNames })
+  return toVNodes(tpl.content)
+})
+
+const Content = () => tree.value
 
 function onClick(e) {
   const tagEl = e.target.closest?.('.md-tag')
@@ -33,12 +80,11 @@ function onClick(e) {
 </script>
 
 <template>
-  <div class="markdown-view" v-html="html" @click="onClick" />
+  <div class="markdown-view" @click="onClick"><Content /></div>
 </template>
 
 <style scoped>
 .markdown-view {
-  color: var(--color-on-surface);
   line-height: 1.55;
   word-break: break-word;
   overflow-wrap: anywhere;
@@ -51,7 +97,6 @@ function onClick(e) {
 }
 .markdown-view :deep(.md-h) {
   font-weight: 700;
-  color: var(--color-on-surface);
   line-height: 1.25;
   margin: 12px 0 6px;
 }

@@ -115,7 +115,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="tp" ref="root">
+  <div ref="root" class="tp">
     <button type="button" class="tp-control" :class="{ open, empty: !valid }" :disabled="disabled" @click="toggle">
       <span class="material-symbols-outlined tp-ico">{{ icon }}</span>
       <span class="tp-value">{{ valid ? modelValue : placeholder }}</span>
@@ -132,7 +132,7 @@ onBeforeUnmount(() => {
     <Teleport to="body">
       <transition name="tp-pop">
         <div v-if="open" ref="popEl" class="tp-pop" :style="popStyle">
-          <div class="tp-col" ref="hoursCol">
+          <div ref="hoursCol" class="tp-col">
             <button
               v-for="h in hours" :key="'h' + h" type="button"
               class="tp-opt" :class="{ active: h === cur.h }"
@@ -140,7 +140,7 @@ onBeforeUnmount(() => {
             >{{ pad(h) }}</button>
           </div>
           <div class="tp-colon">:</div>
-          <div class="tp-col" ref="minutesCol">
+          <div ref="minutesCol" class="tp-col">
             <button
               v-for="m in minutes" :key="'m' + m" type="button"
               class="tp-opt" :class="{ active: m === cur.m }"

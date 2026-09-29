@@ -146,7 +146,7 @@ import { checkboxText, dateParts, normalizePhone } from '@/utils/registryFields.
 
 const props = defineProps({
   field: { type: Object, required: true },
-  modelValue: { default: null },
+  modelValue: { type: [String, Number, Boolean, Array, Object], default: null },
   /* Загрузчик файла своего раздела: async (file) => метаданные { path, name, … }.
      Не у всех разделов файлы есть вовсе (расписания их не держат), поэтому
      загрузчик необязателен: без него поле-файл только показывает уже

@@ -85,7 +85,7 @@
          падала с NotFoundError и роняла всё окно вместе с кнопкой «закрыть».
          В своём контейнере у корня раздела соседей нет. -->
     <div ref="bodyEl" class="win-body main-content">
-      <div class="win-view"><WindowContent :win="win" /></div>
+      <div class="win-view"><WindowContent v-if="!win.dormant" :win="win" /></div>
     </div>
 
     <div
@@ -100,7 +100,7 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import router from '@/router/index.js'
 import { useDesktopStore } from '@/stores/desktop.js'
 import { appById, windowTitle } from '@/desktop/apps.js'
@@ -118,6 +118,9 @@ const RESIZE_DIRS = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw']
 const TEAR_OFF = 8
 
 const desktop = useDesktopStore()
+
+// Восстановленное свёрнутым окно поднимает раздел при первом разворачивании.
+watch(() => props.win.minimized, (min) => { if (!min) desktop.wake(props.win.id) }, { immediate: true })
 const aboutOpen = ref(false)
 
 const app = computed(() => appById(props.win.appId))

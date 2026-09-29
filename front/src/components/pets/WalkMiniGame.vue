@@ -4,7 +4,7 @@
       <div class="mg-panel">
         <header class="mg-head">
           <h3>Прогулка · {{ scene.title }}</h3>
-          <button class="mg-close" type="button" @click="onClose" aria-label="Закрыть">
+          <button class="mg-close" type="button" aria-label="Закрыть" @click="onClose">
             <span class="material-symbols-outlined">close</span>
           </button>
         </header>

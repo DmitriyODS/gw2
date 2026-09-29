@@ -1704,10 +1704,11 @@ onBeforeUnmount(() => {
   if (frameId) cancelAnimationFrame(frameId)
 })
 
+// Сцена неизменяема (новый объект на каждую правку) — глубокий обход не нужен.
 watch(() => props.scene, () => {
   syncImages()
   requestDraw()
-}, { deep: true })
+})
 
 // Смена темы не трогает props.scene — без отдельного watcher'а холст держал
 // цвета предыдущей темы (в т.ч. фон-сетку/точки) до первой правки сцены.
