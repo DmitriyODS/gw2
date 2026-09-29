@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/DmitriyODS/gw2/back-go/ai/internal/domain"
@@ -38,6 +39,20 @@ type Client struct {
 	baseURL string
 	http    *http.Client
 	log     *slog.Logger
+
+	// quirks — что модель не принимает (ключ — сервер+модель). Узнаётся из
+	// ответа 400 и дальше учитывается сразу, без лишнего круга.
+	quirks sync.Map
+}
+
+// modelQuirks — отличия модели от классического Chat Completions.
+// Reasoning-модели OpenAI (o-серия, gpt-5…) не принимают max_tokens (только
+// max_completion_tokens) и произвольную temperature. Имя модели ничего не
+// гарантирует — у пользователя бывает свой сервер со своими правилами, —
+// поэтому поведение выясняется по отказу, а не по списку моделей.
+type modelQuirks struct {
+	completionTokens bool
+	noTemperature    bool
 }
 
 var _ domain.LLMClient = (*Client)(nil)
@@ -55,11 +70,63 @@ func New(baseURL string, log *slog.Logger) *Client {
 }
 
 type chatRequest struct {
-	Model       string          `json:"model"`
-	Messages    json.RawMessage `json:"messages"`
-	Tools       json.RawMessage `json:"tools,omitempty"`
-	MaxTokens   int             `json:"max_tokens"`
-	Temperature float64         `json:"temperature"`
+	Model               string          `json:"model"`
+	Messages            json.RawMessage `json:"messages"`
+	Tools               json.RawMessage `json:"tools,omitempty"`
+	MaxTokens           int             `json:"max_tokens,omitempty"`
+	MaxCompletionTokens int             `json:"max_completion_tokens,omitempty"`
+	Temperature         *float64        `json:"temperature,omitempty"`
+}
+
+// reasoningBudget — во что превращается лимит ответа у модели с
+// max_completion_tokens: туда входят и скрытые рассуждения, и с прежним
+// бюджетом ответ обрезался до пустоты. Списывается всё равно фактический расход.
+const reasoningBudget = 4
+
+func buildChatRequest(p domain.ChatParams, q modelQuirks) chatRequest {
+	req := chatRequest{Model: p.Model, Messages: json.RawMessage(p.MessagesJSON)}
+	if q.completionTokens {
+		req.MaxCompletionTokens = p.MaxTokens * reasoningBudget
+	} else {
+		req.MaxTokens = p.MaxTokens
+	}
+	if !q.noTemperature {
+		t := p.Temperature
+		req.Temperature = &t
+	}
+	if p.ToolsJSON != "" {
+		req.Tools = json.RawMessage(p.ToolsJSON)
+	}
+	return req
+}
+
+// adapt — отказ из-за параметра, который модель не принимает: запомнить и
+// сказать, есть ли смысл повторить.
+func (c *Client) adapt(key string, q *modelQuirks, err error) bool {
+	var he *httpError
+	if !errors.As(err, &he) || he.status != http.StatusBadRequest {
+		return false
+	}
+	var body struct {
+		Error struct {
+			Param string `json:"param"`
+			Code  string `json:"code"`
+		} `json:"error"`
+	}
+	if json.Unmarshal(he.body, &body) != nil {
+		return false
+	}
+	switch {
+	case body.Error.Param == "max_tokens" && !q.completionTokens:
+		q.completionTokens = true
+	case body.Error.Param == "temperature" && !q.noTemperature:
+		q.noTemperature = true
+	default:
+		return false
+	}
+	c.quirks.Store(key, *q)
+	c.log.Info("llm.model_quirk", "model", key, "param", body.Error.Param, "code", body.Error.Code)
+	return true
 }
 
 type chatResponse struct {
@@ -78,18 +145,22 @@ type chatResponse struct {
 }
 
 func (c *Client) ChatOnce(ctx context.Context, p domain.ChatParams) (*domain.ChatResult, error) {
-	req := chatRequest{
-		Model:       p.Model,
-		Messages:    json.RawMessage(p.MessagesJSON),
-		MaxTokens:   p.MaxTokens,
-		Temperature: p.Temperature,
-	}
-	if p.ToolsJSON != "" {
-		req.Tools = json.RawMessage(p.ToolsJSON)
+	key := p.BaseURL + "|" + p.Model
+	var q modelQuirks
+	if v, ok := c.quirks.Load(key); ok {
+		q = v.(modelQuirks)
 	}
 	var resp chatResponse
-	if err := c.post(ctx, p.BaseURL, "/chat/completions", p.APIKey, req, &resp, p.Timeout); err != nil {
-		return nil, err
+	// Отказов по параметрам бывает не больше двух (лимит и температура).
+	for attempt := 0; ; attempt++ {
+		err := c.post(ctx, p.BaseURL, "/chat/completions", p.APIKey, buildChatRequest(p, q), &resp, p.Timeout)
+		if err == nil {
+			break
+		}
+		if attempt < 2 && c.adapt(key, &q, err) {
+			continue
+		}
+		return nil, asDomain(err)
 	}
 	if len(resp.Choices) == 0 {
 		return nil, upstreamError("пустой ответ модели: нет choices")
@@ -133,7 +204,7 @@ func (c *Client) Embed(ctx context.Context, p domain.EmbedParams) ([][]float32, 
 	err := c.post(ctx, p.BaseURL, "/embeddings", p.APIKey,
 		embeddingsRequest{Model: p.Model, Input: p.Texts}, &resp, p.Timeout)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, asDomain(err)
 	}
 	// API возвращает items с полем index — на всякий случай сортируем.
 	sort.Slice(resp.Data, func(i, j int) bool { return resp.Data[i].Index < resp.Data[j].Index })
@@ -187,12 +258,31 @@ func (c *Client) post(ctx context.Context, baseURL, path, apiKey string, body, o
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		snippet, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBody))
 		c.log.Warn("llm.upstream_error", "path", path, "status", resp.StatusCode)
-		return upstreamError(fmt.Sprintf("status %d: %s", resp.StatusCode, strings.TrimSpace(string(snippet))))
+		return &httpError{status: resp.StatusCode, body: snippet}
 	}
 	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
 		return upstreamError("декодирование ответа: " + err.Error())
 	}
 	return nil
+}
+
+// httpError — не-2xx ответ upstream'а; тело нужно, чтобы понять причину отказа.
+type httpError struct {
+	status int
+	body   []byte
+}
+
+func (e *httpError) Error() string {
+	return fmt.Sprintf("status %d: %s", e.status, strings.TrimSpace(string(e.body)))
+}
+
+// asDomain — наружу ошибка уходит доменной (AI_UPSTREAM с текстом upstream'а).
+func asDomain(err error) error {
+	var he *httpError
+	if errors.As(err, &he) {
+		return upstreamError(he.Error())
+	}
+	return err
 }
 
 func upstreamError(msg string) *domain.Error {
