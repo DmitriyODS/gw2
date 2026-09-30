@@ -450,7 +450,10 @@ const messageInputRef = ref(null)
 // Лента — подтверждённые сообщения и хвост неотправленных из очереди.
 const outbox = useMessageOutboxStore()
 const feedMessages = computed(() => {
-  const pendingOut = activeId.value ? outbox.messagesFor(activeId.value) : []
+  // Из стора, а не через activeId: тот объявлен ниже, а лента вычисляет ключи
+  // сразу при создании — обращение к нему здесь роняло раздел (TDZ).
+  const convId = messenger.activeConversationId
+  const pendingOut = convId ? outbox.messagesFor(convId) : []
   return pendingOut.length ? [...messenger.activeMessages, ...pendingOut] : messenger.activeMessages
 })
 const messageGroups = computed(() => groupMessagesByDay(feedMessages.value))
