@@ -238,7 +238,8 @@ fi
 # Выпускаем его ДО подъёма: LiveKit со ссылкой на несуществующий файл не
 # стартует, и звонки легли бы целиком. Проверку Let's Encrypt обслуживает
 # уже работающий nginx (порт 80 отдаёт /.well-known для любого имени).
-TURN_DOMAIN=$(grep -E '^LIVEKIT_TURN_DOMAIN=' .env 2>/dev/null | tail -1 | cut -d= -f2-)
+# `|| true`: строки может не быть, а под pipefail пустой grep уронил бы скрипт.
+TURN_DOMAIN=$( (grep -E '^LIVEKIT_TURN_DOMAIN=' .env 2>/dev/null || true) | tail -1 | cut -d= -f2-)
 TURN_DOMAIN=${TURN_DOMAIN:-turn.gw.kodass.ru}
 # Прежде TURN жил на домене сайта. Теперь 443 они делят по имени, и на
 # одном домене TURN молча уходил бы сайту — переносим на поддомен.
