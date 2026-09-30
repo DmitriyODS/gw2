@@ -5,7 +5,13 @@ import { getSocket } from '@/socket/index.js'
 import { useAuthStore } from './auth.js'
 import { useNotificationsStore } from './notifications.js'
 import { useMessengerStore } from './messenger.js'
-import { requestNotificationPermission } from '@/utils/systemNotify.js'
+import { requestNotificationPermission, closeCallNotification } from '@/utils/systemNotify.js'
+
+/** Экран входящего гаснет сам, если сервер так и не сообщил об исходе
+ *  (серверный дозвон — 60 с; запас на доставку события). */
+const INCOMING_TIMEOUT_MS = 90000
+
+const STALE_CALL_CODES = new Set(['NOT_INVITED', 'NOT_IN_CALL', 'CALL_NOT_FOUND'])
 
 /**
  * Store текущего звонка. В каждый момент времени активный звонок один.
@@ -64,6 +70,12 @@ export const useCallStore = defineStore('call', {
     chatUnread: 0,
     /** Звонок, к которому можно вернуться после перезагрузки страницы. */
     rejoinCall: null,
+    /** Связь с комнатой: 'connected' | 'reconnecting' | 'lost'. */
+    connection: 'connected',
+    /** Браузер запретил автовоспроизведение — звук включается кликом. */
+    audioBlocked: false,
+    /** Качество своей связи по оценке LiveKit ('excellent'|'good'|'poor'|'lost'). */
+    localQuality: null,
   }),
 
   getters: {
@@ -103,6 +115,31 @@ export const useCallStore = defineStore('call', {
         this.resyncParticipants()
       })
       callRoom.addEventListener('participant-left', () => this.resyncParticipants())
+      callRoom.addEventListener('reconnecting', () => {
+        if (this.phase !== 'idle') this.connection = 'reconnecting'
+      })
+      callRoom.addEventListener('reconnected', () => {
+        this.connection = 'connected'
+        this.resyncParticipants()
+      })
+      callRoom.addEventListener('audio-playback', (e) => {
+        this.audioBlocked = !e.detail.canPlay
+      })
+      callRoom.addEventListener('quality', (e) => {
+        const { identity, local, quality } = e.detail
+        if (local) {
+          this.localQuality = quality
+          return
+        }
+        const p = this.participants[identity]
+        if (p && p.quality !== quality) {
+          this.participants = { ...this.participants, [identity]: { ...p, quality } }
+        }
+      })
+      // Сеть вернулась, а связь со звонком потеряна — пробуем снова сами.
+      window.addEventListener('online', () => {
+        if (this.connection === 'lost') this.reconnect()
+      })
       callRoom.addEventListener('track-changed', (e) => {
         if (e.detail?.local) {
           this.localTick = Date.now()
@@ -165,7 +202,12 @@ export const useCallStore = defineStore('call', {
         // Комнату закрыл сервер (звонок завершён/нас удалили) — выходим.
         if (e.detail?.byServer) {
           this.reset()
+          return
         }
+        // LiveKit исчерпал попытки переподключения (сменилась сеть, телефон
+        // уснул): комната мертва, а окно звонка осталось бы «активным» без
+        // звука. Возвращаемся со свежим токеном.
+        this.reconnect()
       })
     },
 
@@ -188,6 +230,7 @@ export const useCallStore = defineStore('call', {
           video: st.video,
           screen: st.screen,
           speaking: this.participants[p.identity]?.speaking || false,
+          quality: this.participants[p.identity]?.quality || null,
           pending: false,
           tick: Date.now(),
         }
@@ -208,6 +251,7 @@ export const useCallStore = defineStore('call', {
           guest: false,
           audio: false, video: false, screen: false,
           speaking: false,
+          quality: null,
           pending: true,
           tick: 0,
         }
@@ -262,16 +306,60 @@ export const useCallStore = defineStore('call', {
           url: livekit.url,
           token: livekit.token,
           audio: this.audioEnabled,
-          video: this.media === 'video' && this.videoEnabled,
+          video: this.videoEnabled && this.hasCamera,
         })
       } catch (e) {
+        // Трубку положили, пока шёл вход, — это не ошибка подключения.
+        if (e?.name === 'AbortError') return
         const msg = 'Не удалось подключиться к серверу звонков'
         this.error = msg
         try { useNotificationsStore().warn(msg) } catch {}
         this.hangup()
         throw e
       }
+      this.connection = 'connected'
       this.resyncParticipants()
+    },
+
+    /** Вернуться в звонок после обрыва связи: свежий токен и новое
+     *  подключение. Одна попытка за раз; не вышло — «Связь потеряна» с
+     *  кнопкой повтора (и автоповтор, когда вернётся сеть). */
+    async reconnect() {
+      if (this._recovering || this.phase === 'idle' || !this.call) return
+      this._recovering = true
+      this.connection = 'reconnecting'
+      const callId = this.call.id
+      try {
+        const data = this.guest
+          ? await joinCallByCode(this.call.share_code, { name: this.guestName })
+          : await getCallToken(callId)
+        if (this.phase === 'idle' || this.call?.id !== callId) return
+        await callRoom.connect({
+          url: data.livekit.url,
+          token: data.livekit.token,
+          audio: this.audioEnabled,
+          video: this.videoEnabled && this.hasCamera,
+        })
+        this.connection = 'connected'
+        this.resyncParticipants()
+      } catch (e) {
+        if (e?.name === 'AbortError' || this.phase === 'idle') return
+        if (STALE_CALL_CODES.has(e?.code)) {
+          this.reset()
+          try { useNotificationsStore().info('Звонок завершён') } catch {}
+          return
+        }
+        this.connection = 'lost'
+      } finally {
+        this._recovering = false
+      }
+    },
+
+    /** Включить звук, заблокированный политикой автовоспроизведения. */
+    async enableAudio() {
+      try {
+        this.audioBlocked = !(await callRoom.startAudio())
+      } catch { /* повторим по следующему клику */ }
     },
 
     /** Я звоню кому-то — отправляем call:start, ждём call:started с токеном.
@@ -298,6 +386,7 @@ export const useCallStore = defineStore('call', {
       }
       socket.emit('call:start', { user_ids: userIds, media })
       this._armOutgoingTimeout()
+      callRoom.preload()
     },
 
     /** Если за разумное время никто не вошёл — завершаем «не дозвонился». */
@@ -335,6 +424,9 @@ export const useCallStore = defineStore('call', {
 
     /** Мне позвонили. Камеру не трогаем, пока пользователь не примет. */
     handleIncoming(callPayload) {
+      // Тот же звонок пришёл дважды (сверка при загрузке и сокет-событие) —
+      // иначе ветка ниже отклонила бы собственный входящий.
+      if (this.call?.id === callPayload.id && this.phase !== 'idle') return
       if (this.phase !== 'idle') {
         // Я уже в звонке — отказываем сразу автоматически, чтобы у звонящего
         // звонок не висел в ringing до таймаута.
@@ -346,6 +438,14 @@ export const useCallStore = defineStore('call', {
       this.media = callPayload.media || 'video'
       this._incomingAt = Date.now()
       this.phase = 'incoming'
+      callRoom.preload()
+      clearTimeout(this._incomingTimer)
+      this._incomingTimer = setTimeout(() => {
+        if (this.phase === 'incoming' && this.call?.id === callPayload.id && !this._acceptedHere) {
+          closeCallNotification()
+          this.reset()
+        }
+      }, INCOMING_TIMEOUT_MS)
     },
 
     /** Я принимаю входящий: сервер в ответ пришлёт call:accepted с токеном. */
@@ -489,6 +589,20 @@ export const useCallStore = defineStore('call', {
           if (!current || current.id !== this.call?.id) {
             this.reset()
             if (live) this.rejoinCall = live
+            return
+          }
+          // Сервер уже считает нас участником, а экран всё ещё «входящий»:
+          // call:accepted потерялся на переподключении сокета.
+          if (this.phase === 'incoming' && live) {
+            if (this._acceptedHere) {
+              // «Принять» нажимали здесь — входим по токену.
+              this._acceptedHere = false
+              this.phase = 'idle'
+              await this.joinExistingCall(live)
+            } else {
+              // Приняли на другом устройстве — здесь просто гасим экран.
+              this.reset()
+            }
           }
           return
         }
@@ -578,9 +692,12 @@ export const useCallStore = defineStore('call', {
 
     /** Сервер сообщил, что в звонок позвали новых людей — обновляем
      *  метаданные, resync добавит плитки-плейсхолдеры. */
-    handleInvited({ call_id, call }) {
+    handleInvited({ call_id, call, user_ids = [] }) {
       if (!this.call || this.call.id !== call_id) return
       if (call) this.call = call
+      // Позвали снова того, кто отказался или не взял трубку, — плитка
+      // ожидания должна вернуться.
+      for (const id of user_ids) this._declined?.delete(id)
       this.resyncParticipants()
     },
 
@@ -640,10 +757,9 @@ export const useCallStore = defineStore('call', {
     },
 
     /** Сообщение в чат звонка (data-канал, к собеседникам и гостям). */
-    sendChat(text) {
+    async sendChat(text) {
       const value = (text || '').trim()
       if (!value || !callRoom.connected) return
-      callRoom.sendChat(value)
       const auth = useAuthStore()
       this._chatSeq = (this._chatSeq || 0) + 1
       this.chatMessages.push({
@@ -654,6 +770,11 @@ export const useCallStore = defineStore('call', {
         ts: Date.now(),
         own: true,
       })
+      try {
+        await callRoom.sendChat(value)
+      } catch {
+        try { useNotificationsStore().warn('Сообщение не доставлено') } catch {}
+      }
     },
 
     openPanel(name) {
@@ -671,7 +792,12 @@ export const useCallStore = defineStore('call', {
 
     reset() {
       this._clearOutgoingTimeout()
+      clearTimeout(this._incomingTimer)
       this._acceptedHere = false
+      this._recovering = false
+      this.connection = 'connected'
+      this.audioBlocked = false
+      this.localQuality = null
       callRoom.disconnect().catch(() => {})
       this.participants = {}
       this.localTick = 0
@@ -699,7 +825,7 @@ export const useCallStore = defineStore('call', {
       // Звонок уже завершён, а мы пытались принять/присоединиться по
       // устаревшей плашке — сбрасываем и обновляем переписку, чтобы плашка
       // перерисовалась в «завершён».
-      const isStale = code === 'NOT_INVITED' || code === 'NOT_IN_CALL' || code === 'CALL_NOT_FOUND'
+      const isStale = STALE_CALL_CODES.has(code)
       const text = isStale
         ? 'Звонок уже завершён'
         : (message || 'Ошибка звонка')

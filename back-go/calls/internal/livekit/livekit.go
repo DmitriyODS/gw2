@@ -36,7 +36,8 @@ type Config struct {
 	APIURL string
 	// ClientURL — URL подключения браузера ('/livekit' за nginx или ws://…).
 	ClientURL string
-	// TokenTTL — должен покрывать самый длинный звонок.
+	// TokenTTL — срок входа по токену; дальше соединение живёт на продлённом
+	// токене, который выдаёт сам LiveKit.
 	TokenTTL time.Duration
 }
 
@@ -50,7 +51,7 @@ var _ domain.MediaServer = (*Client)(nil)
 
 func New(cfg Config, log *slog.Logger) *Client {
 	if cfg.TokenTTL == 0 {
-		cfg.TokenTTL = 6 * time.Hour
+		cfg.TokenTTL = 15 * time.Minute
 	}
 	return &Client{
 		cfg:  cfg,

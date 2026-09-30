@@ -64,6 +64,10 @@ func (r *fakeRepo) GetCallByShareCode(_ context.Context, code string) (*domain.C
 }
 
 func (r *fakeRepo) UpdateCall(_ context.Context, c *domain.Call) error {
+	// Как в SQL: завершённый звонок не перезаписывается.
+	if old, ok := r.calls[c.ID]; ok && old.Finished() {
+		return nil
+	}
 	cp := *c
 	r.calls[c.ID] = &cp
 	return nil
@@ -90,6 +94,14 @@ func (r *fakeRepo) ListParticipants(_ context.Context, callID int64) ([]*domain.
 	for _, p := range r.parts[callID] {
 		cp := *p
 		out = append(out, &cp)
+	}
+	return out, nil
+}
+
+func (r *fakeRepo) ListParticipantsForCalls(ctx context.Context, ids []int64) (map[int64][]*domain.Participant, error) {
+	out := make(map[int64][]*domain.Participant, len(ids))
+	for _, id := range ids {
+		out[id], _ = r.ListParticipants(ctx, id)
 	}
 	return out, nil
 }
@@ -237,6 +249,9 @@ type fakePub struct{ events []pubEvent }
 func (p *fakePub) CallEnded(_ context.Context, callID int64, status string, notify []int64) {
 	p.events = append(p.events, pubEvent{"call_ended", callID, status, notify})
 }
+func (p *fakePub) ParticipantDeclined(_ context.Context, callID, _ int64, notify []int64) {
+	p.events = append(p.events, pubEvent{"participant_declined", callID, "", notify})
+}
 func (p *fakePub) PillCreated(_ context.Context, conversationID, senderID, callID int64) {
 	p.events = append(p.events, pubEvent{"pill_created", callID, "", []int64{conversationID, senderID}})
 }
@@ -275,7 +290,8 @@ func newTestService() (*Service, *fakeRepo, *fakeMedia, *fakePub) {
 		99: {ID: 99, FIO: "Чужой", IsActive: true, CompanyActive: true},
 	}, map[int64]int64{10: 1, 20: 1, 30: 1, 99: 2})
 	svc := New(repo, users, ringstate.New(), media, pub, &fakeMessenger{}, slog.Default())
-	svc.leftGrace = 0 // сверка после participant_left — синхронно
+	svc.leftGrace = 0   // сверка после participant_left — синхронно
+	svc.ringTimeout = 0 // таймеры дозвона не заводим — expireInvite зовут тесты
 	return svc, repo, media, pub
 }
 
@@ -786,5 +802,238 @@ func must(t *testing.T, err error) {
 	t.Helper()
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+// ── Таймаут дозвона, бронь занятости, закрытие участников ────────
+
+// ageInvite — приглашение отправлено давно (дозвон истёк).
+func ageInvite(repo *fakeRepo, callID, userID int64) {
+	for _, p := range repo.parts[callID] {
+		if p.UserID == userID {
+			p.InvitedAt = p.InvitedAt.Add(-2 * time.Minute)
+		}
+	}
+}
+
+func eventsOf(pub *fakePub, kind string) []pubEvent {
+	var out []pubEvent
+	for _, e := range pub.events {
+		if e.kind == kind {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+func TestRingTimeoutP2PBecomesMissed(t *testing.T) {
+	svc, repo, media, pub := newTestService()
+	ctx := context.Background()
+	started, err := svc.StartCall(ctx, dto.StartCallRequest{InitiatorID: 10, InviteeIDs: []int64{20}})
+	must(t, err)
+	callID := started.Call.ID
+	ageInvite(repo, callID, 20)
+
+	must(t, svc.expireInvite(ctx, callID, 20))
+
+	stored, _ := repo.GetCall(ctx, callID)
+	if stored.Status != domain.StatusMissed || stored.EndedAt == nil {
+		t.Fatalf("звонок %s, ожидался missed", stored.Status)
+	}
+	if svc.ring.IsUserBusy(10) || svc.ring.IsUserBusy(20) {
+		t.Error("участники должны освободиться")
+	}
+	if len(media.deleted) != 1 {
+		t.Error("комната должна быть погашена")
+	}
+	ended := eventsOf(pub, "call_ended")
+	if len(ended) != 1 || !domain.Has(ended[0].notify, 10) || !domain.Has(ended[0].notify, 20) {
+		t.Errorf("call_ended: %+v", ended)
+	}
+	for _, p := range repo.parts[callID] {
+		if p.LeftAt == nil {
+			t.Errorf("участник %d остался «в звонке»", p.UserID)
+		}
+	}
+}
+
+func TestRingTimeoutGroupDropsOnlySilent(t *testing.T) {
+	svc, repo, _, pub := newTestService()
+	ctx := context.Background()
+	started, err := svc.StartCall(ctx, dto.StartCallRequest{InitiatorID: 10, InviteeIDs: []int64{20, 30}})
+	must(t, err)
+	callID := started.Call.ID
+	_, err = svc.AcceptCall(ctx, dto.AcceptRequest{CallID: callID, UserID: 20})
+	must(t, err)
+	ageInvite(repo, callID, 20)
+	ageInvite(repo, callID, 30)
+
+	must(t, svc.expireInvite(ctx, callID, 30))
+	must(t, svc.expireInvite(ctx, callID, 20)) // принявшего не трогаем
+
+	stored, _ := repo.GetCall(ctx, callID)
+	if stored.Finished() {
+		t.Fatal("звонок с двумя собеседниками не должен закрыться")
+	}
+	if svc.ring.IsUserBusy(30) {
+		t.Error("не взявший трубку должен освободиться для других звонков")
+	}
+	if !svc.ring.IsUserBusy(20) {
+		t.Error("принявший остаётся в звонке")
+	}
+	declined := eventsOf(pub, "participant_declined")
+	if len(declined) != 1 || !domain.Has(declined[0].notify, 10) || domain.Has(declined[0].notify, 30) {
+		t.Errorf("participant_declined: %+v", declined)
+	}
+	ended := eventsOf(pub, "call_ended")
+	if len(ended) != 1 || len(ended[0].notify) != 1 || ended[0].notify[0] != 30 {
+		t.Errorf("экран входящего гасится только у выбывшего: %+v", ended)
+	}
+}
+
+func TestRingTimeoutSkipsFreshReinvite(t *testing.T) {
+	svc, repo, _, _ := newTestService()
+	ctx := context.Background()
+	started, err := svc.StartCall(ctx, dto.StartCallRequest{InitiatorID: 10, InviteeIDs: []int64{20}})
+	must(t, err)
+	svc.ringTimeout = time.Minute // таймер прежнего приглашения, новое свежее
+
+	must(t, svc.expireInvite(ctx, started.Call.ID, 20))
+	if stored, _ := repo.GetCall(ctx, started.Call.ID); stored.Finished() {
+		t.Error("свежее приглашение не должно истечь по старому таймеру")
+	}
+}
+
+func TestStartCallRespectsReservation(t *testing.T) {
+	svc, _, _, _ := newTestService()
+	ctx := context.Background()
+	// Встречный звонок уже захватил собеседника.
+	if !svc.ring.Reserve([]int64{20}) {
+		t.Fatal("бронь не удалась")
+	}
+	_, err := svc.StartCall(ctx, dto.StartCallRequest{InitiatorID: 10, InviteeIDs: []int64{20}})
+	if domainCode(err) != "INVITEE_BUSY" {
+		t.Fatalf("ожидался INVITEE_BUSY, получено %v", err)
+	}
+	if svc.ring.IsUserBusy(10) {
+		t.Error("бронь инициатора должна сняться после отказа")
+	}
+	svc.ring.Release([]int64{20})
+
+	// Удачный звонок: бронь переходит в занятость звонком и не снимается.
+	started, err := svc.StartCall(ctx, dto.StartCallRequest{InitiatorID: 10, InviteeIDs: []int64{20}})
+	must(t, err)
+	if id, ok := svc.ring.UserActiveCall(20); !ok || id != started.Call.ID {
+		t.Errorf("собеседник должен числиться за звонком, получено %d %v", id, ok)
+	}
+}
+
+func TestLeaveClosesRemainingParticipants(t *testing.T) {
+	svc, repo, _, _ := newTestService()
+	ctx := context.Background()
+	started, err := svc.StartCall(ctx, dto.StartCallRequest{InitiatorID: 10, InviteeIDs: []int64{20}})
+	must(t, err)
+	callID := started.Call.ID
+	_, err = svc.AcceptCall(ctx, dto.AcceptRequest{CallID: callID, UserID: 20})
+	must(t, err)
+
+	resp, err := svc.LeaveCall(ctx, dto.HangupRequest{CallID: callID, UserID: 20})
+	must(t, err)
+	if !resp.Ended {
+		t.Fatal("p2p без собеседника должен завершиться")
+	}
+	for _, p := range repo.parts[callID] {
+		if p.LeftAt == nil {
+			t.Errorf("участник %d остался «в звонке»", p.UserID)
+		}
+	}
+	stored, _ := repo.GetCall(ctx, callID)
+	if stored.AnsweredAt == nil || resp.Call.DurationSec == nil {
+		t.Error("у состоявшегося звонка должны быть момент ответа и длительность")
+	}
+}
+
+func TestAcceptAfterDeclineDoesNotResurrect(t *testing.T) {
+	svc, repo, _, _ := newTestService()
+	ctx := context.Background()
+	started, err := svc.StartCall(ctx, dto.StartCallRequest{InitiatorID: 10, InviteeIDs: []int64{20}})
+	must(t, err)
+	callID := started.Call.ID
+	_, err = svc.DeclineCall(ctx, dto.HangupRequest{CallID: callID, UserID: 20})
+	must(t, err)
+
+	if _, err := svc.AcceptCall(ctx, dto.AcceptRequest{CallID: callID, UserID: 20}); domainCode(err) != "NOT_INVITED" {
+		t.Fatalf("ожидался NOT_INVITED, получено %v", err)
+	}
+	// Даже запись из устаревшего снимка не воскрешает завершённый звонок.
+	stale := *repo.calls[callID]
+	stale.Status = domain.StatusActive
+	must(t, repo.UpdateCall(ctx, &stale))
+	if stored, _ := repo.GetCall(ctx, callID); stored.Status != domain.StatusMissed {
+		t.Errorf("статус %s, ожидался missed", stored.Status)
+	}
+	if resp := started.Call; resp.DurationSec != nil {
+		t.Error("у пропущенного звонка нет длительности")
+	}
+}
+
+type fakeDedup struct{ seen map[string]bool }
+
+func (d *fakeDedup) FirstSeen(_ context.Context, id string) bool {
+	if d.seen[id] {
+		return false
+	}
+	d.seen[id] = true
+	return true
+}
+
+func TestWebhookDuplicateIgnored(t *testing.T) {
+	svc, repo, media, pub := newTestService()
+	svc.WithWebhookDedup(&fakeDedup{seen: map[string]bool{}})
+	ctx := context.Background()
+	started, err := svc.StartCall(ctx, dto.StartCallRequest{InitiatorID: 10, InviteeIDs: []int64{20}})
+	must(t, err)
+	callID := started.Call.ID
+	room := domain.RoomNameFor(callID)
+	media.occupants[room] = []string{}
+
+	finished := dto.WebhookEvent{ID: "EV_1", Event: "room_finished", Room: room}
+	must(t, svc.HandleWebhook(ctx, finished))
+	must(t, svc.HandleWebhook(ctx, finished))
+
+	if n := len(eventsOf(pub, "call_ended")); n != 1 {
+		t.Errorf("call_ended разослан %d раз, ожидался один", n)
+	}
+	if stored, _ := repo.GetCall(ctx, callID); stored.Status != domain.StatusMissed {
+		t.Errorf("статус %s, ожидался missed", stored.Status)
+	}
+}
+
+func TestReinviteAfterRingTimeout(t *testing.T) {
+	svc, repo, _, _ := newTestService()
+	ctx := context.Background()
+	started, err := svc.StartCall(ctx, dto.StartCallRequest{InitiatorID: 10, InviteeIDs: []int64{20, 30}})
+	must(t, err)
+	callID := started.Call.ID
+	_, err = svc.AcceptCall(ctx, dto.AcceptRequest{CallID: callID, UserID: 20})
+	must(t, err)
+	ageInvite(repo, callID, 30)
+	must(t, svc.expireInvite(ctx, callID, 30))
+
+	resp, err := svc.InviteToCall(ctx, dto.InviteRequest{CallID: callID, InviterID: 10, InviteeIDs: []int64{30}})
+	must(t, err)
+	if len(resp.NewInviteeIDs) != 1 || resp.NewInviteeIDs[0] != 30 {
+		t.Fatalf("не взявшего трубку должно быть можно позвать снова: %v", resp.NewInviteeIDs)
+	}
+	if !svc.ring.IsUserBusy(30) {
+		t.Error("повторно приглашённый снова ждёт ответа")
+	}
+	// Отказ после повторного приглашения обрабатывается, а повторный — нет.
+	first, err := svc.DeclineCall(ctx, dto.HangupRequest{CallID: callID, UserID: 30})
+	must(t, err)
+	second, err := svc.DeclineCall(ctx, dto.HangupRequest{CallID: callID, UserID: 30})
+	must(t, err)
+	if first.Call == nil || second.Call != nil {
+		t.Errorf("первый отказ: %v, повторный должен быть no-op: %v", first.Call, second.Call)
 	}
 }

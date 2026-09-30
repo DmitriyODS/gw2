@@ -66,20 +66,80 @@ public class NativeShellPlugin extends Plugin {
         return (AudioManager) getContext().getSystemService(Context.AUDIO_SERVICE);
     }
 
-    // Смена набора аудио-устройств (подключили/убрали гарнитуру, BT) — будим
-    // веб-слой, чтобы он перечитал доступные маршруты и показал выбор.
+    // Маршрут звука звонка. Идёт ли звонок, предпочитает ли он громкую связь
+    // (видео) и что выбрал человек руками — маршрут пересчитывается при
+    // подключении и отключении гарнитуры.
+    private boolean callAudioActive;
+    private boolean preferSpeaker;
+    private String manualRoute;
+
+    // Смена набора аудио-устройств (подключили/убрали гарнитуру, BT) — во время
+    // звонка звук переезжает на гарнитуру сам, как в системной звонилке, и
+    // веб-слой перечитывает доступные маршруты.
     @Override
     public void load() {
         try {
             am().registerAudioDeviceCallback(new AudioDeviceCallback() {
                 @Override public void onAudioDevicesAdded(AudioDeviceInfo[] a) {
+                    // Новая гарнитура важнее ручного выбора.
+                    if (callAudioActive && hasHeadset(a)) {
+                        manualRoute = null;
+                        applyAutoRoute();
+                    }
                     notifyListeners("audioDevicesChanged", new JSObject());
                 }
                 @Override public void onAudioDevicesRemoved(AudioDeviceInfo[] r) {
+                    // Выбранное устройство пропало — назад к маршруту по умолчанию.
+                    if (callAudioActive && (manualRoute == null || !availableRoutes().contains(manualRoute))) {
+                        manualRoute = null;
+                        applyAutoRoute();
+                    }
                     notifyListeners("audioDevicesChanged", new JSObject());
                 }
             }, null);
         } catch (Exception ignored) {}
+    }
+
+    private static boolean hasHeadset(AudioDeviceInfo[] devices) {
+        for (AudioDeviceInfo d : devices) {
+            String r = routeOf(d.getType());
+            if ("wired".equals(r) || "bluetooth".equals(r)) return true;
+        }
+        return false;
+    }
+
+    // Маршруты, доступные прямо сейчас (гарнитура — только подключённая).
+    private java.util.Set<String> availableRoutes() {
+        java.util.LinkedHashSet<String> out = new java.util.LinkedHashSet<>();
+        AudioManager m = am();
+        try {
+            AudioDeviceInfo[] devices = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+                ? m.getAvailableCommunicationDevices().toArray(new AudioDeviceInfo[0])
+                : m.getDevices(AudioManager.GET_DEVICES_OUTPUTS);
+            for (AudioDeviceInfo d : devices) {
+                int type = d.getType();
+                // До Android 12 гарнитура BT видна как A2DP, а говорить через неё будем по SCO.
+                if (type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP) { out.add("bluetooth"); continue; }
+                String r = routeOf(type);
+                if (r != null) out.add(r);
+            }
+        } catch (Exception ignored) {}
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            out.add("earpiece");
+            out.add("speaker");
+        }
+        return out;
+    }
+
+    // Гарнитура, если подключена; иначе громкая связь для видео и «ухо» для
+    // голоса — как в WhatsApp и Meet. MODE_IN_COMMUNICATION сам по себе ведёт
+    // звук в разговорный динамик, и видеозвонок было почти не слышно.
+    private void applyAutoRoute() {
+        java.util.Set<String> routes = availableRoutes();
+        String route = routes.contains("bluetooth") ? "bluetooth"
+            : routes.contains("wired") ? "wired"
+            : preferSpeaker ? "speaker" : "earpiece";
+        applyRoute(route);
     }
 
     // ── Звонок: foreground-сервис (жизнь при блокировке) ───────────────────
@@ -88,7 +148,9 @@ public class NativeShellPlugin extends Plugin {
         // Старт FGS может быть запрещён (фон/прошивка One UI) — не роняем звонок.
         try {
             Context ctx = getContext();
-            Intent i = new Intent(ctx, CallForegroundService.class);
+            Intent i = new Intent(ctx, CallForegroundService.class)
+                .putExtra(CallForegroundService.EXTRA_CAMERA,
+                    Boolean.TRUE.equals(call.getBoolean("camera", false)));
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) ctx.startForegroundService(i);
             else ctx.startService(i);
         } catch (Throwable ignored) {}
@@ -151,11 +213,17 @@ public class NativeShellPlugin extends Plugin {
     @PluginMethod
     public void audioStart(PluginCall call) {
         try { am().setMode(AudioManager.MODE_IN_COMMUNICATION); } catch (Exception ignored) {}
+        callAudioActive = true;
+        preferSpeaker = Boolean.TRUE.equals(call.getBoolean("speaker", false));
+        manualRoute = null;
+        applyAutoRoute();
         call.resolve();
     }
 
     @PluginMethod
     public void audioStop(PluginCall call) {
+        callAudioActive = false;
+        manualRoute = null;
         AudioManager m = am();
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -200,6 +268,14 @@ public class NativeShellPlugin extends Plugin {
     @PluginMethod
     public void audioSetRoute(PluginCall call) {
         String route = call.getString("route", "");
+        boolean ok = applyRoute(route);
+        if (ok) manualRoute = route;
+        JSObject ret = new JSObject();
+        ret.put("ok", ok);
+        call.resolve(ret);
+    }
+
+    private boolean applyRoute(String route) {
         AudioManager m = am();
         boolean ok = false;
         try {
@@ -220,9 +296,7 @@ public class NativeShellPlugin extends Plugin {
                 }
             }
         } catch (Exception ignored) {}
-        JSObject ret = new JSObject();
-        ret.put("ok", ok);
-        call.resolve(ret);
+        return ok;
     }
 
     @PluginMethod

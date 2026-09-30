@@ -23,7 +23,7 @@ import (
 
 // backupExcluded — таблицы, которые бэкап не берёт намеренно (≡ domain.
 // BackupExcluded authsvc): транзиентные коды и активные входы, перегенерируемые
-// эмбеддинги.
+// эмбеддинги, незавершённые чанковые загрузки.
 var backupExcluded = map[string]bool{
 	"email_verifications": true,
 	"password_resets":     true,
@@ -31,6 +31,7 @@ var backupExcluded = map[string]bool{
 	"task_embeddings":     true,
 	"note_embeddings":     true,
 	"goose_db_version":    true,
+	"upload_sessions":     true,
 }
 
 // backupSectionKeys — разделы выбора (≡ domain.BackupSections + SectionOther;

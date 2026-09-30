@@ -17,6 +17,10 @@ func (s *Service) HandleWebhook(ctx context.Context, event dto.WebhookEvent) err
 	if callID == 0 {
 		return nil
 	}
+	if event.ID != "" && s.dedup != nil && !s.dedup.FirstSeen(ctx, event.ID) {
+		return nil
+	}
+	defer s.locks.lock(callID)()
 	s.log.Info("livekit.webhook", "event", event.Event, "room", event.Room,
 		"identity", event.Identity, "call_id", callID)
 
@@ -79,6 +83,7 @@ func (s *Service) applyParticipantJoined(ctx context.Context, callID int64, iden
 				part.JoinedAt = &ts
 			}
 			part.LeftAt = nil
+			part.Declined = false
 			if err := s.repo.UpdateParticipant(ctx, part); err != nil {
 				return err
 			}
@@ -89,8 +94,7 @@ func (s *Service) applyParticipantJoined(ctx context.Context, callID int64, iden
 
 	// «Разговор начался» = в комнате двое. Сам инициатор, сидящий в комнате
 	// один во время дозвона, статус не меняет.
-	if call.Status == domain.StatusRinging && s.ring.OccupantsCount(callID) >= 2 {
-		call.Status = domain.StatusActive
+	if s.ring.OccupantsCount(callID) >= 2 && call.Answer(now()) {
 		if err := s.repo.UpdateCall(ctx, call); err != nil {
 			return err
 		}
@@ -144,6 +148,7 @@ func (s *Service) scheduleLeftSweep(callID int64) {
 		s.sweepMu.Unlock()
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
+		defer s.locks.lock(callID)()
 		if err := s.sweepDeparted(ctx, callID); err != nil {
 			s.log.Error("calls.left_sweep_failed", "call_id", callID, "error", err)
 		}
@@ -231,6 +236,11 @@ func (s *Service) applyRoomFinished(ctx context.Context, callID int64) error {
 	if call == nil {
 		return nil
 	}
+	// Звонок уже закрыт тем, кто погасил комнату (выход, отказ, сверка), —
+	// он же разослал завершение.
+	if call.Finished() && ring == nil {
+		return nil
+	}
 
 	if !call.Finished() {
 		// Никогда не было второго участника — «не дозвонился».
@@ -239,28 +249,16 @@ func (s *Service) applyRoomFinished(ctx context.Context, callID int64) error {
 		} else {
 			call.Status = domain.StatusEnded
 		}
-		if call.EndedAt == nil {
-			ts := now()
-			call.EndedAt = &ts
-		}
-		if err := s.repo.UpdateCall(ctx, call); err != nil {
-			return err
-		}
 	}
-	if ring != nil {
+	if call.EndedAt == nil {
 		ts := now()
-		for _, uid := range ring.Joined {
-			part, err := s.repo.GetParticipant(ctx, callID, uid)
-			if err != nil {
-				return err
-			}
-			if part != nil && part.LeftAt == nil {
-				part.LeftAt = &ts
-				if err := s.repo.UpdateParticipant(ctx, part); err != nil {
-					return err
-				}
-			}
-		}
+		call.EndedAt = &ts
+	}
+	if err := s.repo.UpdateCall(ctx, call); err != nil {
+		return err
+	}
+	if err := s.repo.CloseOpenParticipants(ctx, callID, *call.EndedAt); err != nil {
+		return err
 	}
 	s.pub.CallEnded(ctx, callID, call.Status, s.endedNotifyIDs(ctx, call, ring))
 	s.pub.PillUpdated(ctx, callID)
@@ -338,5 +336,12 @@ func (s *Service) restoreRingState(ctx context.Context, call *domain.Call, ident
 	invited := unionExcept(members, pending, 0)
 	s.ring.RestoreCall(call.ID, call.InitiatorID, call.Kind, call.Media,
 		invited, members, guests)
+	// Таймеры дозвона жили в памяти прежнего процесса — заводим заново на
+	// остаток срока.
+	for _, p := range parts {
+		if p.LeftAt == nil && !p.Declined && p.JoinedAt == nil && !domain.Has(members, p.UserID) {
+			s.armRingTimeout(call.ID, []int64{p.UserID}, s.ringTimeout-now().Sub(p.InvitedAt))
+		}
+	}
 	return nil
 }

@@ -12,6 +12,8 @@ type CallRepository interface {
 	CreateCall(ctx context.Context, call *Call, participants []*Participant) error
 	GetCall(ctx context.Context, id int64) (*Call, error)
 	GetCallByShareCode(ctx context.Context, code string) (*Call, error)
+	// UpdateCall не трогает уже завершённый звонок: переход статуса из
+	// устаревшего снимка не должен воскрешать ended/missed.
 	UpdateCall(ctx context.Context, call *Call) error
 	// DeleteCall — физическое удаление (откат не состоявшегося звонка).
 	DeleteCall(ctx context.Context, id int64) error
@@ -19,6 +21,8 @@ type CallRepository interface {
 	GetParticipant(ctx context.Context, callID, userID int64) (*Participant, error)
 	// ListParticipants — с ФИО/аватаром (join users), в порядке записи.
 	ListParticipants(ctx context.Context, callID int64) ([]*Participant, error)
+	// ListParticipantsForCalls — то же для пачки звонков одним запросом.
+	ListParticipantsForCalls(ctx context.Context, callIDs []int64) (map[int64][]*Participant, error)
 	CreateParticipant(ctx context.Context, p *Participant) error
 	UpdateParticipant(ctx context.Context, p *Participant) error
 	// CloseOpenParticipants — left_at для всех, кто его ещё не имеет.
@@ -68,6 +72,11 @@ func Has(ids []int64, id int64) bool {
 type RingState interface {
 	UserActiveCall(userID int64) (int64, bool)
 	IsUserBusy(userID int64) bool
+	// Reserve — атомарно занять пользователей под будущий звонок (id ещё нет):
+	// false, если хоть один уже занят. Бронь снимает CreateCall/AddInvitee
+	// (занятость переходит на звонок) либо Release при неудаче.
+	Reserve(userIDs []int64) bool
+	Release(userIDs []int64)
 	Snapshot(callID int64) (*RingSnapshot, bool)
 	OccupantsCount(callID int64) int
 
@@ -107,8 +116,17 @@ type MediaServer interface {
 // вторична и звонок не роняет.
 type EventPublisher interface {
 	CallEnded(ctx context.Context, callID int64, status string, notifyUserIDs []int64)
+	// ParticipantDeclined — приглашённый выбыл, не войдя (отказ или истёк
+	// дозвон): остальные убирают его плитку-плейсхолдер.
+	ParticipantDeclined(ctx context.Context, callID, userID int64, notifyUserIDs []int64)
 	PillCreated(ctx context.Context, conversationID, senderID, callID int64)
 	PillUpdated(ctx context.Context, callID int64)
+}
+
+// WebhookDedup — отсев повторной доставки вебхука LiveKit по id события
+// (доставка «как минимум один раз»). Недоступное хранилище — fail-open.
+type WebhookDedup interface {
+	FirstSeen(ctx context.Context, eventID string) bool
 }
 
 // MessengerClient — gRPC msgsvc: парный диалог для p2p-звонка (создаётся ДО

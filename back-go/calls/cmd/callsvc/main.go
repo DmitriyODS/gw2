@@ -23,6 +23,7 @@ import (
 	"github.com/DmitriyODS/gw2/back-go/calls/internal/events"
 	"github.com/DmitriyODS/gw2/back-go/calls/internal/livekit"
 	"github.com/DmitriyODS/gw2/back-go/calls/internal/repository/postgres"
+	"github.com/DmitriyODS/gw2/back-go/calls/internal/repository/redisx"
 	"github.com/DmitriyODS/gw2/back-go/calls/internal/ringstate"
 	"github.com/DmitriyODS/gw2/back-go/calls/internal/service"
 	grpctransport "github.com/DmitriyODS/gw2/back-go/calls/internal/transport/grpc"
@@ -46,7 +47,10 @@ func main() {
 		log.Error("paseto.bad_public_key", "error", err)
 		os.Exit(1)
 	}
-	tokenTTL := 6 * time.Hour
+	// Токен LiveKit нужен только на вход: живому соединению сервер сам
+	// выдаёт продлённый. Короткий срок сужает окно для утёкшего токена
+	// (гостевые ссылки открывают в чужих браузерах).
+	tokenTTL := 15 * time.Minute
 	if raw := os.Getenv("LIVEKIT_TOKEN_TTL"); raw != "" {
 		if sec, err := strconv.Atoi(raw); err == nil && sec > 0 {
 			tokenTTL = time.Duration(sec) * time.Second
@@ -80,7 +84,8 @@ func main() {
 	users := postgres.NewUserReader(pool)
 	ring := ringstate.New()
 	pub := events.NewPublisher(pkgevents.NewPublisher(rdb, log, events.Channel), msgr, log)
-	svc := service.New(repo, users, ring, lk, pub, msgr, log)
+	svc := service.New(repo, users, ring, lk, pub, msgr, log).
+		WithWebhookDedup(redisx.NewWebhookDedup(rdb, log))
 	eps := endpoint.New(svc)
 
 	// Лимиты тарифа: сколько человек помещается в групповой звонок инициатора.

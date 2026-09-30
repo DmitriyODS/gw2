@@ -35,6 +35,9 @@ const (
 	pingInterval = 25 * time.Second
 	pongWait     = 60 * time.Second
 	writeWait    = 10 * time.Second
+	// callQueueSize — команд звонка в очереди соединения; живому клиенту хватает
+	// единиц, переполнение — признак мусорного клиента.
+	callQueueSize = 16
 )
 
 type Server struct {
@@ -171,6 +174,22 @@ func (h *wsHandler) handle(conn *websocket.Conn) {
 		}
 	}()
 
+	// ── команды звонка: строго по порядку ────────────────────────
+	// gRPC до 10 с — вне читателя (пинг-понг не ждёт), но одной очередью на
+	// соединение: «принять» и сразу «положить трубку» в отдельных горутинах
+	// выполнялись в произвольном порядке, и сервер оставлял человека в звонке.
+	callCmds := make(chan hub.Frame, callQueueSize)
+	go func() {
+		for {
+			select {
+			case <-client.Done():
+				return
+			case frame := <-callCmds:
+				h.deps.Ring.Dispatch(client.UserID, frame.Event, frame.Data)
+			}
+		}
+	}()
+
 	// ── reader: входящие команды ─────────────────────────────────
 	_ = conn.SetReadDeadline(time.Now().Add(pongWait))
 	conn.SetPongHandler(func(string) error {
@@ -190,7 +209,7 @@ func (h *wsHandler) handle(conn *websocket.Conn) {
 		if err := json.Unmarshal(raw, &frame); err != nil {
 			continue
 		}
-		h.dispatch(client, frame)
+		h.dispatch(client, frame, callCmds)
 	}
 
 	client.Close()
@@ -205,7 +224,7 @@ func (h *wsHandler) cleanup(client *hub.Client) {
 }
 
 // dispatch — маршрутизация входящих кадров клиента.
-func (h *wsHandler) dispatch(client *hub.Client, frame hub.Frame) {
+func (h *wsHandler) dispatch(client *hub.Client, frame hub.Frame, callCmds chan<- hub.Frame) {
 	ctx := context.Background()
 	switch frame.Event {
 	case "auth":
@@ -220,8 +239,11 @@ func (h *wsHandler) dispatch(client *hub.Client, frame hub.Frame) {
 	case "presence:heartbeat":
 		h.deps.Presence.OnHeartbeat(ctx, client.UserID, client.ConnID)
 	case "call:start", "call:invite", "call:accept", "call:decline", "call:leave", "call:end":
-		// gRPC до 10с — в горутине, чтобы не блокировать чтение (пинг-понг).
-		go h.deps.Ring.Dispatch(client.UserID, frame.Event, frame.Data)
+		select {
+		case callCmds <- frame:
+		default:
+			h.deps.Log.Warn("ws.call_queue_full", "user_id", client.UserID, "event", frame.Event)
+		}
 	case "typing":
 		// Эфемерный индикатор «печатает…»: релеим собеседнику без БД. Клиент
 		// сам сообщает to_user_id (знает other_user диалога).

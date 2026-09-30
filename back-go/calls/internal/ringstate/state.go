@@ -19,9 +19,9 @@ type callState struct {
 	initiatorID int64
 	kind        string
 	media       string
-	invited     map[int64]struct{} // кому отправлен invite (включая инициатора)
-	joined      map[int64]struct{} // кто из пользователей платформы в комнате
-	declined    map[int64]struct{} // кто явно отклонил
+	invited     map[int64]struct{}  // кому отправлен invite (включая инициатора)
+	joined      map[int64]struct{}  // кто из пользователей платформы в комнате
+	declined    map[int64]struct{}  // кто явно отклонил
 	guests      map[string]struct{} // identity внешних гостей по ссылке
 }
 
@@ -29,8 +29,11 @@ type callState struct {
 type State struct {
 	mu       sync.Mutex
 	calls    map[int64]*callState
-	userCall map[int64]int64 // активный звонок пользователя
+	userCall map[int64]int64 // активный звонок пользователя; reserved — бронь
 }
+
+// reserved — занятость под звонок, которому ещё не выдан id (Reserve).
+const reserved int64 = 0
 
 var _ domain.RingState = (*State)(nil)
 
@@ -45,7 +48,38 @@ func (s *State) UserActiveCall(userID int64) (int64, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	id, ok := s.userCall[userID]
+	if id == reserved {
+		return 0, false
+	}
 	return id, ok
+}
+
+// Reserve — проверка «никто не занят» и захват одним шагом: раздельные
+// IsUserBusy + CreateCall пропускали встречный звонок A→B и B→A, и каждый
+// оказывался в двух звонках сразу.
+func (s *State) Reserve(userIDs []int64) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, uid := range userIDs {
+		if _, busy := s.userCall[uid]; busy {
+			return false
+		}
+	}
+	for _, uid := range userIDs {
+		s.userCall[uid] = reserved
+	}
+	return true
+}
+
+// Release — снять бронь, не доставшуюся звонку (занятость звонком не трогает).
+func (s *State) Release(userIDs []int64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, uid := range userIDs {
+		if id, ok := s.userCall[uid]; ok && id == reserved {
+			delete(s.userCall, uid)
+		}
+	}
 }
 
 // IsUserBusy — занят, если уже в звонке или ему висит активный invite.
@@ -136,6 +170,7 @@ func (s *State) AddInvitee(callID, userID int64) {
 		return
 	}
 	c.invited[userID] = struct{}{}
+	delete(c.declined, userID) // позвали снова после отказа или истёкшего дозвона
 	s.userCall[userID] = callID
 }
 

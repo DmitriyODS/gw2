@@ -33,13 +33,16 @@ const (
 // Call — запись звонка (история в БД + текущий статус).
 // CompanyID опционален: звонок возможен между людьми без общей компании.
 type Call struct {
-	ID             int64
-	InitiatorID    int64
-	CompanyID      *int64
-	Kind           string
-	Status         string
-	Media          string
-	StartedAt      time.Time
+	ID          int64
+	InitiatorID int64
+	CompanyID   *int64
+	Kind        string
+	Status      string
+	Media       string
+	StartedAt   time.Time
+	// AnsweredAt — момент, когда в комнате впервые оказались двое; от него
+	// считается длительность разговора. nil — никто не ответил.
+	AnsweredAt     *time.Time
 	EndedAt        *time.Time
 	ConversationID *int64
 	RoomName       string
@@ -49,6 +52,17 @@ type Call struct {
 // Finished — звонок уже финализирован (вернуться/присоединиться нельзя).
 func (c *Call) Finished() bool {
 	return c.Status == StatusEnded || c.Status == StatusMissed
+}
+
+// Answer — звонок состоялся: ringing → active с отметкой момента ответа.
+// false — переводить нечего (уже активен или завершён).
+func (c *Call) Answer(at time.Time) bool {
+	if c.Status != StatusRinging {
+		return false
+	}
+	c.Status = StatusActive
+	c.AnsweredAt = &at
+	return true
 }
 
 // RoomNameFor — имя комнаты LiveKit для звонка.

@@ -52,6 +52,7 @@
                 :video="miniSource.video"
                 :avatar="miniSource.avatar"
                 :speaking="miniSource.speaking"
+                :quality="miniSource.quality"
                 :tick="miniSource.tick"
               />
             </div>
@@ -69,6 +70,7 @@
                   :video="spotlight.video"
                   :avatar="spotlight.avatar"
                   :speaking="spotlight.speaking"
+                  :quality="spotlight.quality"
                   :tick="spotlight.tick"
                 />
                 <div class="stage-actions">
@@ -103,6 +105,7 @@
                     :pending="s.pending"
                     :speaking="s.speaking"
                     :guest="s.guest"
+                    :quality="s.quality"
                     :tick="s.tick"
                   />
                 </button>
@@ -129,6 +132,7 @@
                   :pending="s.pending"
                   :speaking="s.speaking"
                   :guest="s.guest"
+                  :quality="s.quality"
                   :tick="s.tick"
                 />
               </button>
@@ -178,6 +182,36 @@
                   <span class="material-symbols-outlined">{{ routeMeta(r.route).icon }}</span>
                   <span>{{ routeMeta(r.route).label }}</span>
                 </button>
+              </div>
+            </Transition>
+          </div>
+          <!-- Выбор микрофона, камеры и выхода звука — браузер и десктоп
+               (в мобильной обёртке выход выбирает меню выше). -->
+          <div v-if="!audioSupported && !callStore.isMinimized" class="ctrl-audio">
+            <button
+              class="ctrl-btn"
+              :class="{ on: deviceMenuOpen }"
+              title="Устройства"
+              @click="toggleDeviceMenu"
+            >
+              <span class="material-symbols-outlined">tune</span>
+            </button>
+            <Transition name="ctrl-audio-pop">
+              <div v-if="deviceMenuOpen" class="ctrl-audio-menu device-menu" role="menu">
+                <template v-for="sec in deviceSections" :key="sec.kind">
+                  <div class="ctrl-audio-head">{{ sec.title }}</div>
+                  <button
+                    v-for="d in devices[sec.kind]"
+                    :key="d.deviceId"
+                    class="ctrl-audio-item"
+                    :class="{ active: d.deviceId === activeDevices[sec.kind] }"
+                    @click="pickDevice(sec.kind, d.deviceId)"
+                  >
+                    <span class="material-symbols-outlined">{{ sec.icon }}</span>
+                    <span class="device-label">{{ d.label || sec.fallback }}</span>
+                  </button>
+                </template>
+                <div v-if="!deviceSections.length" class="ctrl-audio-head">Устройства не найдены</div>
               </div>
             </Transition>
           </div>
@@ -239,11 +273,35 @@
           </button>
         </div>
 
-        <div v-if="callStore.error" class="callview-error">
-          <span>{{ callStore.error }}</span>
-          <button class="error-close" title="Закрыть" @click="callStore.error = null">
-            <span class="material-symbols-outlined">close</span>
+        <div class="callview-notices">
+          <div
+            v-if="callStore.connection !== 'connected'"
+            class="callview-notice"
+            :class="callStore.connection"
+            role="status"
+          >
+            <span class="material-symbols-outlined" :class="{ spin: callStore.connection === 'reconnecting' }">
+              {{ callStore.connection === 'lost' ? 'signal_disconnected' : 'progress_activity' }}
+            </span>
+            <span>{{ callStore.connection === 'lost' ? 'Связь со звонком потеряна' : 'Переподключение…' }}</span>
+            <button v-if="callStore.connection === 'lost'" class="notice-btn" @click="callStore.reconnect()">
+              Повторить
+            </button>
+          </div>
+          <button
+            v-else-if="callStore.audioBlocked"
+            class="callview-notice audio"
+            @click="callStore.enableAudio()"
+          >
+            <span class="material-symbols-outlined">volume_off</span>
+            <span>Браузер приглушил звонок — нажмите, чтобы включить звук</span>
           </button>
+          <div v-if="callStore.error" class="callview-error">
+            <span>{{ callStore.error }}</span>
+            <button class="error-close" title="Закрыть" @click="callStore.error = null">
+              <span class="material-symbols-outlined">close</span>
+            </button>
+          </div>
         </div>
 
         <CallAudioSink />
@@ -262,6 +320,7 @@
 import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { useCallStore } from '@/stores/call.js'
 import { useAuthStore } from '@/stores/auth.js'
+import { useNotificationsStore } from '@/stores/notifications.js'
 import { callRoom } from '@/services/livekit.js'
 import { useTileGrid } from '@/composables/useTileGrid.js'
 import { useCallAudioRoutes, AUDIO_ROUTE_META } from '@/composables/useCallAudioRoutes.js'
@@ -285,10 +344,53 @@ const {
 const audioMenuOpen = ref(false)
 watch(() => callStore.phase, (p) => {
   if (p === 'active' || p === 'outgoing') audioRefresh()
-  else audioMenuOpen.value = false
+  else {
+    audioMenuOpen.value = false
+    deviceMenuOpen.value = false
+  }
 })
 function routeMeta(route) { return AUDIO_ROUTE_META[route] || AUDIO_ROUTE_META.earpiece }
 function pickRoute(route) { audioApplyRoute(route); audioMenuOpen.value = false }
+
+/* Устройства звонка (браузер/десктоп). Выход звука умеют не все браузеры —
+   без setSinkId раздел не показываем. */
+const canPickOutput = typeof HTMLMediaElement !== 'undefined'
+  && 'setSinkId' in HTMLMediaElement.prototype
+const DEVICE_KINDS = [
+  { kind: 'audioinput', title: 'Микрофон', icon: 'mic', fallback: 'Микрофон' },
+  { kind: 'videoinput', title: 'Камера', icon: 'videocam', fallback: 'Камера' },
+  { kind: 'audiooutput', title: 'Звук', icon: 'volume_up', fallback: 'Динамики' },
+]
+const deviceMenuOpen = ref(false)
+const devices = ref({ audioinput: [], videoinput: [], audiooutput: [] })
+const activeDevices = ref({})
+const deviceSections = computed(() => DEVICE_KINDS.filter(s =>
+  (s.kind !== 'audiooutput' || canPickOutput) && devices.value[s.kind]?.length))
+
+async function refreshDeviceList() {
+  devices.value = await callRoom.listDevices()
+  activeDevices.value = Object.fromEntries(DEVICE_KINDS.map(s => [s.kind, callRoom.activeDevice(s.kind)]))
+}
+
+function toggleDeviceMenu() {
+  deviceMenuOpen.value = !deviceMenuOpen.value
+  if (deviceMenuOpen.value) refreshDeviceList()
+}
+
+async function pickDevice(kind, deviceId) {
+  try {
+    await callRoom.switchDevice(kind, deviceId)
+  } catch {
+    try { useNotificationsStore().warn('Не удалось переключить устройство') } catch {}
+  }
+  await refreshDeviceList()
+}
+
+// Подключили гарнитуру или сменилось активное устройство — открытое меню
+// показывает актуальный список.
+function onDevicesChanged() {
+  if (deviceMenuOpen.value) refreshDeviceList()
+}
 
 const participantIds = computed(() =>
   callStore.participantList.map(p => p.userId).filter(Boolean))
@@ -346,12 +448,13 @@ const cameraSources = computed(() => {
     key: 'self', identity: null, isLocal: true, name: myName.value, avatar: myAvatar.value,
     source: 'camera', audio: callStore.audioEnabled, video: callStore.videoEnabled,
     speaking: callStore.localSpeaking, pending: false, guest: false, tick: callStore.localTick,
+    quality: callStore.localQuality,
   }]
   for (const p of callStore.participantList) {
     list.push({
       key: p.identity, identity: p.identity, isLocal: false, name: p.name, avatar: avatarOf(p),
       source: 'camera', audio: p.audio, video: p.video, speaking: p.speaking,
-      pending: p.pending, guest: p.guest, tick: p.tick,
+      pending: p.pending, guest: p.guest, tick: p.tick, quality: p.quality,
     })
   }
   return list
@@ -549,9 +652,11 @@ async function toggleStageFullscreen() {
 
 onMounted(() => {
   document.addEventListener('fullscreenchange', onFullscreenChange)
+  callRoom.addEventListener('devices-changed', onDevicesChanged)
 })
 onBeforeUnmount(() => {
   document.removeEventListener('fullscreenchange', onFullscreenChange)
+  callRoom.removeEventListener('devices-changed', onDevicesChanged)
   stopTimer()
   stopRingback()
   onMiniDragEnd()
@@ -958,6 +1063,27 @@ watch(isRinging, (v) => {
 }
 
 .ctrl-audio-item:hover { background: var(--color-surface-low); }
+
+.device-menu {
+  min-width: 240px;
+  max-width: min(320px, 90vw);
+  max-height: min(420px, 60dvh);
+  overflow-y: auto;
+}
+
+.ctrl-audio-head {
+  padding: 8px 12px 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-dim);
+}
+
+.device-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .ctrl-audio-item.active { background: var(--color-primary-container); color: var(--color-on-primary-container); }
 .ctrl-audio-item .material-symbols-outlined { font-size: 20px; }
 
@@ -1052,11 +1178,75 @@ watch(isRinging, (v) => {
   .callview:not(.mini) .ctrl-btn.hangup .material-symbols-outlined { font-size: 22px; }
 }
 
-.callview-error {
+.callview-notices {
   position: absolute;
   top: 60px;
   left: 50%;
   transform: translateX(-50%);
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: max-content;
+  max-width: min(92vw, 480px);
+  pointer-events: none;
+}
+
+.callview-notices > * { pointer-events: auto; }
+
+.callview-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 0;
+  padding: 8px 14px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--color-surface-highest);
+  color: var(--color-text);
+  box-shadow: var(--shadow-lg);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+}
+
+.callview-notice.lost {
+  padding-right: 6px;
+  background: var(--color-error-container);
+  color: var(--color-on-error-container);
+}
+
+.callview-notice.audio {
+  background: var(--color-primary-container);
+  color: var(--color-on-primary-container);
+  cursor: pointer;
+}
+
+.callview-notice .material-symbols-outlined { font-size: 18px; }
+
+.notice-btn {
+  min-height: 0;
+  padding: 6px 12px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--color-on-error-container);
+  color: var(--color-error-container);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.spin { animation: callSpin 1.2s linear infinite; }
+
+@keyframes callSpin {
+  from { transform: rotate(0); }
+  to { transform: rotate(360deg); }
+}
+
+.callview-error {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -1066,8 +1256,6 @@ watch(isRinging, (v) => {
   border-radius: 999px;
   font-size: 13px;
   font-weight: 600;
-  z-index: 6;
-  max-width: min(92vw, 480px);
 }
 
 .error-close {

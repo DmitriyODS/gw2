@@ -58,6 +58,15 @@ func (p *Publisher) CallEnded(ctx context.Context, callID int64, status string, 
 	})
 }
 
+func (p *Publisher) ParticipantDeclined(ctx context.Context, callID, userID int64, notifyUserIDs []int64) {
+	if len(notifyUserIDs) == 0 {
+		return
+	}
+	p.bus.Publish(ctx, "call:participant-declined", userRooms(notifyUserIDs), map[string]any{
+		"call_id": callID, "user_id": userID,
+	})
+}
+
 // PillCreated — создать плашку в парном диалоге и разослать message:new
 // (фронт рендерит её по kind='call').
 func (p *Publisher) PillCreated(_ context.Context, conversationID, senderID, callID int64) {

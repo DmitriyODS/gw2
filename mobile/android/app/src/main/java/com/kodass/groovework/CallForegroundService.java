@@ -19,6 +19,9 @@ import androidx.core.app.NotificationCompat;
 public class CallForegroundService extends Service {
 
     static final int NOTIF_ID = 44001;
+    // Видеозвонок: с Android 11 камера в фоне работает только у сервиса с
+    // типом camera — без него картинка замирала при блокировке экрана.
+    static final String EXTRA_CAMERA = "camera";
     private PowerManager.WakeLock wakeLock;
 
     @Override
@@ -32,18 +35,18 @@ public class CallForegroundService extends Service {
         // останавливаемся (звонок продолжится, просто без гарантии жизни при
         // заблокированном экране). stopSelf до 5-сек таймаута снимает требование
         // системы вызвать startForeground — иначе был бы отдельный краш.
+        // Повторный старт (включили/выключили камеру) обновляет тип сервиса.
+        // Отказ с типом camera (нет разрешения на камеру) — остаёмся с микрофоном.
+        boolean camera = intent != null && intent.getBooleanExtra(EXTRA_CAMERA, false);
         boolean started = false;
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                startForeground(NOTIF_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE);
-            } else {
-                startForeground(NOTIF_ID, n);
-            }
-            started = true;
-        } catch (Throwable t) {
-            try { startForeground(NOTIF_ID, n); started = true; }
-            catch (Throwable ignored) {}
+        if (camera && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            started = tryStart(n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+                | ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA);
         }
+        if (!started && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            started = tryStart(n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE);
+        }
+        if (!started) started = tryStart(n, 0);
         if (!started) {
             stopSelf();
             return START_NOT_STICKY;
@@ -58,6 +61,16 @@ public class CallForegroundService extends Service {
             if (!wakeLock.isHeld()) wakeLock.acquire(2 * 60 * 60 * 1000L); // предохранитель 2ч
         } catch (Throwable ignored) {}
         return START_NOT_STICKY;
+    }
+
+    private boolean tryStart(Notification n, int type) {
+        try {
+            if (type != 0) startForeground(NOTIF_ID, n, type);
+            else startForeground(NOTIF_ID, n);
+            return true;
+        } catch (Throwable t) {
+            return false;
+        }
     }
 
     private Notification buildNotification() {

@@ -29,9 +29,6 @@ function loadLivekit() {
 /** Топик data-канала для чата звонка. */
 const CHAT_TOPIC = 'chat'
 
-const encoder = new TextEncoder()
-const decoder = new TextDecoder()
-
 /** '/livekit' → wss://host/livekit (по схеме страницы); абсолютные оставляем. */
 export function resolveLivekitUrl(url) {
   if (!url) return null
@@ -51,10 +48,32 @@ export function parseParticipantMetadata(participant) {
   }
 }
 
+/** Демонстрация экрана: чёткий текст вместо плавности, без «зеркала» своей
+ *  вкладки, с возможностью отдать звук вкладки/системы (галочка в диалоге
+ *  выбора браузера). */
+const SCREEN_SHARE_OPTIONS = {
+  audio: true,
+  contentHint: 'detail',
+  selfBrowserSurface: 'exclude',
+  surfaceSwitching: 'include',
+  systemAudio: 'include',
+}
+
+/** Подключение отменено (повесили трубку, пока шёл вход) — не ошибка. */
+function abortError() {
+  const e = new Error('Подключение отменено')
+  e.name = 'AbortError'
+  return e
+}
+
 export class CallRoomManager extends EventTarget {
   constructor() {
     super()
     this.room = null
+    // Поколение подключения: disconnect() во время connect() делает текущую
+    // попытку устаревшей, и она сворачивается, не публикуя треки в чужую
+    // (уже закрытую) комнату — иначе микрофон и камера оставались включены.
+    this._gen = 0
   }
 
   get connected() {
@@ -65,14 +84,28 @@ export class CallRoomManager extends EventTarget {
     return this.room?.localParticipant?.identity || null
   }
 
+  /** Браузер разрешил воспроизводить звук (иначе нужен жест — startAudio). */
+  get canPlaybackAudio() {
+    return this.room ? this.room.canPlaybackAudio : true
+  }
+
+  /** Подтянуть SDK заранее (входящий, дозвон): к «Принять» чанк уже в кеше. */
+  preload() {
+    return loadLivekit().then(() => {}, () => {})
+  }
+
   /**
    * Подключиться к комнате. audio/video — стартовое состояние локальных
    * устройств (выключенная камера НЕ запрашивает разрешение на неё).
    */
   async connect({ url, token, audio = true, video = true }) {
     await this.disconnect()
+    const gen = ++this._gen
 
-    const { Room, RoomEvent, DisconnectReason } = await loadLivekit()
+    const {
+      Room, RoomEvent, DisconnectReason, createLocalAudioTrack, createLocalVideoTrack,
+    } = await loadLivekit()
+    if (gen !== this._gen) throw abortError()
 
     const room = new Room({
       // SFU сам подбирает слои simulcast под размер плитки у получателя.
@@ -81,6 +114,7 @@ export class CallRoomManager extends EventTarget {
     })
     this.room = room
 
+    const emitLocal = () => this._emit('track-changed', { identity: this.localIdentity, local: true })
     room
       .on(RoomEvent.ParticipantConnected, (p) => this._emit('participant-joined', { identity: p.identity }))
       .on(RoomEvent.ParticipantDisconnected, (p) => this._emit('participant-left', { identity: p.identity }))
@@ -88,29 +122,32 @@ export class CallRoomManager extends EventTarget {
       .on(RoomEvent.TrackUnsubscribed, (_t, _pub, p) => this._emit('track-changed', { identity: p.identity }))
       .on(RoomEvent.TrackMuted, (_pub, p) => this._emit('track-changed', { identity: p.identity }))
       .on(RoomEvent.TrackUnmuted, (_pub, p) => this._emit('track-changed', { identity: p.identity }))
-      .on(RoomEvent.LocalTrackPublished, () => this._emit('track-changed', { identity: this.localIdentity, local: true }))
-      .on(RoomEvent.LocalTrackUnpublished, () => this._emit('track-changed', { identity: this.localIdentity, local: true }))
+      .on(RoomEvent.LocalTrackPublished, emitLocal)
+      .on(RoomEvent.LocalTrackUnpublished, emitLocal)
       .on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
         this._emit('speakers', { identities: speakers.map(s => s.identity) })
       })
-      .on(RoomEvent.DataReceived, (payload, participant, _kind, topic) => {
-        if (topic !== CHAT_TOPIC) return
-        try {
-          const msg = JSON.parse(decoder.decode(payload))
-          this._emit('chat', {
-            identity: participant?.identity || null,
-            name: participant?.name || msg.name || 'Участник',
-            text: String(msg.text || '').slice(0, 2000),
-            ts: msg.ts || Date.now(),
-          })
-        } catch { /* мусор в data-канале игнорируем */ }
+      .on(RoomEvent.ConnectionQualityChanged, (quality, p) => {
+        this._emit('quality', { identity: p.identity, local: p === room.localParticipant, quality })
       })
-      .on(RoomEvent.ConnectionStateChanged, (state) => this._emit('connection-state', { state }))
+      // Полное переподключение (сменилась сеть, долгий обрыв) — медиа стоит,
+      // пользователю нужно это видеть. Лёгкое восстановление сигнального
+      // канала медиа не прерывает и в интерфейсе не отражается.
+      .on(RoomEvent.Reconnecting, () => this._emit('reconnecting', {}))
+      .on(RoomEvent.Reconnected, () => this._emit('reconnected', {}))
+      // Автовоспроизведение звука запрещено (вход без жеста — например,
+      // авто-возврат в звонок после перезагрузки): нужен клик и startAudio().
+      .on(RoomEvent.AudioPlaybackStatusChanged, () => {
+        this._emit('audio-playback', { canPlay: room.canPlaybackAudio })
+      })
+      .on(RoomEvent.MediaDevicesChanged, () => this._emit('devices-changed', {}))
+      .on(RoomEvent.ActiveDeviceChanged, () => this._emit('devices-changed', {}))
       .on(RoomEvent.Disconnected, (reason) => {
         this._emit('disconnected', {
           // Комнату закрыл сервер (звонок завершён) или нас выкинули — стору
-          // важно отличать это от нашего собственного disconnect().
+          // важно отличать это от обрыва связи, после которого возвращаются.
           byServer: reason === DisconnectReason.ROOM_DELETED
+            || reason === DisconnectReason.ROOM_CLOSED
             || reason === DisconnectReason.PARTICIPANT_REMOVED
             || reason === DisconnectReason.SERVER_SHUTDOWN,
           // Этим же identity вошли в другом месте (вторая вкладка/устройство,
@@ -119,34 +156,78 @@ export class CallRoomManager extends EventTarget {
         })
       })
 
-    await room.connect(resolveLivekitUrl(url), token)
-
-    // Микрофон/камера — после connect: до него setMicrophoneEnabled не
-    // публикует трек. Ошибка устройства не рвёт соединение — можно сидеть
-    // «слушателем» (например, гость без камеры).
-    try {
-      await room.localParticipant.setMicrophoneEnabled(audio)
-    } catch (e) {
-      this._emit('media-error', { kind: 'audio', error: e })
-    }
-    if (video) {
+    room.registerTextStreamHandler(CHAT_TOPIC, async (reader, { identity }) => {
       try {
-        await room.localParticipant.setCameraEnabled(true)
-      } catch (e) {
-        this._emit('media-error', { kind: 'video', error: e })
-      }
+        const text = await reader.readAll()
+        this._emit('chat', {
+          identity,
+          name: room.remoteParticipants.get(identity)?.name || 'Участник',
+          text: String(text || '').slice(0, 2000),
+          ts: reader.info?.timestamp || Date.now(),
+        })
+      } catch { /* поток оборвался — сообщение потеряно вместе с ним */ }
+    })
+
+    // Разрешения и захват устройств — параллельно с сигнальным подключением:
+    // это самые долгие шаги входа, последовательно они складывались.
+    const captured = Promise.allSettled([
+      audio ? createLocalAudioTrack() : null,
+      video ? createLocalVideoTrack() : null,
+    ])
+
+    try {
+      await room.connect(resolveLivekitUrl(url), token)
+    } catch (e) {
+      stopCaptured(await captured)
+      if (this.room === room) this.room = null
+      throw gen !== this._gen ? abortError() : e
     }
+
+    const [mic, cam] = await captured
+    if (gen !== this._gen) {
+      stopCaptured([mic, cam])
+      throw abortError()
+    }
+    // Ошибка устройства не рвёт соединение — можно сидеть «слушателем»
+    // (например, гость без камеры).
+    await this._publish(room, mic, 'audio')
+    await this._publish(room, cam, 'video')
+    if (gen !== this._gen) throw abortError()
+
     this._emit('connected', {})
+    this._emit('audio-playback', { canPlay: room.canPlaybackAudio })
     return room
   }
 
+  async _publish(room, result, kind) {
+    if (result.status === 'rejected') {
+      this._emit('media-error', { kind, error: result.reason })
+      return
+    }
+    const track = result.value
+    if (!track) return
+    try {
+      await room.localParticipant.publishTrack(track)
+    } catch (e) {
+      track.stop()
+      if (this.room === room) this._emit('media-error', { kind, error: e })
+    }
+  }
+
   async disconnect() {
+    this._gen++
     const room = this.room
     this.room = null
     if (room) {
       room.removeAllListeners()
       try { await room.disconnect() } catch { /* уже отключены */ }
     }
+  }
+
+  /** Включить звук после запрета автовоспроизведения (зовётся из клика). */
+  async startAudio() {
+    await this.room?.startAudio()
+    return this.canPlaybackAudio
   }
 
   async setMicEnabled(v) {
@@ -158,13 +239,30 @@ export class CallRoomManager extends EventTarget {
   }
 
   async setScreenShareEnabled(v) {
-    await this.room?.localParticipant.setScreenShareEnabled(v)
+    await this.room?.localParticipant.setScreenShareEnabled(v, v ? SCREEN_SHARE_OPTIONS : undefined)
   }
 
-  sendChat(text) {
-    if (!this.room) return
-    const payload = encoder.encode(JSON.stringify({ text, ts: Date.now() }))
-    this.room.localParticipant.publishData(payload, { reliable: true, topic: CHAT_TOPIC })
+  /** Сообщение в чат звонка; отказ доставки — исключением. */
+  async sendChat(text) {
+    if (!this.room) throw new Error('Нет соединения со звонком')
+    await this.room.localParticipant.sendText(text, { topic: CHAT_TOPIC })
+  }
+
+  /** Устройства: микрофоны, камеры и (где браузер умеет) выходы звука. */
+  async listDevices() {
+    const { Room } = await loadLivekit()
+    const kinds = ['audioinput', 'videoinput', 'audiooutput']
+    const lists = await Promise.all(kinds.map(k => Room.getLocalDevices(k, false).catch(() => [])))
+    return Object.fromEntries(kinds.map((k, i) => [k, lists[i].filter(d => d.deviceId)]))
+  }
+
+  activeDevice(kind) {
+    return this.room?.getActiveDevice(kind) || 'default'
+  }
+
+  async switchDevice(kind, deviceId) {
+    if (!this.room) return false
+    return this.room.switchActiveDevice(kind, deviceId)
   }
 
   /** Снимок удалённых участников (LiveKit Participant[]). */
@@ -191,16 +289,18 @@ export class CallRoomManager extends EventTarget {
   }
 
   /**
-   * Трек участника для attach в плитке. source: 'camera'|'screen'|'audio'.
-   * Возвращает livekit Track или null.
+   * Трек участника для attach. source: 'camera' | 'screen' | 'audio' |
+   * 'screen-audio' (звук демонстрации). Возвращает livekit Track или null.
    */
   getTrack(identity, source) {
     const p = this._participant(identity)
     if (!p) return null
     const { Track } = lk
-    const src = source === 'screen' ? Track.Source.ScreenShare
-      : source === 'audio' ? Track.Source.Microphone
-        : Track.Source.Camera
+    const src = {
+      screen: Track.Source.ScreenShare,
+      audio: Track.Source.Microphone,
+      'screen-audio': Track.Source.ScreenShareAudio,
+    }[source] || Track.Source.Camera
     const pub = p.getTrackPublication(src)
     if (!pub || !pub.track || pub.isMuted) return null
     return pub.track
@@ -208,6 +308,12 @@ export class CallRoomManager extends EventTarget {
 
   _emit(type, detail) {
     this.dispatchEvent(new CustomEvent(type, { detail }))
+  }
+}
+
+function stopCaptured(results) {
+  for (const r of results) {
+    if (r.status === 'fulfilled' && r.value) r.value.stop()
   }
 }
 

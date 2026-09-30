@@ -66,6 +66,12 @@ const (
 	pushBase      = "http://localhost:18097"
 	billingBase   = "http://localhost:18107"
 	gatewayWSURL  = "ws://localhost:18096/ws"
+	// Звонки: callsvc и СВОЙ экземпляр шлюза, который к нему ходит. Основной
+	// шлюз смотрит на пустой :19090 — он проверяет CALLS_UNAVAILABLE.
+	callsBase        = "http://localhost:18190"
+	callsGatewayBase = "http://localhost:18196"
+	callsGatewayWS   = "ws://localhost:18196/ws"
+	livekitSecret    = "dev_livekit_secret_min_32_chars_ok"
 
 	// Тестам выделена СВОЯ база Redis того же dev-инстанса: ключи presence
 	// (gw2:presence:*) и дневных капов питомцев (gw2:pets:daily:*) не должны
@@ -306,6 +312,28 @@ func runMain(m *testing.M) int {
 		"HTTP_ADDR=:18096",
 	})
 
+	// callsvc + шлюз к нему. LiveKit — dev-контейнер (:7880): комнаты создаются
+	// по-настоящему, вебхуки тесты подписывают и шлют сами.
+	procs.start("callsvc", filepath.Join(repoRoot, "back-go/calls"), "./cmd/callsvc", []string{
+		"DATABASE_URL=" + testDBURL,
+		"REDIS_URL=" + testRedisURL,
+		"PASETO_PUBLIC_KEY=" + pasetoPublicKey,
+		"MESSENGER_GRPC_ADDR=localhost:19092",
+		"BILLING_GRPC_ADDR=localhost:19107",
+		"LIVEKIT_URL=http://localhost:7880",
+		"LIVEKIT_API_KEY=devkey",
+		"LIVEKIT_API_SECRET=" + livekitSecret,
+		"HTTP_ADDR=:18190",
+		"GRPC_ADDR=:19190",
+	})
+	procs.start("gatewaysvc-calls", filepath.Join(repoRoot, "back-go/gateway"), "./cmd/gatewaysvc", []string{
+		"DATABASE_URL=" + testDBURL,
+		"REDIS_URL=" + testRedisURL,
+		"PASETO_PUBLIC_KEY=" + pasetoPublicKey,
+		"CALLS_GRPC_ADDR=localhost:19190",
+		"HTTP_ADDR=:18196",
+	})
+
 	// 4. Ждём готовности каждого сервиса (retry до 30с).
 	for _, hc := range []string{
 		authBase + "/healthz", diaryBase + "/healthz", "http://localhost:18098/healthz",
@@ -313,6 +341,7 @@ func runMain(m *testing.M) int {
 		messengerBase + "/healthz", petsBase + "/healthz", pushBase + "/healthz",
 		gatewayBase + "/healthz", portalBase + "/healthz", notesBase + "/healthz",
 		boardBase + "/healthz", reminderBase + "/healthz",
+		callsBase + "/healthz", callsGatewayBase + "/healthz",
 	} {
 		if err := waitHealthz(hc, 30*time.Second); err != nil {
 			fmt.Println("apitest:", err)
@@ -574,6 +603,7 @@ var notesAPI = &svcClient{base: notesBase}
 var boardAPI = &svcClient{base: boardBase}
 var reminderAPI = &svcClient{base: reminderBase}
 var billingAPI = &svcClient{base: billingBase}
+var callsAPI = &svcClient{base: callsBase}
 
 type reqOpt func(*http.Request)
 

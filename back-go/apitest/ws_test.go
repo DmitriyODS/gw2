@@ -32,7 +32,12 @@ type wsClient struct {
 // dialWS — соединение с /ws БЕЗ auth-кадра (для негативных сценариев).
 func dialWS(t *testing.T) *wsClient {
 	t.Helper()
-	conn, _, err := websocket.DefaultDialer.Dial(gatewayWSURL, nil)
+	return dialWSAt(t, gatewayWSURL)
+}
+
+func dialWSAt(t *testing.T, url string) *wsClient {
+	t.Helper()
+	conn, _, err := websocket.DefaultDialer.Dial(url, nil)
 	if err != nil {
 		t.Fatalf("ws dial: %v", err)
 	}
@@ -57,7 +62,12 @@ func dialWS(t *testing.T) *wsClient {
 // connectWS — полный handshake: dial + кадр auth + ожидание _connected.
 func connectWS(t *testing.T, token string) *wsClient {
 	t.Helper()
-	c := dialWS(t)
+	return connectWSAt(t, gatewayWSURL, token)
+}
+
+func connectWSAt(t *testing.T, url, token string) *wsClient {
+	t.Helper()
+	c := dialWSAt(t, url)
 	c.emit(t, "auth", map[string]any{"token": token})
 	f := c.waitFrame(t, "_connected", 10*time.Second)
 	if f.Obj()["user_id"] == nil {

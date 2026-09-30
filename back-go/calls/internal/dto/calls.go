@@ -132,6 +132,7 @@ type ActiveCallResponse struct {
 // ── Вебхук LiveKit ───────────────────────────────────────────────
 
 type WebhookEvent struct {
+	ID       string // id события LiveKit — ключ отсева повторной доставки
 	Event    string // participant_joined | participant_left | room_finished
 	Room     string
 	Identity string
@@ -171,8 +172,9 @@ func NewCallDTO(call *domain.Call, initiatorFIO string, parts []*domain.Particip
 	if call.ShareCode != "" {
 		out.ShareCode = &call.ShareCode
 	}
-	if call.EndedAt != nil {
-		d := int64(call.EndedAt.Sub(call.StartedAt).Seconds())
+	// Длительность — время разговора: без ответа её нет.
+	if call.EndedAt != nil && call.AnsweredAt != nil {
+		d := int64(call.EndedAt.Sub(*call.AnsweredAt).Seconds())
 		out.DurationSec = &d
 	}
 	for _, p := range parts {

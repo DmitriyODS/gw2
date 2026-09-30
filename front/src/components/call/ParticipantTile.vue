@@ -35,6 +35,12 @@
       <span class="tile-name">{{ isLocal ? `${name} (Вы)` : name }}</span>
       <span v-if="guest" class="tile-guest">гость</span>
       <span v-if="!audio && !pending" class="material-symbols-outlined tile-icon">mic_off</span>
+      <span
+        v-if="weakLink"
+        class="material-symbols-outlined tile-icon tile-quality"
+        :class="quality"
+        :title="quality === 'lost' ? 'Нет связи' : 'Слабая связь'"
+      >{{ quality === 'lost' ? 'signal_disconnected' : 'network_wifi_1_bar' }}</span>
     </div>
   </div>
 </template>
@@ -59,7 +65,11 @@ const props = defineProps({
   guest: { type: Boolean, default: false },
   /** Меняется при каждом изменении треков — триггер пере-attach. */
   tick: { type: Number, default: 0 },
+  /** Качество связи по LiveKit: значок показываем только у плохой. */
+  quality: { type: String, default: null },
 })
+
+const weakLink = computed(() => props.quality === 'poor' || props.quality === 'lost')
 
 const videoEl = ref(null)
 
@@ -221,4 +231,8 @@ onBeforeUnmount(() => {
 .tile-icon { font-size: 16px; }
 
 .tile.audio_off .tile-icon { color: var(--color-error); }
+
+/* Подпись лежит на тёмной подложке — берём светлые тона ролей. */
+.tile .tile-icon.tile-quality.poor { color: var(--color-warning-container); }
+.tile .tile-icon.tile-quality.lost { color: var(--color-error-container); }
 </style>

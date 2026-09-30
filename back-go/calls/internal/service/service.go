@@ -64,6 +64,16 @@ type Service struct {
 	sweepMu   sync.Mutex
 	sweepSet  map[int64]struct{}
 
+	// Сколько звонит приглашённому, прежде чем сервер снимет приглашение сам.
+	// Клиентский таймаут дозвона короче (45 с) и обычно срабатывает раньше;
+	// серверный нужен, когда клиента звонящего уже нет, и в групповых звонках,
+	// где не взявший трубку иначе навсегда оставался «занятым». 0 — выключено
+	// (тесты зовут expireInvite напрямую).
+	ringTimeout time.Duration
+
+	locks *callLocks
+	dedup domain.WebhookDedup
+
 	// billing — лимиты тарифа (WithBilling; nil — прежний жёсткий потолок).
 	billing *billingclient.Client
 }
@@ -75,7 +85,14 @@ func New(repo domain.CallRepository, users domain.UserReader, ring domain.RingSt
 	log *slog.Logger) *Service {
 	return &Service{repo: repo, users: users, ring: ring, media: media, pub: pub,
 		msgr: msgr, log: log,
-		leftGrace: 20 * time.Second, sweepSet: make(map[int64]struct{})}
+		leftGrace: 20 * time.Second, sweepSet: make(map[int64]struct{}),
+		ringTimeout: 60 * time.Second, locks: newCallLocks()}
+}
+
+// WithWebhookDedup — отсев повторной доставки вебхуков LiveKit.
+func (s *Service) WithWebhookDedup(d domain.WebhookDedup) *Service {
+	s.dedup = d
+	return s
 }
 
 func now() time.Time { return time.Now().UTC() }
@@ -187,6 +204,14 @@ func (s *Service) StartCall(ctx context.Context, req dto.StartCallRequest) (*dto
 			return nil, domain.NewError("INVITEE_BUSY", "Один из участников уже разговаривает", 409)
 		}
 	}
+	// Проверки выше — ради точного кода ошибки; занятость захватывается
+	// атомарно здесь. Release снимает только бронь: после CreateCall
+	// пользователи уже числятся за звонком и отпускаться не будут.
+	seats := append([]int64{req.InitiatorID}, inviteeIDs...)
+	if !s.ring.Reserve(seats) {
+		return nil, domain.NewError("INVITEE_BUSY", "Один из участников уже разговаривает", 409)
+	}
+	defer s.ring.Release(seats)
 
 	invitees, err := s.users.ListVisibleUsers(ctx, inviteeIDs)
 	if err != nil {
@@ -262,6 +287,7 @@ func (s *Service) StartCall(ctx context.Context, req dto.StartCallRequest) (*dto
 	}
 
 	s.ring.CreateCall(call.ID, req.InitiatorID, inviteeIDs, kind, call.Media)
+	s.armRingTimeout(call.ID, inviteeIDs, s.ringTimeout)
 
 	// Комнату создаём заранее ради лимита участников и empty_timeout; если
 	// LiveKit API недоступен — комната автосоздастся при первом подключении.
@@ -300,14 +326,16 @@ func (s *Service) abortStart(ctx context.Context, call *domain.Call) {
 // InviteToCall — позвать новых участников в идущий звонок. Любой участник
 // может позвать ещё людей.
 func (s *Service) InviteToCall(ctx context.Context, req dto.InviteRequest) (*dto.InviteResponse, error) {
+	defer s.locks.lock(req.CallID)()
 	ring, ok := s.ring.Snapshot(req.CallID)
 	if !ok || !domain.Has(ring.Invited, req.InviterID) {
 		return nil, domain.NewError("NOT_IN_CALL", "Вы не в этом звонке", 404)
 	}
 
+	// Отказавшегося или не взявшего трубку можно позвать ещё раз.
 	newIDs := make([]int64, 0, len(req.InviteeIDs))
 	for _, uid := range dedupe(req.InviteeIDs, req.InviterID) {
-		if !domain.Has(ring.Invited, uid) {
+		if !domain.Has(ring.Invited, uid) || domain.Has(ring.Declined, uid) {
 			newIDs = append(newIDs, uid)
 		}
 	}
@@ -326,14 +354,14 @@ func (s *Service) InviteToCall(ctx context.Context, req dto.InviteRequest) (*dto
 		return &dto.InviteResponse{Call: snap, NewInviteeIDs: []int64{}, NotifyUserIDs: ring.Joined}, nil
 	}
 
-	if len(ring.Invited)+len(ring.Guests)+len(newIDs) > s.maxParticipants(ctx, call.InitiatorID) {
+	seated := len(ring.Invited) - len(ring.Declined) + len(ring.Guests)
+	if seated+len(newIDs) > s.maxParticipants(ctx, call.InitiatorID) {
 		return nil, domain.NewError("TOO_MANY_INVITEES", "В звонке слишком много участников", 400)
 	}
-	for _, uid := range newIDs {
-		if s.ring.IsUserBusy(uid) {
-			return nil, domain.NewError("INVITEE_BUSY", "Один из приглашённых уже разговаривает", 409)
-		}
+	if !s.ring.Reserve(newIDs) {
+		return nil, domain.NewError("INVITEE_BUSY", "Один из приглашённых уже разговаривает", 409)
 	}
+	defer s.ring.Release(newIDs)
 	users, err := s.users.ListVisibleUsers(ctx, newIDs)
 	if err != nil {
 		return nil, err
@@ -366,6 +394,7 @@ func (s *Service) InviteToCall(ctx context.Context, req dto.InviteRequest) (*dto
 		}
 		s.ring.AddInvitee(req.CallID, uid)
 	}
+	s.armRingTimeout(req.CallID, newIDs, s.ringTimeout)
 
 	// Звонок на двоих превратился в групповой.
 	if call.Kind == domain.KindP2P {
@@ -385,9 +414,14 @@ func (s *Service) InviteToCall(ctx context.Context, req dto.InviteRequest) (*dto
 
 // AcceptCall — принять входящий: пометить участие и выдать LiveKit-токен.
 func (s *Service) AcceptCall(ctx context.Context, req dto.AcceptRequest) (*dto.AcceptResponse, error) {
+	defer s.locks.lock(req.CallID)()
 	ring, ok := s.ring.Snapshot(req.CallID)
 	if !ok || !domain.Has(ring.Invited, req.UserID) {
 		return nil, domain.NewError("NOT_INVITED", "Вы не приглашены в этот звонок", 404)
+	}
+	// Приглашение успело истечь, и человек уже в другом звонке.
+	if other, ok := s.ring.UserActiveCall(req.UserID); ok && other != req.CallID {
+		return nil, domain.NewError("BUSY", "Вы уже в другом звонке", 409)
 	}
 
 	s.ring.MarkJoined(req.CallID, req.UserID)
@@ -407,8 +441,7 @@ func (s *Service) AcceptCall(ctx context.Context, req dto.AcceptRequest) (*dto.A
 		return nil, domain.NewError("USER_NOT_FOUND", "Пользователь не найден", 404)
 	}
 
-	if call.Status == domain.StatusRinging {
-		call.Status = domain.StatusActive
+	if call.Answer(now()) {
 		if err := s.repo.UpdateCall(ctx, call); err != nil {
 			return nil, err
 		}
@@ -417,9 +450,13 @@ func (s *Service) AcceptCall(ctx context.Context, req dto.AcceptRequest) (*dto.A
 	if err != nil {
 		return nil, err
 	}
-	if part != nil && part.JoinedAt == nil {
-		ts := now()
-		part.JoinedAt = &ts
+	if part != nil {
+		if part.JoinedAt == nil {
+			ts := now()
+			part.JoinedAt = &ts
+		}
+		part.LeftAt = nil
+		part.Declined = false
 		if err := s.repo.UpdateParticipant(ctx, part); err != nil {
 			return nil, err
 		}
@@ -440,14 +477,12 @@ func (s *Service) AcceptCall(ctx context.Context, req dto.AcceptRequest) (*dto.A
 
 // DeclineCall — явный отказ. Пустой Call в ответе = звонка уже нет (no-op).
 func (s *Service) DeclineCall(ctx context.Context, req dto.HangupRequest) (*dto.HangupResponse, error) {
+	defer s.locks.lock(req.CallID)()
 	ring, ok := s.ring.Snapshot(req.CallID)
-	if !ok || !domain.Has(ring.Invited, req.UserID) {
+	// Уже выбыл (повторный отказ, истёкший дозвон) — повторять рассылку незачем.
+	if !ok || !domain.Has(ring.Invited, req.UserID) || domain.Has(ring.Declined, req.UserID) {
 		return &dto.HangupResponse{}, nil
 	}
-	notify := unionExcept(ring.Joined, ring.Invited, req.UserID)
-
-	s.ring.MarkDeclined(req.CallID, req.UserID)
-
 	call, err := s.repo.GetCall(ctx, req.CallID)
 	if err != nil {
 		return nil, err
@@ -455,40 +490,9 @@ func (s *Service) DeclineCall(ctx context.Context, req dto.HangupRequest) (*dto.
 	if call == nil {
 		return &dto.HangupResponse{}, nil
 	}
-	ts := now()
-	part, err := s.repo.GetParticipant(ctx, req.CallID, req.UserID)
+	ended, notify, err := s.dropInvitee(ctx, call, ring, req.UserID, true)
 	if err != nil {
 		return nil, err
-	}
-	if part != nil {
-		part.Declined = true
-		part.LeftAt = &ts
-		if err := s.repo.UpdateParticipant(ctx, part); err != nil {
-			return nil, err
-		}
-	}
-
-	ended := false
-	// Если в p2p отказался единственный приглашённый — это «не дозвонился».
-	if call.Kind == domain.KindP2P && call.Status == domain.StatusRinging {
-		call.Status = domain.StatusMissed
-		call.EndedAt = &ts
-		if err := s.repo.UpdateCall(ctx, call); err != nil {
-			return nil, err
-		}
-		s.media.DeleteRoom(ctx, call.RoomName)
-		s.ring.EndCall(req.CallID)
-		ended = true
-	} else if s.ring.ShouldEnd(req.CallID) {
-		if err := s.finalize(ctx, call); err != nil {
-			return nil, err
-		}
-		s.ring.EndCall(req.CallID)
-		ended = true
-	}
-	if ended {
-		// Завершение должно дойти до всех, кто когда-либо был в звонке.
-		notify = s.endedNotifyIDs(ctx, call, ring)
 	}
 
 	snap, err := s.snapshot(ctx, call)
@@ -499,8 +503,43 @@ func (s *Service) DeclineCall(ctx context.Context, req dto.HangupRequest) (*dto.
 	return &dto.HangupResponse{Call: snap, Ended: ended, NotifyUserIDs: notify}, nil
 }
 
+// dropInvitee — приглашённый выбыл, не войдя: отказался сам (declined) или
+// истёк дозвон. Возвращает, завершился ли звонок, и кому о выбытии сообщить.
+func (s *Service) dropInvitee(ctx context.Context, call *domain.Call, ring *domain.RingSnapshot,
+	userID int64, declined bool) (bool, []int64, error) {
+	notify := unionExcept(ring.Joined, ring.Invited, userID)
+	s.ring.MarkDeclined(call.ID, userID)
+
+	part, err := s.repo.GetParticipant(ctx, call.ID, userID)
+	if err != nil {
+		return false, nil, err
+	}
+	if part != nil {
+		ts := now()
+		part.Declined = declined
+		part.LeftAt = &ts
+		if err := s.repo.UpdateParticipant(ctx, part); err != nil {
+			return false, nil, err
+		}
+	}
+
+	// В p2p выбыл единственный приглашённый — «не дозвонился».
+	if call.Kind == domain.KindP2P && call.Status == domain.StatusRinging {
+		call.Status = domain.StatusMissed
+	} else if !s.ring.ShouldEnd(call.ID) {
+		return false, notify, nil
+	}
+	if err := s.finalize(ctx, call); err != nil {
+		return false, nil, err
+	}
+	s.ring.EndCall(call.ID)
+	// Завершение должно дойти до всех, кто когда-либо был в звонке.
+	return true, s.endedNotifyIDs(ctx, call, ring), nil
+}
+
 // LeaveCall — выход из звонка (повесить трубку).
 func (s *Service) LeaveCall(ctx context.Context, req dto.HangupRequest) (*dto.HangupResponse, error) {
+	defer s.locks.lock(req.CallID)()
 	ring, ok := s.ring.Snapshot(req.CallID)
 	if !ok {
 		return &dto.HangupResponse{}, nil
@@ -553,6 +592,7 @@ func (s *Service) LeaveCall(ctx context.Context, req dto.HangupRequest) (*dto.Ha
 
 // EndCall — инициатор завершает звонок целиком (для всех).
 func (s *Service) EndCall(ctx context.Context, req dto.HangupRequest) (*dto.HangupResponse, error) {
+	defer s.locks.lock(req.CallID)()
 	ring, ok := s.ring.Snapshot(req.CallID)
 	if !ok || ring.InitiatorID != req.UserID {
 		return &dto.HangupResponse{}, nil
@@ -566,19 +606,6 @@ func (s *Service) EndCall(ctx context.Context, req dto.HangupRequest) (*dto.Hang
 		return &dto.HangupResponse{}, nil
 	}
 	notify := s.endedNotifyIDs(ctx, call, ring)
-	ts := now()
-	for _, uid := range ring.Joined {
-		part, err := s.repo.GetParticipant(ctx, req.CallID, uid)
-		if err != nil {
-			return nil, err
-		}
-		if part != nil && part.LeftAt == nil {
-			part.LeftAt = &ts
-			if err := s.repo.UpdateParticipant(ctx, part); err != nil {
-				return nil, err
-			}
-		}
-	}
 	if err := s.finalize(ctx, call); err != nil {
 		return nil, err
 	}
@@ -595,6 +622,7 @@ func (s *Service) EndCall(ctx context.Context, req dto.HangupRequest) (*dto.Hang
 // RejoinToken — токен для возврата в живой звонок (плашка в чате, баннер
 // «Вернуться» после F5). Доступен любому участнику звонка.
 func (s *Service) RejoinToken(ctx context.Context, callID, userID int64) (*dto.TokenResponse, error) {
+	defer s.locks.lock(callID)()
 	call, err := s.repo.GetCall(ctx, callID)
 	if err != nil {
 		return nil, err
@@ -639,6 +667,7 @@ func (s *Service) RejoinToken(ctx context.Context, callID, userID int64) (*dto.T
 			part.JoinedAt = &ts
 		}
 		part.LeftAt = nil
+		part.Declined = false
 		if err := s.repo.UpdateParticipant(ctx, part); err != nil {
 			return nil, err
 		}
@@ -687,13 +716,18 @@ func (s *Service) History(ctx context.Context, userID int64, limit int) ([]*dto.
 	if err != nil {
 		return nil, err
 	}
+	ids := make([]int64, 0, len(calls))
+	for _, c := range calls {
+		ids = append(ids, c.ID)
+	}
+	byCall, err := s.repo.ListParticipantsForCalls(ctx, ids)
+	if err != nil {
+		return nil, fmt.Errorf("list participants: %w", err)
+	}
 	out := make([]*dto.CallDTO, 0, len(calls))
 	for _, c := range calls {
-		snap, err := s.snapshot(ctx, c)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, snap)
+		parts := byCall[c.ID]
+		out = append(out, dto.NewCallDTO(c, s.initiatorFIO(c, parts), parts))
 	}
 	return out, nil
 }
@@ -774,6 +808,7 @@ func (s *Service) JoinByCode(ctx context.Context, req dto.JoinByCodeRequest) (*d
 }
 
 func (s *Service) joinMemberByLink(ctx context.Context, call *domain.Call, userID int64) (*dto.JoinByCodeResponse, error) {
+	defer s.locks.lock(call.ID)()
 	if other, ok := s.ring.UserActiveCall(userID); ok && other != call.ID {
 		return nil, domain.NewError("BUSY", "Вы уже в другом звонке", 409)
 	}
@@ -870,9 +905,69 @@ func (s *Service) finalize(ctx context.Context, call *domain.Call) error {
 	if err := s.repo.UpdateCall(ctx, call); err != nil {
 		return err
 	}
+	// Оставшиеся в комнате выходят вместе со звонком: room_finished это уже не
+	// сделает — ринг-state к его приходу снят, и в истории люди навсегда
+	// оставались «в звонке».
+	if err := s.repo.CloseOpenParticipants(ctx, call.ID, *call.EndedAt); err != nil {
+		return err
+	}
 	if call.RoomName != "" {
 		s.media.DeleteRoom(ctx, call.RoomName)
 	}
+	return nil
+}
+
+// armRingTimeout — через after снять приглашение, если на него так и не
+// ответили. Таймеры не отменяются: expireInvite сверяет состояние сам.
+func (s *Service) armRingTimeout(callID int64, userIDs []int64, after time.Duration) {
+	if s.ringTimeout <= 0 {
+		return
+	}
+	for _, uid := range userIDs {
+		time.AfterFunc(max(after, 0), func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			defer cancel()
+			if err := s.expireInvite(ctx, callID, uid); err != nil {
+				s.log.Error("calls.ring_timeout_failed", "call_id", callID, "user_id", uid, "error", err)
+			}
+		})
+	}
+}
+
+// expireInvite — истёк дозвон до приглашённого: снять приглашение, у него
+// погасить экран входящего, остальным убрать его плитку; p2p становится
+// пропущенным.
+func (s *Service) expireInvite(ctx context.Context, callID, userID int64) error {
+	defer s.locks.lock(callID)()
+	ring, ok := s.ring.Snapshot(callID)
+	if !ok || !domain.Has(ring.Invited, userID) ||
+		domain.Has(ring.Joined, userID) || domain.Has(ring.Declined, userID) {
+		return nil
+	}
+	call, err := s.repo.GetCall(ctx, callID)
+	if err != nil || call == nil || call.Finished() {
+		return err
+	}
+	part, err := s.repo.GetParticipant(ctx, callID, userID)
+	if err != nil || part == nil || part.JoinedAt != nil {
+		return err
+	}
+	// Позвали повторно — у нового приглашения свой таймер.
+	if now().Sub(part.InvitedAt) < s.ringTimeout-time.Second {
+		return nil
+	}
+	ended, notify, err := s.dropInvitee(ctx, call, ring, userID, false)
+	if err != nil {
+		return err
+	}
+	s.log.Info("calls.ring_timeout", "call_id", callID, "user_id", userID, "ended", ended)
+	if ended {
+		s.pub.CallEnded(ctx, callID, call.Status, notify)
+	} else {
+		s.pub.ParticipantDeclined(ctx, callID, userID, notify)
+		s.pub.CallEnded(ctx, callID, domain.StatusMissed, []int64{userID})
+	}
+	s.pub.PillUpdated(ctx, callID)
 	return nil
 }
 

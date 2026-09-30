@@ -1,12 +1,12 @@
 <template>
   <!-- Невидимые <audio> для ВСЕХ удалённых участников: звук не должен зависеть
        от того, какие плитки сейчас отрисованы (мини-режим, фокус демонстрации,
-       боковые панели). -->
+       боковые панели). У каждого — голос и звук его демонстрации экрана. -->
   <div class="call-audio-sink" aria-hidden="true">
     <audio
-      v-for="p in remotes"
-      :key="p.identity"
-      :ref="(el) => setRef(p.identity, el)"
+      v-for="s in sources"
+      :key="s.key"
+      :ref="(el) => setRef(s.key, el)"
       autoplay
     />
   </div>
@@ -18,34 +18,40 @@ import { useCallStore } from '@/stores/call.js'
 import { callRoom } from '@/services/livekit.js'
 
 const callStore = useCallStore()
-const remotes = computed(() => callStore.participantList.filter(p => !p.pending))
 
-const els = new Map()      // identity → <audio>
-const attached = new Map() // identity → livekit Track
+const sources = computed(() => callStore.participantList
+  .filter(p => !p.pending)
+  .flatMap(p => [
+    { key: `${p.identity}:audio`, identity: p.identity, source: 'audio' },
+    { key: `${p.identity}:screen-audio`, identity: p.identity, source: 'screen-audio' },
+  ]))
 
-function setRef(identity, el) {
+const els = new Map()      // key → <audio>
+const attached = new Map() // key → livekit Track
+
+function setRef(key, el) {
   if (el) {
-    els.set(identity, el)
+    els.set(key, el)
   } else {
-    els.delete(identity)
-    attached.delete(identity)
+    els.delete(key)
+    attached.delete(key)
   }
   sync()
 }
 
 function sync() {
-  for (const p of remotes.value) {
-    const el = els.get(p.identity)
+  for (const s of sources.value) {
+    const el = els.get(s.key)
     if (!el) continue
-    const track = callRoom.getTrack(p.identity, 'audio')
-    const prev = attached.get(p.identity)
+    const track = callRoom.getTrack(s.identity, s.source)
+    const prev = attached.get(s.key)
     if (prev && prev !== track) {
       try { prev.detach(el) } catch {}
-      attached.delete(p.identity)
+      attached.delete(s.key)
     }
     if (track && prev !== track) {
       track.attach(el)
-      attached.set(p.identity, track)
+      attached.set(s.key, track)
     }
   }
 }
@@ -54,8 +60,8 @@ function sync() {
 watch(() => callStore.participants, sync, { flush: 'post' })
 
 onBeforeUnmount(() => {
-  for (const [identity, track] of attached) {
-    const el = els.get(identity)
+  for (const [key, track] of attached) {
+    const el = els.get(key)
     if (el) { try { track.detach(el) } catch {} }
   }
   attached.clear()

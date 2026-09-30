@@ -27,13 +27,13 @@ func NewCallRepository(pool *pgxpool.Pool) *CallRepository {
 }
 
 const callColumns = `id, initiator_id, company_id, kind, status, media,
-	started_at, ended_at, conversation_id, room_name, share_code`
+	started_at, answered_at, ended_at, conversation_id, room_name, share_code`
 
 func scanCall(row pgx.Row) (*domain.Call, error) {
 	var c domain.Call
 	var roomName, shareCode *string
 	err := row.Scan(&c.ID, &c.InitiatorID, &c.CompanyID, &c.Kind, &c.Status,
-		&c.Media, &c.StartedAt, &c.EndedAt, &c.ConversationID, &roomName, &shareCode)
+		&c.Media, &c.StartedAt, &c.AnsweredAt, &c.EndedAt, &c.ConversationID, &roomName, &shareCode)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
@@ -109,8 +109,9 @@ func (r *CallRepository) GetCallByShareCode(ctx context.Context, code string) (*
 
 func (r *CallRepository) UpdateCall(ctx context.Context, call *domain.Call) error {
 	_, err := r.pool.Exec(ctx, `
-		UPDATE calls SET kind = $1, status = $2, ended_at = $3 WHERE id = $4`,
-		call.Kind, call.Status, call.EndedAt, call.ID)
+		UPDATE calls SET kind = $1, status = $2, answered_at = $3, ended_at = $4
+		WHERE id = $5 AND status NOT IN ('ended', 'missed')`,
+		call.Kind, call.Status, call.AnsweredAt, call.EndedAt, call.ID)
 	return err
 }
 
@@ -148,25 +149,36 @@ func scanParticipant(row pgx.Row) (*domain.Participant, error) {
 }
 
 func (r *CallRepository) ListParticipants(ctx context.Context, callID int64) ([]*domain.Participant, error) {
+	byCall, err := r.ListParticipantsForCalls(ctx, []int64{callID})
+	if err != nil {
+		return nil, err
+	}
+	return byCall[callID], nil
+}
+
+func (r *CallRepository) ListParticipantsForCalls(ctx context.Context, callIDs []int64) (map[int64][]*domain.Participant, error) {
+	out := make(map[int64][]*domain.Participant, len(callIDs))
+	if len(callIDs) == 0 {
+		return out, nil
+	}
 	rows, err := r.pool.Query(ctx, `
 		SELECT cp.id, cp.call_id, cp.user_id, cp.role, cp.invited_at,
 		       cp.joined_at, cp.left_at, cp.declined, u.fio, u.avatar_path
 		FROM call_participants cp
 		JOIN users u ON u.id = cp.user_id
-		WHERE cp.call_id = $1
-		ORDER BY cp.id`, callID)
+		WHERE cp.call_id = ANY($1)
+		ORDER BY cp.id`, callIDs)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var out []*domain.Participant
 	for rows.Next() {
 		p, err := scanParticipant(rows)
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, p)
+		out[p.CallID] = append(out[p.CallID], p)
 	}
 	return out, rows.Err()
 }

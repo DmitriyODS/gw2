@@ -112,6 +112,7 @@ func (h *handlers) livekitWebhook(c *fiber.Ctx) error {
 		h.log.Warn("livekit.webhook_rejected", "error", err)
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"code": "BAD_SIGNATURE"})
 	}
+	id, _ := event["id"].(string)
 	name, _ := event["event"].(string)
 	room, _ := event["room"].(map[string]any)
 	participant, _ := event["participant"].(map[string]any)
@@ -119,7 +120,7 @@ func (h *handlers) livekitWebhook(c *fiber.Ctx) error {
 	identity, _ := participant["identity"].(string)
 
 	if err := h.svc.HandleWebhook(c.Context(), dto.WebhookEvent{
-		Event: name, Room: roomName, Identity: identity,
+		ID: id, Event: name, Room: roomName, Identity: identity,
 	}); err != nil && !errors.Is(err, c.Context().Err()) {
 		// Вебхук не должен ретраиться LiveKit'ом из-за внутренних ошибок.
 		h.log.Error("livekit.webhook_apply_failed", "event", name, "error", err)

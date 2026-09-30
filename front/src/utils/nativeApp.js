@@ -111,10 +111,12 @@ function cssColorToRgba(color) {
 
 /* ── Звонок: нативная поддержка (foreground-сервис жизни при блокировке,
    удержание экрана поверх локскрина, аудио-маршрутизация) ── */
-export async function startCallService() {
+// camera — видеозвонок: сервису нужен ещё и тип «камера», иначе в фоне и при
+// блокировке экрана картинка замирает. Повторный вызов меняет тип на ходу.
+export async function startCallService({ camera = false } = {}) {
   const shell = nativeShell()
   if (!isNativeApp() || !shell?.startCallService) return
-  try { await shell.startCallService() } catch {}
+  try { await shell.startCallService({ camera }) } catch {}
 }
 export async function stopCallService() {
   const shell = nativeShell()
@@ -135,10 +137,12 @@ export async function setCallShowOverLock(on) {
   if (!isNativeApp() || !shell?.setShowOverLock) return
   try { await shell.setShowOverLock({ on }) } catch {}
 }
-export async function audioStart() {
+// speaker — маршрут по умолчанию громкая связь (видео); голосовой звонок
+// идёт в «ухо». Подключённая гарнитура важнее обоих — её выбирает нативка.
+export async function audioStart({ speaker = false } = {}) {
   const shell = nativeShell()
   if (!isNativeApp() || !shell?.audioStart) return
-  try { await shell.audioStart() } catch {}
+  try { await shell.audioStart({ speaker }) } catch {}
 }
 export async function audioStop() {
   const shell = nativeShell()
