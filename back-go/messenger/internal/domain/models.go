@@ -209,6 +209,7 @@ type CallInfo struct {
 	Media          string
 	Status         string
 	StartedAt      time.Time
+	AnsweredAt     *time.Time // nil — никто не ответил
 	EndedAt        *time.Time
 	InitiatorID    int64
 	ConversationID *int64 // не сериализуется; нужен GetCallMessage
@@ -258,6 +259,8 @@ type Message struct {
 	PinnedAt            *time.Time
 	PinnedByID          *int64
 	EditedAt            *time.Time
+	// ClientID — ключ идемпотентности отправки (очередь клиента без сети).
+	ClientID *string
 
 	Attachments   []Attachment
 	Reactions     []Reaction
@@ -310,6 +313,7 @@ type NewMessage struct {
 	PostExcerpt         *string
 	PostCoverURL        *string
 	IsBot               bool
+	ClientID            *string
 }
 
 // User — пользователь платформы в объёме мессенджера (read-only).

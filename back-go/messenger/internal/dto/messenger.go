@@ -170,6 +170,10 @@ type Message struct {
 	PinnedByID     *int64         `json:"pinned_by_id"`
 	EditedAt       *JSONTime      `json:"edited_at"`
 	IsFromSupport  bool           `json:"is_from_support"`
+	// ClientID — ключ из очереди отправителя: по нему его клиент заменяет
+	// черновик «с часиками» настоящим сообщением (сокет может прийти раньше
+	// HTTP-ответа).
+	ClientID *string `json:"client_id,omitempty"`
 }
 
 // truncateRunes — как срез строки в Python (по символам, не байтам).
@@ -200,6 +204,7 @@ func NewMessage(m *domain.Message) *Message {
 		PinnedByID:     m.PinnedByID,
 		EditedAt:       jsonTimePtr(m.EditedAt),
 		IsFromSupport:  m.IsFromSupport(),
+		ClientID:       m.ClientID,
 	}
 	for i := range m.Attachments {
 		out.Attachments = append(out.Attachments, *NewAttachment(&m.Attachments[i]))
@@ -234,8 +239,9 @@ func NewMessage(m *domain.Message) *Message {
 			EndedAt:     jsonTimePtr(c.EndedAt),
 			InitiatorID: c.InitiatorID,
 		}
-		if c.EndedAt != nil {
-			d := int64(c.EndedAt.Sub(c.StartedAt).Seconds())
+		// Длительность — время разговора: без ответа её нет (плашка «пропущен»).
+		if c.EndedAt != nil && c.AnsweredAt != nil {
+			d := int64(c.EndedAt.Sub(*c.AnsweredAt).Seconds())
 			ci.DurationSec = &d
 		}
 		out.Call = ci
@@ -379,6 +385,9 @@ type ConversationListItem struct {
 
 // MessageCreate — тело POST /conversations/<id>/messages.
 type MessageCreate struct {
+	// ClientID — ключ идемпотентности: повтор с тем же ключом вернёт уже
+	// созданное сообщение.
+	ClientID      *string `json:"client_id"`
 	Text          *string `json:"text"`
 	AttachmentIDs []int64 `json:"attachment_ids"`
 	ReplyToID     *int64  `json:"reply_to_id"`

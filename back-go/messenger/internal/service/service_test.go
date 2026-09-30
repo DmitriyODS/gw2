@@ -260,6 +260,15 @@ func (r *fakeRepo) GetMessage(_ context.Context, id int64) (*domain.Message, err
 	return r.snapshot(m), nil
 }
 
+func (r *fakeRepo) GetMessageByClientID(_ context.Context, senderID int64, clientID string) (*domain.Message, error) {
+	for _, m := range r.msgs {
+		if m.ClientID != nil && *m.ClientID == clientID && m.SenderID != nil && *m.SenderID == senderID {
+			return r.snapshot(m), nil
+		}
+	}
+	return nil, nil
+}
+
 func hiddenFor(m *domain.Message, side string) bool {
 	if side == domain.SideA {
 		return m.HiddenForA
@@ -389,6 +398,13 @@ func (r *fakeRepo) TotalUnread(_ context.Context, userID int64) (int, error) {
 }
 
 func (r *fakeRepo) CreateMessage(_ context.Context, nm domain.NewMessage) (*domain.Message, error) {
+	if nm.ClientID != nil && nm.SenderID != nil {
+		for _, m := range r.msgs {
+			if m.ClientID != nil && *m.ClientID == *nm.ClientID && m.SenderID != nil && *m.SenderID == *nm.SenderID {
+				return nil, domain.ErrDuplicateClientID
+			}
+		}
+	}
 	r.nextMsg++
 	kind := nm.Kind
 	if kind == "" {
@@ -406,6 +422,7 @@ func (r *fakeRepo) CreateMessage(_ context.Context, nm domain.NewMessage) (*doma
 		Kind:                kind,
 		TaskID:              nm.TaskID,
 		CallID:              nm.CallID,
+		ClientID:            nm.ClientID,
 	}
 	r.msgs[m.ID] = m
 	if nm.SenderID != nil {
@@ -1041,9 +1058,11 @@ func TestConversationHiddenByBothSidesIsPhysicallyDeleted(t *testing.T) {
 	if len(files.removed) != 1 {
 		t.Fatalf("файлы не зачищены: %v", files.removed)
 	}
-	// Второй удаливший получает эхо в свои вкладки.
+	// Каждый удаливший получает эхо только в свои вкладки (по нему же журнал
+	// дельты отмечает диалог ушедшим); собеседника «у себя» не касается.
 	evs := pub.byName("conversation:deleted")
-	if len(evs) != 1 || len(evs[0].Rooms) != 1 || evs[0].Rooms[0] != "user_3" {
+	if len(evs) != 2 || len(evs[0].Rooms) != 1 || evs[0].Rooms[0] != "user_2" ||
+		len(evs[1].Rooms) != 1 || evs[1].Rooms[0] != "user_3" {
 		t.Fatalf("conversation:deleted: %+v", evs)
 	}
 }
@@ -1346,9 +1365,12 @@ func TestCallMessageLifecycle(t *testing.T) {
 		t.Fatalf("notify: %v", notify)
 	}
 
-	// Звонок завершился — снапшот читает статус заново и считает длительность.
-	ended := started.Add(90 * time.Second)
+	// Звонок завершился — снапшот читает статус заново и считает длительность
+	// разговора: от ответа, а не от первого гудка.
+	answered := started.Add(10 * time.Second)
+	ended := started.Add(100 * time.Second)
 	repo.calls[42].Status = "ended"
+	repo.calls[42].AnsweredAt = &answered
 	repo.calls[42].EndedAt = &ended
 
 	gotConvID, updated, notify2, err := svc.GetCallMessage(ctx, 42)
@@ -1558,5 +1580,46 @@ func TestSyncConversationsDelta(t *testing.T) {
 	}
 	if len(changes.touched) == 0 {
 		t.Fatal("открытие диалога не отмечено в журнале")
+	}
+}
+
+// Повтор отправки из очереди клиента (ответ потерялся после записи) с тем же
+// ключом возвращает то же сообщение: второго нет, рассылки второй — тоже.
+func TestSendMessageIdempotentByClientID(t *testing.T) {
+	svc, repo, _, pub := newTestEnv()
+	ctx := context.Background()
+	conv, _ := svc.OpenConversation(ctx, 2, 3)
+	att, _ := svc.UploadAttachment(ctx, 2, "a.txt", "text/plain", []byte("x"))
+	key := "3f1c2a9e-7b1d-4c55-9a0e-1b2c3d4e5f60"
+	text := "привет"
+	req := dto.MessageCreate{ClientID: &key, Text: &text, AttachmentIDs: []int64{att.ID}}
+
+	first, err := svc.SendMessage(ctx, conv.ID, 2, req)
+	if err != nil {
+		t.Fatalf("первая отправка: %v", err)
+	}
+	// Вложение уже привязано к первому — повтор всё равно успешен.
+	again, err := svc.SendMessage(ctx, conv.ID, 2, req)
+	if err != nil {
+		t.Fatalf("повтор: %v", err)
+	}
+	if again.ID != first.ID || again.ClientID == nil || *again.ClientID != key {
+		t.Fatalf("повтор вернул другое сообщение: %d vs %d", again.ID, first.ID)
+	}
+	if n := len(repo.convMessages(conv.ID)); n != 1 {
+		t.Fatalf("сообщений в диалоге: %d, ожидалось 1", n)
+	}
+	if n := len(pub.byName("message:new")); n != 1 {
+		t.Fatalf("message:new разослано %d раз", n)
+	}
+
+	// Тот же ключ в другом диалоге — ошибка клиента, а не повтор.
+	other, _ := svc.OpenConversation(ctx, 2, 4)
+	if _, err := svc.SendMessage(ctx, other.ID, 2, dto.MessageCreate{ClientID: &key, Text: &text}); err == nil {
+		t.Fatal("ключ из чужого диалога должен отклоняться")
+	}
+	bad := "x"
+	if _, err := svc.SendMessage(ctx, conv.ID, 2, dto.MessageCreate{ClientID: &bad, Text: &text}); err == nil {
+		t.Fatal("недопустимый ключ должен отклоняться")
 	}
 }

@@ -6,6 +6,8 @@ import { useUnitsStore } from '@/stores/units.js'
 import { useMessengerStore } from '@/stores/messenger.js'
 import { useCallStore } from '@/stores/call.js'
 import { useLiveTilesStore } from '@/stores/liveTiles.js'
+import { useNetworkStore } from '@/stores/network.js'
+import { useMessageOutboxStore } from '@/stores/messageOutbox.js'
 import { registerMessengerSocketHandlers } from '@/socket/messenger.js'
 import { registerCallSocketHandlers } from '@/socket/calls.js'
 import { registerPetsSocketHandlers } from '@/socket/pets.js'
@@ -137,10 +139,15 @@ function scheduleSleep(visible) {
   clearTimeout(sleepTimer)
   sleepTimer = null
   if (visible) {
+    if (socket) useNetworkStore().setSocketActive(true)
     socket?.wake()
     return
   }
-  sleepTimer = setTimeout(() => socket?.sleep(), SLEEP_AFTER_HIDDEN_MS)
+  sleepTimer = setTimeout(() => {
+    // Намеренный сон — не обрыв связи: индикатор сети его не показывает.
+    useNetworkStore().setSocketActive(false)
+    socket?.sleep()
+  }, SLEEP_AFTER_HIDDEN_MS)
 }
 
 function installVisibilityResync() {
@@ -206,6 +213,9 @@ export function connectSocket() {
   let hadConnected = false
 
   socket.on('connect', () => {
+    useNetworkStore().setSocketConnected(true)
+    // Связь есть — досылаем сообщения, накопившиеся без неё.
+    useMessageOutboxStore().flush()
     // Свежий снимок онлайн-статусов при каждом (пере)подключении — события
     // presence:update, прошедшие до коннекта, мы не услышали.
     try { useMessengerStore().fetchPresence() } catch {}
@@ -233,7 +243,10 @@ export function connectSocket() {
     console.warn('Socket connection error:', err.message)
   })
 
-  socket.on('disconnect', () => { stopHeartbeat() })
+  socket.on('disconnect', () => {
+    stopHeartbeat()
+    useNetworkStore().setSocketConnected(false)
+  })
 
   socket.onAny((event) => {
     const app = TILE_BY_EVENT_PREFIX[event.slice(0, event.indexOf(':'))]
@@ -248,6 +261,9 @@ export function connectSocket() {
   socket.holdEvents(import('@/socket/sections.js').then(({ registerSectionSocketHandlers }) => {
     if (socket === own) registerSectionSocketHandlers(own)
   }))
+  const network = useNetworkStore()
+  network.init()
+  network.setSocketActive(true)
   return socket
 }
 
@@ -260,4 +276,5 @@ export function disconnectSocket() {
     socket.disconnect()
     socket = null
   }
+  useNetworkStore().setSocketActive(false)
 }

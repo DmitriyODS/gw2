@@ -658,19 +658,21 @@ async function submit() {
     autoresize()
     return
   }
+  const ready = pending.value.filter(p => p.id)
   const payload = {
     text: full.trim(),
-    attachment_ids: pending.value.filter(p => p.id).map(p => p.id),
+    attachment_ids: ready.map(p => p.id),
     reply_to_id: props.replyTo?.id || null,
     task_id: attachedTask.value?.id || null,
+    // Для черновика в ленте (сообщение ещё в очереди) — сами вложения.
+    attachments: ready.map(({ _key, uploading, ...att }) => att),
   }
-  // Поле НЕ очищаем здесь: очистку делает родитель через clearAfterSend()
-  // ТОЛЬКО при успешной отправке. При сбое сети текст остаётся в поле (и не
-  // дублируется — кнопка отправки заблокирована prop `sending` на время запроса).
+  // Поле очищает родитель через clearAfterSend(): мессенджер — сразу, когда
+  // сообщение встало в очередь отправки (текст живёт в пузыре «с часиками»).
   emit('send', payload)
 }
 
-/* Успешная отправка подтверждена родителем — очищаем поле и вложения.
+/* Сообщение принято к отправке — очищаем поле и вложения.
    Samsung/IME: после отправки композиция ещё активна, а Vue во время неё НЕ
    пишет пустую строку в DOM (директива v-model пропускает обновление при
    composing) — поле не очищалось с первого раза. Поэтому чистим сам <textarea>

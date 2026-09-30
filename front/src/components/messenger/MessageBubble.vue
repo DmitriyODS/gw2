@@ -143,7 +143,15 @@
         <span v-if="senderName" class="msg-sender">{{ senderName }}</span>
         <span v-if="message.edited_at" class="msg-edited" title="Сообщение отредактировано">изменено</span>
         <span class="msg-time">{{ formatTime(message.created_at) }}</span>
-        <span v-if="isMine && isGroup" class="msg-read group" role="button" title="Кто прочитал" @click.stop="$emit('read-by', message.id)">
+        <!-- Сообщение из очереди отправки: часики, пока ждёт связи; ошибка —
+             если сервер отказал. -->
+        <span v-if="message.outbox === 'failed'" class="msg-read msg-out-failed" :title="message.outbox_error || 'Не отправлено'">
+          <span class="material-symbols-outlined">error</span>
+        </span>
+        <span v-else-if="message.outbox" class="msg-read" title="Ждёт отправки">
+          <span class="material-symbols-outlined">schedule</span>
+        </span>
+        <span v-else-if="isMine && isGroup" class="msg-read group" role="button" title="Кто прочитал" @click.stop="$emit('read-by', message.id)">
           <span class="material-symbols-outlined" :class="{ seen: readCount > 0 }">done_all</span>
           <span v-if="readCount > 0" class="msg-read-count">{{ readCount }}</span>
         </span>
@@ -153,6 +161,11 @@
           </span>
         </span>
       </div>
+      <div v-if="message.outbox === 'failed'" class="msg-out-actions">
+        <span class="msg-out-error">{{ message.outbox_error || 'Не отправлено' }}</span>
+        <AppButton variant="text" size="sm" @pointerup.stop @click.stop="$emit('retry', message.client_id)">Повторить</AppButton>
+        <AppButton variant="text" size="sm" tone="danger" @pointerup.stop @click.stop="$emit('discard', message.client_id)">Удалить</AppButton>
+      </div>
     </div>
   </div>
 </template>
@@ -161,6 +174,7 @@
 import { computed, ref } from 'vue'
 import AttachmentView from './AttachmentView.vue'
 import MarkdownView from '@/components/common/MarkdownView.vue'
+import AppButton from '@/components/ui/AppButton.vue'
 
 const props = defineProps({
   message: { type: Object, required: true },
@@ -176,7 +190,7 @@ const props = defineProps({
   readCount: { type: Number, default: 0 },
 })
 
-const emit = defineEmits(['delete', 'edit', 'reply', 'forward', 'join-call', 'pin', 'open-task', 'open-post', 'context-menu', 'quote-click', 'react', 'read-by'])
+const emit = defineEmits(['delete', 'edit', 'reply', 'forward', 'join-call', 'pin', 'open-task', 'open-post', 'context-menu', 'quote-click', 'react', 'read-by', 'retry', 'discard'])
 
 // Реакции сгруппированные по эмодзи; mine — подсветка своей.
 const reactionGroups = computed(() => {
@@ -793,6 +807,25 @@ const joinLabel = computed(() => props.isMine ? 'Вернуться' : 'Прис
 
 .msg-read .material-symbols-outlined.seen {
   color: var(--color-success);
+}
+
+.msg-read.msg-out-failed .material-symbols-outlined { color: var(--color-error); }
+
+.msg-out-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.msg-out-error {
+  flex: 1 1 100%;
+  font-size: 12px;
+  color: var(--color-error);
+  text-align: right;
+  overflow-wrap: anywhere;
 }
 
 .msg-read.group {

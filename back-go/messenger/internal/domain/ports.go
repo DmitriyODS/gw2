@@ -98,7 +98,10 @@ type Repository interface {
 	// CreateMessage — INSERT + привязка вложений (uploader = sender,
 	// message_id IS NULL) + у диалога last_message_at и сброс hidden_for_*.
 	// Возвращает полный снапшот.
+	// Занятый ключ идемпотентности (sender_id, client_id) — ErrDuplicateClientID.
 	CreateMessage(ctx context.Context, m NewMessage) (*Message, error)
+	// GetMessageByClientID — сообщение отправителя по ключу идемпотентности.
+	GetMessageByClientID(ctx context.Context, senderID int64, clientID string) (*Message, error)
 	// MarkRead — read_at для всех входящих; количество обновлённых.
 	MarkRead(ctx context.Context, convID, readerID int64) (int, error)
 	// HideMessage — true, если сообщение теперь скрыто обеими сторонами.

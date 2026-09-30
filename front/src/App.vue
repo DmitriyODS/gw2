@@ -40,6 +40,9 @@
         <router-view />
       </main>
     </template>
+    <!-- Нет сети / переподключение — видно на любом экране, иначе сбой
+         выглядел как непонятная ошибка отдельного действия. -->
+    <NetworkBanner v-if="networkStore.status !== 'online' || networkStore.restored" />
     <!-- Правовые документы: пока действующая редакция не принята, приложение
          закрыто (152-ФЗ) — все сервисы отвечают 403, плашка неотменяемая.
          Ленивый чанк: тексты документов читают один раз в жизни аккаунта. -->
@@ -73,6 +76,7 @@ import { usePetsStore } from '@/stores/pets.js'
 import { usePortalStore } from '@/stores/portal.js'
 import { useAssistantStore } from '@/stores/assistant.js'
 import { useCallStore } from '@/stores/call.js'
+import { useNetworkStore } from '@/stores/network.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { useScreenLock } from '@/composables/useScreenLock.js'
 import { useShellMode } from '@/composables/useShellMode.js'
@@ -108,6 +112,7 @@ const ReturnCallBanner = defineAsyncComponent(() => import('@/components/call/Re
 const ScreenLockOverlay = defineAsyncComponent(() => import('@/components/common/ScreenLockOverlay.vue'))
 const WidgetsShell = defineAsyncComponent(() => import('@/components/widgets/WidgetsShell.vue'))
 const LegalConsentOverlay = defineAsyncComponent(() => import('@/components/legal/LegalConsentOverlay.vue'))
+const NetworkBanner = defineAsyncComponent(() => import('@/components/common/NetworkBanner.vue'))
 
 const authStore = useAuthStore()
 const themeStore = useThemeStore()
@@ -117,6 +122,8 @@ const petsStore = usePetsStore()
 const portalStore = usePortalStore()
 const assistantStore = useAssistantStore()
 const callStore = useCallStore()
+const networkStore = useNetworkStore()
+networkStore.init()
 const notif = useNotificationsStore()
 const route = useRoute()
 const router = useRouter()
@@ -355,7 +362,7 @@ function onCallFocusOverlay() {
    датчику приближения (аудио-звонок), а блокировка гасит его штатно. Показ
    поверх локскрина — только для входящего. В браузере/Electron — no-op. */
 let callAudioOn = false
-watch(() => [callStore.phase, callStore.media], ([phase, media]) => {
+watch(() => [callStore.phase, callStore.media, callStore.videoEnabled], ([phase, media, video]) => {
   if (phase === 'incoming') {
     setCallShowOverLock(true)
     return
@@ -363,8 +370,8 @@ watch(() => [callStore.phase, callStore.media], ([phase, media]) => {
   if (phase === 'active' || phase === 'outgoing') {
     setCallShowOverLock(false)             // в разговоре блокировка гасит экран штатно
     setCallProximity(media === 'audio')    // аудио-звонок: экран гаснет у уха
-    startCallService()
-    if (!callAudioOn) { callAudioOn = true; audioStart() }
+    startCallService({ camera: video })
+    if (!callAudioOn) { callAudioOn = true; audioStart({ speaker: media === 'video' }) }
   } else { // idle
     setCallShowOverLock(false)
     setCallProximity(false)

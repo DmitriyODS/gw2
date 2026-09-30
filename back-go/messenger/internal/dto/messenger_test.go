@@ -60,7 +60,7 @@ func TestMessageJSONShape(t *testing.T) {
 		},
 		Call: &domain.CallInfo{
 			ID: 42, Kind: "p2p", Media: "video", Status: "ended",
-			StartedAt: started, EndedAt: &ended, InitiatorID: 3,
+			StartedAt: started, AnsweredAt: &started, EndedAt: &ended, InitiatorID: 3,
 		},
 		ConvIsDevChat: false,
 		ConvOwnerID:   2,

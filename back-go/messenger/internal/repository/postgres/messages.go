@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/DmitriyODS/gw2/back-go/messenger/internal/domain"
 )
@@ -20,9 +21,9 @@ const msgCols = `m.id, m.conversation_id, m.sender_id, m.is_bot, m.text, m.creat
 	r.id, r.sender_id, ru.fio, r.text, r.kind,
 	EXISTS(SELECT 1 FROM message_attachments ra WHERE ra.message_id = r.id),
 	fu.id, fu.fio,
-	cl.id, cl.kind, cl.media, cl.status, cl.started_at, cl.ended_at, cl.initiator_id, cl.conversation_id,
+	cl.id, cl.kind, cl.media, cl.status, cl.started_at, cl.answered_at, cl.ended_at, cl.initiator_id, cl.conversation_id,
 	t.id, t.name, t.is_archived, t.color, tu.fio, t.deadline, t.company_id,
-	m.post_id, m.post_title, m.post_excerpt, m.post_cover_url`
+	m.post_id, m.post_title, m.post_excerpt, m.post_cover_url, m.client_id`
 
 const msgFrom = `
 	FROM messages m
@@ -54,6 +55,7 @@ func scanMessage(row pgx.Row) (*domain.Message, error) {
 		callStatus    *string
 		callStartedAt *time.Time
 		callEndedAt   *time.Time
+		callAnswered  *time.Time
 		callInitiator *int64
 		callConvID    *int64
 
@@ -79,10 +81,10 @@ func scanMessage(row pgx.Row) (*domain.Message, error) {
 		&m.ConvIsDevChat, &convOwner,
 		&replyID, &replySndID, &replyFIO, &replyText, &replyKind, &replyAtt,
 		&fwdID, &fwdFIO,
-		&callID, &callKind, &callMedia, &callStatus, &callStartedAt, &callEndedAt,
+		&callID, &callKind, &callMedia, &callStatus, &callStartedAt, &callAnswered, &callEndedAt,
 		&callInitiator, &callConvID,
 		&taskID, &taskName, &taskArchived, &taskColor, &taskRespFIO, &taskDeadline, &taskCompany,
-		&postID, &postTitle, &postExcerpt, &postCover)
+		&postID, &postTitle, &postExcerpt, &postCover, &m.ClientID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
@@ -113,6 +115,7 @@ func scanMessage(row pgx.Row) (*domain.Message, error) {
 			Media:          deref(callMedia),
 			Status:         deref(callStatus),
 			StartedAt:      derefTime(callStartedAt),
+			AnsweredAt:     callAnswered,
 			EndedAt:        callEndedAt,
 			InitiatorID:    derefInt(callInitiator),
 			ConversationID: callConvID,
@@ -416,14 +419,21 @@ func (r *Repo) CreateMessage(ctx context.Context, nm domain.NewMessage) (*domain
 		err := r.q(ctx).QueryRow(ctx, `
 			INSERT INTO messages (conversation_id, sender_id, is_bot, text, created_at,
 				hidden_for_a, hidden_for_b, reply_to_id, forwarded_from_user_id,
-				kind, call_id, task_id, post_id, post_title, post_excerpt, post_cover_url)
-			VALUES ($1, $2, $3, $4, now(), FALSE, FALSE, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+				kind, call_id, task_id, post_id, post_title, post_excerpt, post_cover_url,
+				client_id)
+			VALUES ($1, $2, $3, $4, now(), FALSE, FALSE, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 			RETURNING id, created_at`,
 			nm.ConversationID, nm.SenderID, nm.IsBot, nm.Text, nm.ReplyToID,
 			nm.ForwardedFromUserID, kind, nm.CallID, nm.TaskID,
-			nm.PostID, nm.PostTitle, nm.PostExcerpt, nm.PostCoverURL,
+			nm.PostID, nm.PostTitle, nm.PostExcerpt, nm.PostCoverURL, nm.ClientID,
 		).Scan(&id, &createdAt)
 		if err != nil {
+			// Гонка повторов с одним ключом: сообщение уже записал параллельный.
+			var pgErr *pgconn.PgError
+			if nm.ClientID != nil && errors.As(err, &pgErr) && pgErr.Code == "23505" &&
+				pgErr.ConstraintName == "messages_sender_client_uidx" {
+				return domain.ErrDuplicateClientID
+			}
 			return err
 		}
 		if len(nm.AttachmentIDs) > 0 && nm.SenderID != nil {
@@ -446,6 +456,11 @@ func (r *Repo) CreateMessage(ctx context.Context, nm domain.NewMessage) (*domain
 		return err
 	})
 	return msg, err
+}
+
+func (r *Repo) GetMessageByClientID(ctx context.Context, senderID int64, clientID string) (*domain.Message, error) {
+	return scanMessage(r.q(ctx).QueryRow(ctx,
+		`SELECT `+msgCols+msgFrom+`WHERE m.sender_id = $1 AND m.client_id = $2`, senderID, clientID))
 }
 
 func (r *Repo) MarkRead(ctx context.Context, convID, readerID int64) (int, error) {

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"path/filepath"
 	"strconv"
@@ -42,6 +43,16 @@ func (s *Service) SendMessage(ctx context.Context, convID, senderID int64,
 		return nil, err
 	}
 
+	// Повтор из очереди клиента: сообщение уже записано (ответ потерялся по
+	// дороге) — отдаём его, не создавая второе и не рассылая заново.
+	clientID, err := normalizeClientID(req.ClientID)
+	if err != nil {
+		return nil, err
+	}
+	if prev, err := s.sentByClientID(ctx, conv.ID, senderID, clientID); prev != nil || err != nil {
+		return prev, err
+	}
+
 	var text *string
 	if req.Text != nil {
 		if t := strings.TrimSpace(*req.Text); t != "" {
@@ -60,6 +71,11 @@ func (s *Service) SendMessage(ctx context.Context, convID, senderID int64,
 			return nil, err
 		}
 		if att == nil || att.UploaderID != senderID || att.MessageID != nil {
+			// Вложение привязал параллельный повтор той же отправки — это
+			// успех, а не ошибка.
+			if prev, err := s.sentByClientID(ctx, conv.ID, senderID, clientID); prev != nil || err != nil {
+				return prev, err
+			}
 			return nil, domain.NewError("BAD_ATTACHMENT", "Недопустимое вложение", 400)
 		}
 	}
@@ -114,7 +130,11 @@ func (s *Service) SendMessage(ctx context.Context, convID, senderID int64,
 		ReplyToID:      req.ReplyToID,
 		Kind:           kind,
 		TaskID:         req.TaskID,
+		ClientID:       clientID,
 	})
+	if errors.Is(err, domain.ErrDuplicateClientID) {
+		return s.sentByClientID(ctx, conv.ID, senderID, clientID)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -943,4 +963,38 @@ func (s *Service) ListPinnedMessages(ctx context.Context, convID, userID int64) 
 		return nil, err
 	}
 	return dto.NewMessages(msgs), nil
+}
+
+// normalizeClientID — ключ идемпотентности от клиента: пустой — отправка без
+// ключа, иначе 8–64 символа из алфавита UUID.
+func normalizeClientID(raw *string) (*string, error) {
+	if raw == nil {
+		return nil, nil
+	}
+	id := strings.TrimSpace(*raw)
+	if id == "" {
+		return nil, nil
+	}
+	if len(id) < 8 || len(id) > 64 || strings.IndexFunc(id, func(r rune) bool {
+		return !(r == '-' || r >= '0' && r <= '9' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z')
+	}) >= 0 {
+		return nil, domain.NewError("BAD_CLIENT_ID", "Недопустимый ключ сообщения", 400)
+	}
+	return &id, nil
+}
+
+// sentByClientID — уже отправленное сообщение с этим ключом (nil — не было).
+// Ключ из чужого диалога — ошибка клиента, а не повтор.
+func (s *Service) sentByClientID(ctx context.Context, convID, senderID int64, clientID *string) (*dto.Message, error) {
+	if clientID == nil {
+		return nil, nil
+	}
+	prev, err := s.repo.GetMessageByClientID(ctx, senderID, *clientID)
+	if err != nil || prev == nil {
+		return nil, err
+	}
+	if prev.ConversationID != convID {
+		return nil, domain.NewError("BAD_CLIENT_ID", "Ключ сообщения уже использован", 409)
+	}
+	return dto.NewMessage(prev), nil
 }

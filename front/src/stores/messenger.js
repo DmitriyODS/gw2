@@ -10,6 +10,8 @@ import { useCallStore } from './call.js'
 import { getSocket } from '@/socket/index.js'
 import { normalizeRecipe } from '@/utils/chatBackgrounds.js'
 import { rememberReaction } from '@/utils/reactions.js'
+// Цикл messageOutbox ↔ messenger безопасен: оба зовут друг друга из функций.
+import { useMessageOutboxStore } from './messageOutbox.js'
 
 // Страница ленты — столько отдаёт listMessages по умолчанию.
 const PAGE_SIZE = 50
@@ -510,6 +512,9 @@ export const useMessengerStore = defineStore('messenger', () => {
 
   /* Обработка входящего сообщения (своего эхо или собеседника). */
   function applyIncomingMessage(conversationId, msg, fromMe = false) {
+    // Своё сообщение из очереди дошло (сокет бывает быстрее HTTP-ответа) —
+    // черновик «с часиками» уступает место настоящему.
+    if (msg.client_id) useMessageOutboxStore().confirm(msg.client_id)
     /* Ленту дописываем, только если она уже загружена. Иначе кэш получал бы
        огрызок из одного сообщения: setActive счёл бы чат загруженным, историю
        не запросил, и открытый чат показывал бы лишь последнее сообщение, а

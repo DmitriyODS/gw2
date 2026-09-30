@@ -1,5 +1,6 @@
 import { useAuthStore } from '@/stores/auth'
 import { notifyPlanLimit } from '@/utils/planLimit.js'
+import { useNetworkStore } from '@/stores/network.js'
 
 let refreshPromise = null
 
@@ -65,6 +66,20 @@ function isRawBody(body) {
     || ArrayBuffer.isView(body)
 }
 
+/** Запрос не дошёл до сервера: текст говорит, что проверить. */
+function networkError() {
+  useNetworkStore().reportRequest(false)
+  const offline = typeof navigator !== 'undefined' && navigator.onLine === false
+  return {
+    status: 0,
+    error: 'NETWORK_ERROR',
+    offline,
+    message: offline
+      ? 'Нет подключения к интернету'
+      : 'Нет связи с сервером. Проверьте подключение к интернету',
+  }
+}
+
 export async function apiRequest(path, options = {}) {
   const auth = useAuthStore()
 
@@ -91,12 +106,16 @@ export async function apiRequest(path, options = {}) {
       body: isRawBody(options.body) ? options.body :
             options.body ? JSON.stringify(options.body) : undefined,
     }, options.timeout ?? 8000)
-  } catch (e) {
-    if (e?.name === 'AbortError' || options.signal?.aborted) {
-      throw { status: 0, error: 'ABORTED', message: 'Запрос отменён' }
+  } catch {
+    // Отменил сам вызывающий (пришёл новый запрос, ушли с экрана) — не ошибка.
+    if (options.signal?.aborted) {
+      throw { status: 0, error: 'ABORTED', message: 'Запрос отменён', silent: true }
     }
-    throw { status: 0, error: 'NETWORK_ERROR', message: 'Сервер недоступен' }
+    // Всё остальное — сеть: и обрыв, и собственный таймаут (он тоже приходит
+    // AbortError'ом, и прежде показывался как «Запрос отменён»).
+    throw networkError()
   }
+  useNetworkStore().reportRequest(true)
 
   if (resp.status === 401 && !options._retry && path !== '/auth/refresh') {
     // Намеренный выход или уже нет активной сессии — не дёргаем refresh и не
@@ -114,7 +133,7 @@ export async function apiRequest(path, options = {}) {
       // не разлогиниваем, отдаём сетевую ошибку; access обновится следующим
       // запросом, когда сеть вернётся.
       if ((e?.status ?? 0) === 0 || e?.status >= 500) {
-        throw { status: 0, error: 'NETWORK_ERROR', message: 'Сервер недоступен' }
+        throw networkError()
       }
       auth.clearAuth()
       throw { status: 401, error: 'unauthorized', message: 'Сессия истекла' }

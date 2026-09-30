@@ -113,8 +113,13 @@
             <template v-else>{{ active.other_user?.fio }}</template>
             <span v-if="peerStatusEmoji" class="chat-fio-status" :title="peerStatusText || 'Статус'">{{ peerStatusEmoji }}</span>
           </div>
-          <div class="chat-status" :class="{ online: chatOnline || peerTyping }">
-            <template v-if="active.is_dev_chat && devChatOwner">
+          <div class="chat-status" :class="{ online: (chatOnline || peerTyping) && !networkNote }">
+            <!-- Связи нет — присутствие собеседника уже неизвестно, а отправка
+                 не пройдёт: подзаголовок говорит об этом прямо. -->
+            <template v-if="networkNote">
+              <span class="chat-net" :class="network.status">{{ networkNote }}</span>
+            </template>
+            <template v-else-if="active.is_dev_chat && devChatOwner">
               <span v-if="active.company_name">{{ active.company_name }} · </span>
               <template v-if="chatOnline">в сети</template>
               <template v-else>{{ ownerLastSeenText }}</template>
@@ -220,6 +225,8 @@
                   @quote-click="onQuoteClick"
                   @react="onReact"
                   @read-by="openReadBy"
+                  @retry="outbox.retry"
+                  @discard="outbox.discard"
                 />
               </div>
               <div v-if="g.after" :style="{ height: `${g.after}px` }" />
@@ -329,6 +336,8 @@ import { useMessengerStore } from '@/stores/messenger.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { useCallStore } from '@/stores/call.js'
+import { useNetworkStore } from '@/stores/network.js'
+import { useMessageOutboxStore } from '@/stores/messageOutbox.js'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
 import { useFileDrop } from '@/composables/useFileDrop.js'
 import { useJumpToMessage } from '@/composables/useJumpToMessage.js'
@@ -438,7 +447,13 @@ function onViewportChange() {
 }
 
 const messageInputRef = ref(null)
-const messageGroups = computed(() => groupMessagesByDay(messenger.activeMessages))
+// Лента — подтверждённые сообщения и хвост неотправленных из очереди.
+const outbox = useMessageOutboxStore()
+const feedMessages = computed(() => {
+  const pendingOut = activeId.value ? outbox.messagesFor(activeId.value) : []
+  return pendingOut.length ? [...messenger.activeMessages, ...pendingOut] : messenger.activeMessages
+})
+const messageGroups = computed(() => groupMessagesByDay(feedMessages.value))
 
 /* Виртуальная лента: строки — разделитель дня и сообщения каждой группы. */
 const feedEl = ref(null)
@@ -524,6 +539,9 @@ const {
 })
 
 function openContextMenu({ x, y, message }) {
+  // Неотправленное сообщение ещё не существует на сервере: ни ответить, ни
+  // переслать, ни отреагировать нельзя — его действия прямо под пузырём.
+  if (message.outbox) return
   ctxMenu.value = { visible: true, x, y, message }
 }
 
@@ -689,6 +707,7 @@ const forwardSource = ref(null)
 const forwardDialogRef = ref(null)
 
 function startReply(message) {
+  if (message.outbox) return
   editing.value = null
   replyTo.value = {
     id: message.id,
@@ -964,6 +983,12 @@ const profileUser = computed(() => {
 const peerStatusEmoji = computed(() => profileUser.value?.status_emoji || '')
 const peerStatusText = computed(() => profileUser.value?.status_text || '')
 
+const network = useNetworkStore()
+const networkNote = computed(() => ({
+  offline: 'Ожидание сети…',
+  connecting: 'Соединение…',
+})[network.status] || '')
+
 function avatarOf(u) {
   if (!u) return ''
   return u.avatar_path ? `/uploads/${u.avatar_path}` : `/api/users/${u.id}/identicon`
@@ -994,22 +1019,21 @@ async function startWith(user) {
   scrollToBottom()
 }
 
+/* Отправка — через очередь: сообщение сразу встаёт в ленту «с часиками», поле
+   освобождается, а без сети очередь дошлёт его сама, когда связь вернётся.
+   Отказ сервера (например, задача чужой компании) помечает пузырь ошибкой с
+   «Повторить»/«Удалить» — текст не теряется. */
 async function onSend(payload) {
-  try {
-    await messenger.send(activeId.value, payload)
-    // Очищаем поле ТОЛЬКО после успешной отправки — при сбое текст остаётся.
-    messageInputRef.value?.clearAfterSend()
-    replyTo.value = null
-    await nextTick()
-    scrollToBottom()
-  } catch (e) {
-    // Поле не очищаем: пользователь может повторить отправку тем же текстом.
-    const code = e?.error
-    const msg = code === 'TASK_WRONG_COMPANY'
-      ? 'Задача относится к другой компании'
-      : (e?.message || 'Не удалось отправить сообщение')
-    useNotificationsStore().error(msg)
-  }
+  const { attachments, ...body } = payload
+  outbox.enqueue(activeId.value, body, {
+    attachments: attachments || [],
+    reply_to: replyTo.value ? { ...replyTo.value } : null,
+    task: attachedTask.value ? { id: attachedTask.value.id, name: attachedTask.value.name } : null,
+  })
+  messageInputRef.value?.clearAfterSend()
+  replyTo.value = null
+  await nextTick()
+  scrollToBottom()
 }
 
 /* Узкая раскладка закрыла чат («назад» каркаса или переход к списку) —
@@ -1313,6 +1337,8 @@ watch(() => route.params.conversationId, async (id) => {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.chat-net.offline { color: var(--color-error); }
 
 .chat-status.online {
   color: var(--color-success);

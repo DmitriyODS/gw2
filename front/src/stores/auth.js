@@ -13,6 +13,7 @@ import { disconnectSocket, updateSocketAuth } from '@/socket/index.js'
 // вызывается только внутри функций (в рантайме, после инициализации сторов),
 // а call.js и так эагерно грузится в App.vue, поэтому вес чанка не растёт.
 import { useCallStore } from './call.js'
+import { useMessageOutboxStore } from './messageOutbox.js'
 // То же и с units.js (он статически импортирует auth.js): useUnitsStore
 // зовётся только внутри switchCompany — цикл разрешается в рантайме.
 import { useUnitsStore } from './units.js'
@@ -286,6 +287,10 @@ export const useAuthStore = defineStore('auth', () => {
         await unregisterNativePush()
       } catch {}
       try { await apiLogout() } catch {}
+      // Неотправленные сообщения — личные данные: при явном выходе не
+      // оставляем их на устройстве. Истёкшая сессия очередь не трогает —
+      // после входа она дойдёт.
+      try { useMessageOutboxStore().reset() } catch {}
       clearAuth()
       // После выхода — экран приветствия: оттуда и вход, и регистрация.
       router.push('/welcome')

@@ -429,9 +429,11 @@ func (s *Service) DeleteConversation(ctx context.Context, convID, userID int64, 
 	payload := dto.ConversationDeletedEvent{ConversationID: convID}
 	if scope == "all" && otherID != nil {
 		s.pub.Publish(ctx, "conversation:deleted", rooms(*otherID, userID), payload)
-	} else if physical && otherID != nil {
-		// Обе стороны независимо нажали «у себя» — уведомим другие вкладки
-		// самого пользователя (собеседнику уже не нужно).
+	} else {
+		// «У себя» — только другим вкладкам самого пользователя (собеседник
+		// диалог сохраняет). Событие нужно и без физического удаления: по нему
+		// же журнал дельты отмечает диалог ушедшим из списка — иначе после сна
+		// скрытый чат возвращался бы на соседнем устройстве.
 		s.pub.Publish(ctx, "conversation:deleted", rooms(userID), payload)
 	}
 	return physical, nil

@@ -331,6 +331,21 @@ describeIntegration('messenger API: папки чатов и фон', () => {
     await api.deleteChatBackground()
   })
 
+  it('повтор отправки из очереди с тем же ключом не задваивает сообщение', async () => {
+    const a = await newCompanyAdmin('a')
+    const b = await newMember(a, a.companyId, 1, 'b')
+    a.session.use()
+    const conv = await api.openConversation(b.auth.userId)
+    const key = '6b9d2c41-0f3e-4a7b-8c1d-2e3f4a5b6c7d'
+
+    const first = await api.sendMessage(conv.id, { client_id: key, text: 'Ты тут?' })
+    const again = await api.sendMessage(conv.id, { client_id: key, text: 'Ты тут?' })
+    expect(again.id).toBe(first.id)
+    expect(again.client_id).toBe(key)
+    const list = await api.listMessages(conv.id)
+    expect(list.filter((m) => m.client_id === key)).toHaveLength(1)
+  })
+
   it('синхронизация списка после сна: первая полная, дальше только изменения', async () => {
     const a = await newCompanyAdmin('a')
     const b = await newMember(a, a.companyId, 1, 'b')
