@@ -4,7 +4,8 @@
 
 - Docker 24+ и Docker Compose v2
 - Открытый порт 80 (или 443 при HTTPS)
-- Для звонков (LiveKit): открытые порты **7881/TCP** и **7882/UDP** (медиа) + **5349/TCP** и **3478/UDP** (встроенный TURN-relay для NAT/VPN/мобильных сетей). `deploy_server.sh` открывает их сам при активном ufw; вручную: `ufw allow 7881/tcp && ufw allow 7882/udp && ufw allow 5349/tcp && ufw allow 3478/udp`. TURN/TLS использует тот же сертификат Let's Encrypt, что и nginx (`LIVEKIT_TURN_DOMAIN`, по умолчанию `gw.kodass.ru`).
+- Для звонков (LiveKit): открытые порты **7881/TCP** и **7882/UDP** (медиа) + **3478/UDP** (встроенный TURN-relay для NAT/VPN/мобильных сетей). `deploy_server.sh` открывает их сам при активном ufw; вручную: `ufw allow 7881/tcp && ufw allow 7882/udp && ufw allow 3478/udp`.
+- **TURN/TLS идёт через 443** вместе с сайтом (в закрытых сетях открыт только он): nginx разводит соединения по имени из TLS-рукопожатия (SNI, блок `stream` в `deploy/nginx/nginx.main.prod.conf`) — `turn.gw.kodass.ru` уходит в LiveKit, остальное сайту, который слушает `127.0.0.1:8443` за PROXY-протоколом (так сервисы видят настоящий адрес клиента). Нужна A-запись поддомена (`LIVEKIT_TURN_DOMAIN`, по умолчанию `turn.gw.kodass.ru`) на IP сервера; сертификат для него `deploy_server.sh` выпускает сам, а без DNS или сертификата выключает TURN (`LIVEKIT_TURN_ENABLED=false` в `.env`), чтобы не уронить LiveKit.
 - Доступ к Docker Hub: сервер **не собирает** образы приложений, а тянет
   готовые из репозитория `osipovskijdima/groove_work` (теги
   `app` / `calls` / `auth` / `front`). Пушит их локальная машина:
@@ -223,7 +224,7 @@ TLS уже встроен в прод-оверлей: nginx слушает 80/44
 
 ```
 Интернет :80/:443             Интернет :7881/tcp :7882/udp (медиа)
-    ↓                                  :5349/tcp :3478/udp (TURN-relay)
+    ↓ (443: SNI turn.* → livekit)      :3478/udp (TURN-relay)
 nginx (фронт + реверс-прокси)            ↓ (медиа/TURN WebRTC, мимо nginx)
     ├── /            → front/dist (Vue SPA)  livekit (SFU звонков + TURN)
     ├── /api/calls/* → calls:8090 (Go REST)  ↑

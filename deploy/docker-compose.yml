@@ -1038,7 +1038,9 @@ services:
   # как fallback для сетей, где UDP закрыт). На сервере открыть в firewall:
   # 7881/TCP и 7882/UDP.
   livekit:
-    image: livekit/livekit-server:v1.9
+    # Версия закреплена патчем: подвижный тег молча менял медиа-сервер на
+    # очередном pull, и поведение звонков сдвигалось без правки репозитория.
+    image: livekit/livekit-server:v1.13.7
     restart: unless-stopped
     ports:
       - "7881:7881"

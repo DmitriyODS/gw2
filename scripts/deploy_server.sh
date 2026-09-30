@@ -10,10 +10,12 @@
 #      Flask) вычищает. PASETO-ключи генерируются ПАРОЙ (приватный
 #      Ed25519 + публичный). Перед любой правкой делает бэкап .env рядом.
 #   2. Если включён ufw — открывает порты LiveKit: медиа 7881/tcp,
-#      7882/udp и TURN-relay 5349/tcp, 3478/udp; 80/443 считаются
+#      7882/udp и TURN-relay 3478/udp (TURN/TLS идёт через 443); 80/443 считаются
 #      уже открытыми. (2b) Поднимает UDP-буферы ядра (net.core.rmem_max/
 #      wmem_max=16 МБ) для качества WebRTC под нагрузкой — персистентно.
-#   3. docker compose pull + up -d --no-build --remove-orphans.
+#   3. docker compose pull + up -d --no-build --remove-orphans. (3a) До
+#      подъёма выпускает сертификат TURN-поддомена; нет DNS или
+#      сертификата — TURN выключается флагом в .env, а не роняет LiveKit.
 #      Образы НА СЕРВЕРЕ НЕ СОБИРАЮТСЯ — их пушит локальная машина
 #      (`make push` → scripts/build_push.sh) в Docker Hub
 #      osipovskijdima/groove_work (теги migrate/gateway/calls/auth/
@@ -23,7 +25,7 @@
 #   5. Health-чеки: фронт и маршруты через nginx, healthz всех
 #      микросервисов изнутри контейнеров, досягаемость gRPC между
 #      сервисами, LiveKit через nginx (/livekit), TCP-порты медиа 7881
-#      и TURN/TLS 5349.
+#      и TURN/TLS на 443 по SNI.
 # ================================================================
 set -euo pipefail
 cd "$(cd "$(dirname "$0")/.." && pwd)"
@@ -190,14 +192,13 @@ if command -v ufw >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
     log "ufw активен — открываю медиа- и TURN-порты LiveKit"
     sudo -n ufw allow 7881/tcp >/dev/null
     sudo -n ufw allow 7882/udp >/dev/null
-    sudo -n ufw allow 5349/tcp >/dev/null
     sudo -n ufw allow 3478/udp >/dev/null
-    ok "открыты 7881/tcp, 7882/udp (медиа) и 5349/tcp, 3478/udp (TURN)"
+    ok "открыты 7881/tcp, 7882/udp (медиа) и 3478/udp (TURN; TURN/TLS — через 443)"
   else
     ok "ufw неактивен — фильтрации нет, порты доступны"
   fi
 else
-  warn "ufw недоступен (нет команды или sudo) — проверьте порты 7881/tcp, 7882/udp, 5349/tcp, 3478/udp вручную"
+  warn "ufw недоступен (нет команды или sudo) — проверьте порты 7881/tcp, 7882/udp, 3478/udp вручную"
 fi
 
 # ── 2b. UDP-буферы ядра для LiveKit (качество WebRTC под нагрузкой) ──
@@ -232,6 +233,51 @@ if ! $COMPOSE pull --quiet; then
   warn "docker compose pull не прошёл — образы не запушены (make push) или нужен docker login на сервере"
   exit 1
 fi
+# ── 3a. Сертификат TURN ──────────────────────────────────────────
+# TURN/TLS делит 443 с сайтом и отвечает своим сертификатом на поддомене.
+# Выпускаем его ДО подъёма: LiveKit со ссылкой на несуществующий файл не
+# стартует, и звонки легли бы целиком. Проверку Let's Encrypt обслуживает
+# уже работающий nginx (порт 80 отдаёт /.well-known для любого имени).
+TURN_DOMAIN=$(grep -E '^LIVEKIT_TURN_DOMAIN=' .env 2>/dev/null | tail -1 | cut -d= -f2-)
+TURN_DOMAIN=${TURN_DOMAIN:-turn.gw.kodass.ru}
+# Прежде TURN жил на домене сайта. Теперь 443 они делят по имени, и на
+# одном домене TURN молча уходил бы сайту — переносим на поддомен.
+if [ "$TURN_DOMAIN" = gw.kodass.ru ]; then
+  sed -i '/^LIVEKIT_TURN_DOMAIN=/d' .env
+  TURN_DOMAIN=turn.gw.kodass.ru
+  ok "TURN перенесён с домена сайта на $TURN_DOMAIN"
+fi
+turn_cert_exists() {
+  $COMPOSE run --rm --no-deps --entrypoint sh certbot \
+    -c "test -f /etc/letsencrypt/live/$TURN_DOMAIN/fullchain.pem" >/dev/null 2>&1
+}
+# Флаг живёт в .env, а не только в этом запуске: ручной `make restart s=livekit`
+# без сертификата иначе уронил бы звонки.
+set_turn_enabled() {
+  sed -i '/^LIVEKIT_TURN_ENABLED=/d' .env
+  [ "$1" = true ] || echo "LIVEKIT_TURN_ENABLED=false" >> .env
+  export LIVEKIT_TURN_ENABLED="$1"
+}
+if turn_cert_exists; then
+  ok "сертификат TURN ($TURN_DOMAIN) на месте"
+  set_turn_enabled true
+elif ! getent hosts "$TURN_DOMAIN" >/dev/null 2>&1; then
+  warn "нет DNS-записи $TURN_DOMAIN — TURN выключен до её появления"
+  set_turn_enabled false
+else
+  log "Выпускаю сертификат TURN для $TURN_DOMAIN"
+  if $COMPOSE run --rm --no-deps --entrypoint certbot certbot certonly \
+      --webroot -w /var/www/certbot -d "$TURN_DOMAIN" \
+      --non-interactive --agree-tos --keep-until-expiring \
+      --register-unsafely-without-email >/dev/null 2>&1 && turn_cert_exists; then
+    ok "сертификат TURN выпущен"
+    set_turn_enabled true
+  else
+    warn "сертификат TURN не выпущен (make logs s=certbot) — TURN выключен, звонки идут без него"
+    set_turn_enabled false
+  fi
+fi
+
 log "Поднимаю контейнеры"
 $COMPOSE up -d --no-build --remove-orphans
 # UDP-буферы только что подняли (2b) — livekit читает их лишь при старте,
@@ -558,11 +604,15 @@ else
   warn "медиа-порт 7881/tcp не слушает — проверьте сервис livekit"
 fi
 
-if (exec 3<>/dev/tcp/127.0.0.1/5349) 2>/dev/null; then
-  exec 3>&- 3<&-
-  ok "TURN/TLS-порт 5349/tcp слушает (3478/udp проверит сам webrtc через relay)"
+# TURN/TLS: на 443 с именем turn.* должен ответить сертификат LiveKit, а не
+# сайта — значит, nginx развёл соединение по SNI, а LiveKit поднял TURN.
+if [ "${LIVEKIT_TURN_ENABLED:-true}" = false ]; then
+  warn "TURN выключен — звонки из закрытых сетей (VPN, корпоративные) не пробьются"
+elif echo | openssl s_client -connect 127.0.0.1:443 -servername "$TURN_DOMAIN" 2>/dev/null \
+    | openssl x509 -noout -subject 2>/dev/null | grep -q "$TURN_DOMAIN"; then
+  ok "TURN/TLS отвечает на 443 ($TURN_DOMAIN; 3478/udp проверит сам webrtc через relay)"
 else
-  warn "TURN/TLS-порт 5349/tcp не слушает — LiveKit не нашёл cert или turn выключен; звонки с мобильных/VPN-сетей не пробьются"
+  warn "TURN/TLS на 443 не отвечает своим сертификатом — проверьте make logs s=livekit и s=nginx"
 fi
 
 $COMPOSE ps --format 'table {{.Name}}\t{{.Status}}'
