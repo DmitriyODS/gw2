@@ -4,6 +4,8 @@ import (
 	"context"
 	"io"
 	"time"
+
+	"github.com/DmitriyODS/gw2/back-go/pkg/spaces"
 )
 
 // Ctx — алиас, чтобы сигнатуры портов не разбухали.
@@ -13,24 +15,24 @@ type Ctx = context.Context
 // внешних ссылок.
 type FormRepository interface {
 	// ── Формы ──
-	// ListForms — формы области, видимые в АКТИВНОЙ компании: свои, заведённые
-	// в ней (плюс личные — вне компаний), назначенные лично и назначенные самой
-	// активной компании. Уровень доступа, число ответов и собственная
-	// обязанность считаются тем же запросом (список раздела показывает всё это
-	// сразу). companyID == 0 — активной компании нет.
-	ListForms(ctx Ctx, userID, companyID int64, scope string) ([]*Form, error)
+	// ListForms — формы области: личные, всех команд человека, назначенные и
+	// расшаренные ему или его командам. Уровень доступа, число ответов и
+	// собственная обязанность считаются тем же запросом.
+	ListForms(ctx Ctx, userID int64, scope string) ([]*Form, error)
 	// FormsSummary — счётчики раздела для живой плитки.
-	FormsSummary(ctx Ctx, userID, companyID int64) (*FormsSummary, error)
+	FormsSummary(ctx Ctx, userID int64) (*FormsSummary, error)
 	// GetForm — форма без структуры и без проверки доступа (её делает сервис).
 	GetForm(ctx Ctx, id int64) (*Form, error)
 	CountOwned(ctx Ctx, ownerID int64) (int, error)
 	CreateForm(ctx Ctx, f *Form) error
 	UpdateForm(ctx Ctx, f *Form) error
+	// MoveForm — сменить пространство, автора и уровень участников команды.
+	MoveForm(ctx Ctx, id, ownerID int64, companyID *int64, teamAccess string) error
 	DeleteForm(ctx Ctx, id int64) error
 	NextPosition(ctx Ctx, ownerID int64) (int, error)
 	// SearchForms — глобальный поиск (строка Hola) по названиям и описаниям
-	// форм, доступных в активной компании.
-	SearchForms(ctx Ctx, userID, companyID int64, query string, limit int) ([]*SearchHit, error)
+	// доступных форм.
+	SearchForms(ctx Ctx, userID int64, query string, limit int) ([]*SearchHit, error)
 
 	// ── Структура ──
 	// ListSections — разделы формы вместе с вопросами, в порядке показа.
@@ -76,9 +78,9 @@ type FormRepository interface {
 	ResponsesOfOwner(ctx Ctx, userID int64, companyIDs []int64) ([]*ResponseScope, error)
 
 	// ── Доступ ──
-	// AccessOf — эффективный уровень человека к форме (лучший из личной шары и
-	// шары его АКТИВНОЙ компании; владельцу — AccessOwner).
-	AccessOf(ctx Ctx, formID, userID, companyID int64) (string, error)
+	// AccessOf — эффективный уровень человека к форме: сильнейший из
+	// положения в команде-пространстве, личной шары и шар его команд.
+	AccessOf(ctx Ctx, formID, userID int64) (string, error)
 	// Audience — кому адресовать сокет-события формы.
 	Audience(ctx Ctx, formID int64) ([]int64, error)
 	ListUserShares(ctx Ctx, formID int64) ([]*UserShare, error)
@@ -111,6 +113,8 @@ type UserReader interface {
 	// CompaniesOf — компании, где человек состоит: через них приходит доступ к
 	// формам, назначенным компании целиком.
 	CompaniesOf(ctx Ctx, userID int64) ([]int64, error)
+	// TeamRole — положение человека в команде (можно ли положить в неё форму).
+	TeamRole(ctx Ctx, userID, companyID int64) (spaces.Role, error)
 	// CompanyMembers — участники компании: их извещают о назначенной ей форме.
 	CompanyMembers(ctx Ctx, companyID int64) ([]int64, error)
 	// SearchDirectory — кандидаты в адресаты из компаний спрашивающего.
@@ -128,6 +132,8 @@ type FileStore interface {
 	SaveStreamFor(ctx context.Context, userID, companyID int64, fileName string, r io.Reader, size int64) (string, error)
 	// RemoveFor — best-effort удаление по ключам с возвратом места в квоту.
 	RemoveFor(ctx context.Context, userID, companyID int64, paths []string)
+	// MoveFor — файлы сменили плательщика (форма переехала между пространствами).
+	MoveFor(ctx context.Context, userID, companyID int64, paths []string) error
 	// Remove — удаление БЕЗ учёта: так чистит раздел «Хранилище», где место
 	// пересчитывает сам биллинг.
 	Remove(paths []string)

@@ -12,19 +12,50 @@ import (
 )
 
 const entryCols = `id, diary_id, entry_date, start_min, end_min, title, description,
-	done, linked_task_id, position, created_at, updated_at`
+	done, linked_task_id, attachments, position, created_at, updated_at`
 
 func scanEntry(row pgx.Row) (*domain.Entry, error) {
-	var e domain.Entry
-	err := row.Scan(&e.ID, &e.DiaryID, &e.Date, &e.StartMin, &e.EndMin, &e.Title,
-		&e.Description, &e.Done, &e.LinkedTaskID, &e.Position, &e.CreatedAt, &e.UpdatedAt)
+	var (
+		e    domain.Entry
+		date *time.Time
+	)
+	err := row.Scan(&e.ID, &e.DiaryID, &date, &e.StartMin, &e.EndMin, &e.Title,
+		&e.Description, &e.Done, &e.LinkedTaskID, &e.Attachments, &e.Position,
+		&e.CreatedAt, &e.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
+	e.Date = dayOrZero(date)
 	return &e, nil
+}
+
+// dayOrZero — день записи; запись без срока хранит NULL, в домене это нулевое
+// время.
+func dayOrZero(d *time.Time) time.Time {
+	if d == nil {
+		return time.Time{}
+	}
+	return *d
+}
+
+// dayParam — день для записи в БД: нулевое время уезжает NULL.
+func dayParam(t time.Time) any {
+	if t.IsZero() {
+		return nil
+	}
+	return t
+}
+
+// attachmentsParam — вложения для JSONB-колонки: nil превращается в пустой
+// массив (колонка NOT NULL с проверкой «это массив»).
+func attachmentsParam(a []domain.Attachment) []domain.Attachment {
+	if a == nil {
+		return []domain.Attachment{}
+	}
+	return a
 }
 
 // buildWhere — условие выборки записей по фильтру (вкладка done + диапазон дат +
@@ -90,10 +121,12 @@ func (r *Repo) GetEntry(ctx context.Context, id int64) (*domain.Entry, error) {
 
 func (r *Repo) CreateEntry(ctx context.Context, e *domain.Entry, searchText string) error {
 	return r.pool.QueryRow(ctx,
-		`INSERT INTO diary_records (diary_id, entry_date, start_min, end_min, title, description, search_text)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7)
+		`INSERT INTO diary_records (diary_id, entry_date, start_min, end_min, title, description,
+		                            attachments, search_text)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		 RETURNING id, done, linked_task_id, created_at, updated_at`,
-		e.DiaryID, e.Date, e.StartMin, e.EndMin, e.Title, e.Description, searchText).
+		e.DiaryID, dayParam(e.Date), e.StartMin, e.EndMin, e.Title, e.Description,
+		attachmentsParam(e.Attachments), searchText).
 		Scan(&e.ID, &e.Done, &e.LinkedTaskID, &e.CreatedAt, &e.UpdatedAt)
 }
 
@@ -111,9 +144,10 @@ func (r *Repo) UpdateEntry(ctx context.Context, e *domain.Entry, searchText stri
 	_, err := r.pool.Exec(ctx,
 		`UPDATE diary_records
 		    SET entry_date = $2, start_min = $3, end_min = $4, title = $5,
-		        description = $6, search_text = $7, updated_at = now()
+		        description = $6, attachments = $7, search_text = $8, updated_at = now()
 		  WHERE id = $1`,
-		e.ID, e.Date, e.StartMin, e.EndMin, e.Title, e.Description, searchText)
+		e.ID, dayParam(e.Date), e.StartMin, e.EndMin, e.Title, e.Description,
+		attachmentsParam(e.Attachments), searchText)
 	return err
 }
 
@@ -126,7 +160,7 @@ func (r *Repo) SetEntryDone(ctx context.Context, id int64, done bool) error {
 func (r *Repo) MoveEntry(ctx context.Context, id, diaryID int64, date time.Time) error {
 	_, err := r.pool.Exec(ctx,
 		`UPDATE diary_records SET diary_id = $2, entry_date = $3, updated_at = now() WHERE id = $1`,
-		id, diaryID, date)
+		id, diaryID, dayParam(date))
 	return err
 }
 
@@ -169,9 +203,7 @@ func (r *Repo) Agenda(ctx context.Context, userID int64, from, to time.Time, lim
 		       count(*) OVER () AS total
 		FROM diary_records e
 		JOIN diaries d ON d.id = e.diary_id
-		WHERE (d.owner_id = $1
-		       OR EXISTS (SELECT 1 FROM diary_user_shares s
-		                  WHERE s.diary_id = d.id AND s.user_id = $1))
+		WHERE `+visibleCond+`
 		  AND e.done = FALSE
 		  AND e.entry_date >= $2 AND e.entry_date <= $3
 		ORDER BY e.entry_date, e.start_min NULLS LAST, e.position, e.id
@@ -184,28 +216,30 @@ func (r *Repo) Agenda(ctx context.Context, userID int64, from, to time.Time, lim
 	out := make([]*domain.SearchHit, 0, limit)
 	total := 0
 	for rows.Next() {
-		var h domain.SearchHit
-		if err := rows.Scan(&h.DiaryID, &h.DiaryName, &h.EntryID, &h.Title, &h.Date, &h.StartMin, &total); err != nil {
+		var (
+			h    domain.SearchHit
+			date *time.Time
+		)
+		if err := rows.Scan(&h.DiaryID, &h.DiaryName, &h.EntryID, &h.Title, &date, &h.StartMin, &total); err != nil {
 			return nil, 0, err
 		}
+		h.Date = dayOrZero(date)
 		out = append(out, &h)
 	}
 	return out, total, rows.Err()
 }
 
 // SearchEntries — глобальный поиск (Spotlight) по записям ежедневников, к
-// которым у пользователя есть доступ: свои и открытые ему адресно. Один
-// запрос с JOIN — списки ежедневников не перебираем.
+// которым у пользователя есть доступ. Один запрос с JOIN — списки ежедневников
+// не перебираем.
 func (r *Repo) SearchEntries(ctx context.Context, userID int64, query string, limit int) ([]*domain.SearchHit, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT e.diary_id, d.name, e.id, e.title, e.entry_date, e.done
 		FROM diary_records e
 		JOIN diaries d ON d.id = e.diary_id
-		WHERE (d.owner_id = $1
-		       OR EXISTS (SELECT 1 FROM diary_user_shares s
-		                  WHERE s.diary_id = d.id AND s.user_id = $1))
+		WHERE `+visibleCond+`
 		  AND e.search_text ILIKE '%' || $2 || '%'
-		ORDER BY e.done ASC, e.entry_date DESC, e.id DESC
+		ORDER BY e.done ASC, e.entry_date DESC NULLS LAST, e.id DESC
 		LIMIT $3`, userID, query, limit)
 	if err != nil {
 		return nil, err
@@ -214,11 +248,74 @@ func (r *Repo) SearchEntries(ctx context.Context, userID int64, query string, li
 
 	out := make([]*domain.SearchHit, 0, limit)
 	for rows.Next() {
-		var h domain.SearchHit
-		if err := rows.Scan(&h.DiaryID, &h.DiaryName, &h.EntryID, &h.Title, &h.Date, &h.Done); err != nil {
+		var (
+			h    domain.SearchHit
+			date *time.Time
+		)
+		if err := rows.Scan(&h.DiaryID, &h.DiaryName, &h.EntryID, &h.Title, &date, &h.Done); err != nil {
 			return nil, err
 		}
+		h.Date = dayOrZero(date)
 		out = append(out, &h)
 	}
 	return out, rows.Err()
+}
+
+/*
+TodayEntries — дела экрана «Сегодня» одним запросом: невыполненные записи
+всех доступных ежедневников по день day включительно плюс дела «Мого дня» без
+срока.
+
+	Выполненные за день не тянем — экрану нужно лишь их число (DoneOn).
+	Записи с прошедшей датой, но не закрытые, тоже попадают: «Сегодня» — это
+	то, что ещё предстоит, а забытое вчера дело никуда не делось.
+*/
+func (r *Repo) TodayEntries(ctx context.Context, userID int64, day time.Time, limit int) ([]*domain.Entry, map[int64]string, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT `+prefixed(entryCols, "e")+`, d.name
+		  FROM diary_records e
+		  JOIN diaries d ON d.id = e.diary_id
+		 WHERE `+visibleCond+`
+		   AND e.done = FALSE
+		   AND (e.entry_date <= $2::date
+		        OR (e.entry_date IS NULL AND d.kind = 'my_day' AND d.owner_id = $1))
+		 ORDER BY e.entry_date NULLS LAST, e.start_min NULLS LAST, e.position, e.id
+		 LIMIT $3`, userID, day, limit)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer rows.Close()
+	out := []*domain.Entry{}
+	names := map[int64]string{}
+	for rows.Next() {
+		var (
+			e    domain.Entry
+			date *time.Time
+			name string
+		)
+		if err := rows.Scan(&e.ID, &e.DiaryID, &date, &e.StartMin, &e.EndMin, &e.Title,
+			&e.Description, &e.Done, &e.LinkedTaskID, &e.Attachments, &e.Position,
+			&e.CreatedAt, &e.UpdatedAt, &name); err != nil {
+			return nil, nil, err
+		}
+		e.Date = dayOrZero(date)
+		names[e.DiaryID] = name
+		out = append(out, &e)
+	}
+	return out, names, rows.Err()
+}
+
+// DoneOn — сколько дел закрыто за день [from, to) во всех доступных
+// ежедневниках. Момент закрытия — updated_at: границы дня в зоне человека
+// присылает клиент.
+func (r *Repo) DoneOn(ctx context.Context, userID int64, from, to time.Time) (int, error) {
+	var n int
+	err := r.pool.QueryRow(ctx, `
+		SELECT count(*)
+		  FROM diary_records e
+		  JOIN diaries d ON d.id = e.diary_id
+		 WHERE `+visibleCond+`
+		   AND e.done
+		   AND e.updated_at >= $2 AND e.updated_at < $3`, userID, from, to).Scan(&n)
+	return n, err
 }

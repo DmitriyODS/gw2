@@ -11,13 +11,13 @@ import { LEGAL_CONSENT_VISIBLE } from '@/utils/release.js'
 const routes = [
   // Корень — промо-лендинг платформы: публичный, без каркаса приложения.
   // Само приложение живёт под /home и своими разделами. authScreen — витрина
-  // тоже оформляется классической темой в системном светлом/тёмном виде:
+  // тоже оформляется флагманской темой в системном светлом/тёмном виде:
   // до входа личной темы у посетителя нет.
   { path: '/', component: () => import('@/views/PromoView.vue'),
     meta: { public: true, fullscreen: true, authScreen: true } },
   // Прежний адрес лендинга — на его нынешнее место (живут внешние ссылки).
   { path: '/promo', redirect: '/' },
-  // Экраны входа (meta.authScreen) оформляются классической темой в системном
+  // Экраны входа (meta.authScreen) оформляются флагманской темой в системном
   // светлом/тёмном виде — личная тема пользователя туда не протекает.
   { path: '/welcome', component: () => import('@/views/WelcomeView.vue'),
     meta: { public: true, authScreen: true } },
@@ -218,7 +218,7 @@ router.beforeEach(async (to) => {
   startNavProgress()
   const auth = useAuthStore()
   await auth.ensureReady()
-  // Экраны входа встречают классической темой в системном светлом/тёмном
+  // Экраны входа встречают флагманской темой в системном светлом/тёмном
   // оформлении; личная тема возвращается при входе в приложение.
   useThemeStore().setAuthPreview(!!to.meta.authScreen)
   // Обёртки (десктоп/Android) открывают прод-адрес без пути: там ждут

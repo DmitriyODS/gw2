@@ -22,4 +22,9 @@ var (
 	ErrShareNotFound  = NewError("NOT_FOUND", "Ссылка не найдена или отозвана", 404)
 	ErrMemberNotFound = NewError("NOT_FOUND", "Пользователь не найден", 404)
 	ErrSelfShare      = NewError("VALIDATION", "Нельзя поделиться с самим собой", 400)
+	ErrOwnerOnly      = NewError("FORBIDDEN", "Это может сделать только владелец ежедневника", 403)
+	ErrNotTeamMember  = NewError("NOT_TEAM_MEMBER", "Вы не состоите в этой команде", 403)
+	// ErrMyDayFixed — «Мой день» служебный: его не переименовать, не удалить, не
+	// раздать и не перенести в команду.
+	ErrMyDayFixed = NewError("VALIDATION", "«Мой день» нельзя изменить", 400)
 )

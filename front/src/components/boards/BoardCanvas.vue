@@ -13,6 +13,7 @@ import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vu
 import Textarea from 'primevue/textarea'
 import ContextMenu from '@/components/common/ContextMenu.vue'
 import { useThemeStore } from '@/stores/theme.js'
+import { useScopedHotkeys } from '@/composables/useScopedHotkeys.js'
 import {
   BOOL_OPS, COMMENT_PIN, OBJ, editableLayerIds, hitTest, invalidateColors, isObjectEditable, moveObject,
   newId, normalizeScene, objectAABB, objectBounds, objectCenter, orderedObjects, pointInPolygon,
@@ -95,6 +96,7 @@ let resizeObs = null
 
 // Активный жест: рисование, перетаскивание, рамка выделения или панорама.
 let gesture = null
+let gestureSeq = 0
 // Пинч двумя пальцами: расстояние и центр на старте.
 let pinch = null
 // Последний контур лассо — из него делается маска слоя и «стереть внутри».
@@ -130,6 +132,16 @@ function objectAt(px, py, tolerance = 8) {
   const list = visibleObjects.value.filter((o) => isObjectEditable(o, editableLayers.value))
   for (let i = list.length - 1; i >= 0; i--) {
     if (hitTest(list[i], px, py, tolerance / camera.value.scale)) return list[i]
+  }
+  return null
+}
+
+/** Булавка обсуждения под точкой — среди ВСЕХ видимых: читать ветку можно и
+    на запертом слое, и без права правки. */
+function commentAt(px, py) {
+  const list = visibleObjects.value
+  for (let i = list.length - 1; i >= 0; i--) {
+    if (list[i].type === OBJ.comment && hitTest(list[i], px, py, 4 / camera.value.scale)) return list[i]
   }
   return null
 }
@@ -455,15 +467,20 @@ function selectionBox() {
 
 // ── Изменение сцены ──────────────────────────────────────────────
 
-function commit(objectsNext, { background, layers, animation, ops } = {}) {
+/* gesture — номер жеста (перенос, масштаб, поворот): его промежуточные кадры
+   редактор сводит в ОДИН шаг отмены, а соавторам жест уходит итогом на
+   отпускании. Правка слоёв — свойство всей сцены: она уходит соавторам
+   целиком (операция scene), адресно её не выразить. */
+function commit(objectsNext, { background, layers, animation, ops, gesture: live } = {}) {
   emit('update:scene', {
     ...normalizeScene(props.scene),
     ...(background ? { background } : {}),
     ...(layers ? { layers } : {}),
     ...(animation !== undefined ? { animation } : {}),
     objects: objectsNext,
-  })
-  if (ops?.length) emit('ops', ops)
+  }, live ? { gesture: live } : undefined)
+  const all = [...(ops || []), ...(layers || background || animation !== undefined ? [{ kind: 'scene' }] : [])]
+  if (all.length) emit('ops', all)
 }
 
 // upsert/remove — операции для соавторов: адресные, поэтому одновременная
@@ -525,7 +542,8 @@ function reorderSelected(toFront) {
   if (!selectedIds.value.length) return
   const picked = objects.value.filter((o) => selectedIds.value.includes(o.id))
   const rest = objects.value.filter((o) => !selectedIds.value.includes(o.id))
-  commit(toFront ? [...rest, ...picked] : [...picked, ...rest], { ops: [upsertOp(picked)] })
+  // Порядок отрисовки адресной правкой не передать — соавторам уходит сцена.
+  commit(toFront ? [...rest, ...picked] : [...picked, ...rest], { ops: [{ kind: 'scene' }] })
 }
 
 function selectAll() {
@@ -851,6 +869,15 @@ function onPointerDown(e) {
     gesture = { kind: 'pan', from: { x: e.clientX, y: e.clientY }, camera: { ...camera.value } }
     return
   }
+  // Обсуждение открывается одним нажатием на булавку: у читателя — всегда,
+  // у редактора — инструментом «Комментарий» (иначе булавку двигают).
+  if (!canEdit.value || props.tool === 'comment') {
+    const pin = commentAt(pt.x, pt.y)
+    if (pin) {
+      emit('comment-open', pin)
+      return
+    }
+  }
   if (!canEdit.value) {
     gesture = { kind: 'pan', from: { x: e.clientX, y: e.clientY }, camera: { ...camera.value } }
     return
@@ -928,14 +955,14 @@ function startSelect(pt, e) {
     const screen = toScreen(pt)
     const handle = toScreen({ x: box.x + box.w, y: box.y + box.h })
     if (Math.abs(screen.x - handle.x) < 10 && Math.abs(screen.y - handle.y) < 10) {
-      gesture = { kind: 'scale', from: box, origin: { ...box }, snapshot: selectedObjects() }
+      gesture = { kind: 'scale', from: box, origin: { ...box }, snapshot: selectedObjects(), seq: ++gestureSeq }
       return
     }
     const top = toScreen({ x: box.x + box.w / 2, y: box.y })
     if (Math.hypot(screen.x - top.x, screen.y - (top.y - ROTATE_OFFSET)) < 12) {
       const pivot = { x: box.x + box.w / 2, y: box.y + box.h / 2 }
       gesture = {
-        kind: 'rotate', pivot, snapshot: selectedObjects(),
+        kind: 'rotate', pivot, snapshot: selectedObjects(), seq: ++gestureSeq,
         start: Math.atan2(pt.y - pivot.y, pt.x - pivot.x),
       }
       return
@@ -950,7 +977,7 @@ function startSelect(pt, e) {
         : [...selectedIds.value, ...group])
       : (selectedIds.value.includes(hit.id) ? selectedIds.value : group)
     setSelection(ids)
-    gesture = { kind: 'move', last: pt }
+    gesture = { kind: 'move', last: pt, seq: ++gestureSeq }
     return
   }
   setSelection([])
@@ -1084,7 +1111,8 @@ function onPointerMove(e) {
       if (e.altKey) guides.value = []
       gesture.last = { x: pt.x + (snapped.dx - raw.dx), y: pt.y + (snapped.dy - raw.dy) }
       commit(objects.value.map((o) => (selectedIds.value.includes(o.id)
-        ? moveObject(o, snapped.dx, snapped.dy) : o)))
+        ? moveObject(o, snapped.dx, snapped.dy) : o)), { gesture: gesture.seq })
+      gesture.moved = true
       break
     }
     case 'pen-handle': {
@@ -1115,7 +1143,8 @@ function onPointerMove(e) {
       }
       const to = { x: from.x, y: from.y, w, h }
       const byId = new Map(gesture.snapshot.map((o) => [o.id, o]))
-      commit(objects.value.map((o) => (byId.has(o.id) ? scaleObject(byId.get(o.id), from, to) : o)))
+      commit(objects.value.map((o) => (byId.has(o.id) ? scaleObject(byId.get(o.id), from, to) : o)), { gesture: gesture.seq })
+      gesture.moved = true
       break
     }
     case 'rotate': {
@@ -1124,7 +1153,8 @@ function onPointerMove(e) {
       // Alt держит шаг в 15° — ровные повороты без прицеливания.
       if (e.altKey) deg = Math.round(deg / 15) * 15
       const byId = new Map(gesture.snapshot.map((o) => [o.id, o]))
-      commit(objects.value.map((o) => (byId.has(o.id) ? rotateObject(byId.get(o.id), deg, gesture.pivot) : o)))
+      commit(objects.value.map((o) => (byId.has(o.id) ? rotateObject(byId.get(o.id), deg, gesture.pivot) : o)), { gesture: gesture.seq })
+      gesture.moved = true
       break
     }
     case 'marquee':
@@ -1167,6 +1197,12 @@ function onPointerUp() {
   }
   if (gesture.kind === 'lasso') finishLasso(gesture)
   if (gesture.kind === 'move') guides.value = []
+  // Итог переноса/масштаба/поворота — соавторам одной адресной правкой.
+  if (gesture.moved) {
+    const ids = new Set(gesture.snapshot ? gesture.snapshot.map((o) => o.id) : selectedIds.value)
+    const changed = objects.value.filter((o) => ids.has(o.id))
+    if (changed.length) emit('ops', [upsertOp(changed)])
+  }
   gesture = null
   requestDraw()
 }
@@ -1283,7 +1319,8 @@ function commitEditing() {
     // Пустую надпись не храним — иначе холст копит невидимый мусор. Стикер без
     // текста остаётся: он сам по себе объект (цветной листок).
     const target = objects.value.find((o) => o.id === state.id)
-    if (target?.type === OBJ.text) commit(objects.value.filter((o) => o.id !== state.id))
+    // Соавторы уже получили черновик надписи — снимаем его и у них.
+    if (target?.type === OBJ.text) commit(objects.value.filter((o) => o.id !== state.id), { ops: [removeOp([state.id])] })
     return
   }
   updateObject(state.id, { text })
@@ -1477,11 +1514,14 @@ function zoomAt(clientX, clientY, factor) {
   }
 }
 
+/* Клавиши — только когда работают с этой доской: окно в фоне не должно
+   удалять выделенное по Delete, нажатому в соседнем разделе. Область —
+   весь редактор (тулбар и панели тоже «внутри»), холст сам её не знает. */
+useScopedHotkeys(() => host.value?.closest('[data-board-scope]') || host.value, onKeyDown)
+
 function onKeyDown(e) {
   if (editing.value) return
   if (!canEdit.value) return
-  const target = e.target
-  if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return
   const combo = e.ctrlKey || e.metaKey
   if (e.key === 'Escape') {
     if (pending.value) { pending.value = null; requestDraw() }
@@ -1637,9 +1677,10 @@ function contentBox() {
 }
 
 /** Вставить картинку по центру видимой области (после загрузки на сервер). */
-function placeImage(src, naturalWidth = 320, naturalHeight = 240) {
+/** Поставить картинку: в точку экрана at (куда её бросили) или в центр вида. */
+function placeImage(src, naturalWidth = 320, naturalHeight = 240, at = null) {
   const rect = canvas.value.getBoundingClientRect()
-  const center = toScene(rect.left + rect.width / 2, rect.top + rect.height / 2)
+  const center = at ? toScene(at.x, at.y) : toScene(rect.left + rect.width / 2, rect.top + rect.height / 2)
   const max = 480
   const k = Math.min(1, max / Math.max(naturalWidth, naturalHeight))
   addObject({
@@ -1652,7 +1693,8 @@ function placeImage(src, naturalWidth = 320, naturalHeight = 240) {
 /** Применить цвет/толщину к выделенным объектам (панель свойств). */
 function applyStyle(patch) {
   if (!selectedIds.value.length) return
-  commit(objects.value.map((o) => (selectedIds.value.includes(o.id) ? { ...o, ...patch } : o)))
+  const next = objects.value.map((o) => (selectedIds.value.includes(o.id) ? { ...o, ...patch } : o))
+  commit(next, { ops: [upsertOp(next.filter((o) => selectedIds.value.includes(o.id)))] })
 }
 
 defineExpose({
@@ -1683,7 +1725,6 @@ onMounted(() => {
   syncImages()
   resizeObs = new ResizeObserver(resize)
   resizeObs.observe(host.value)
-  window.addEventListener('keydown', onKeyDown)
   // Окно рабочего стола позиционируется transform'ом с CSS-переходом (сессия
   // восстанавливается на перезагрузке асинхронно, геометрия окна доезжает до
   // места уже ПОСЛЕ первого mount) — ResizeObserver реагирует только на смену
@@ -1699,7 +1740,6 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   resizeObs?.disconnect()
-  window.removeEventListener('keydown', onKeyDown)
   window.removeEventListener('resize', resize)
   if (frameId) cancelAnimationFrame(frameId)
 })

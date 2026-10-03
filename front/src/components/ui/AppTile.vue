@@ -40,28 +40,32 @@ defineEmits(['click'])
   width: 100%;
   min-height: 112px;
   padding: 18px 12px;
-  border: 1px solid var(--acrylic-border);
+  border: 1px solid var(--sk-edge);
   border-radius: var(--radius-lg);
-  background: var(--glass-bg), var(--acrylic-card-bg);
-  box-shadow: var(--glass-edge);
+  background: var(--sk-raised-bg);
+  box-shadow: var(--sk-raised-shadow);
   color: var(--color-text);
   font: inherit;
   font-size: 0.88rem;
   font-weight: 600;
   text-align: center;
-  transition: border-color 0.2s ease, background 0.2s ease;
+  transition: transform 0.15s ease;
 }
 
 .tile.clickable { cursor: pointer; }
 
 .tile.clickable:hover:not(.selected) {
-  border-color: color-mix(in oklch, var(--color-primary) 30%, var(--acrylic-border));
-  background: var(--glass-hover-bg, var(--glass-bg)), var(--acrylic-card-bg);
+  background: var(--sk-raised-hover-bg);
+  transform: translateY(-1px);
 }
 
+.tile.clickable:active { transform: none; box-shadow: var(--sk-pressed-shadow); }
+
+/* Выбранная плитка — нажатая и зафиксированная: вдавлена и залита тоном. */
 .tile.selected {
-  border-color: var(--color-primary);
-  background: var(--glass-bg), var(--color-primary-container);
+  border-color: color-mix(in oklch, var(--color-primary) 40%, var(--sk-edge));
+  background: var(--grain), var(--color-primary-container);
+  box-shadow: var(--sk-pressed-shadow);
   color: var(--color-on-primary-container);
 }
 

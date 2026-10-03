@@ -15,24 +15,25 @@
 /* ── Layer 1: Key colour parameters ──────────────────────────────
    Only H (hue °) and C (chroma) are stored — lightness is always
    derived per-tone so that the full palette auto-generates.       */
-/* Дефолты = классическая тема (#006cdc / #2499ec / #e1effb) — те же
-   значения theme.js выводит из PRESETS.classic; здесь они нужны до его
-   запуска (флеш первой отрисовки) и вне Vue-контекста. */
+/* Дефолты = флагманская тема «Groove 8» (#e8590c / #454a52 / #f5a524 /
+   #ece9e6) — те же значения theme.js выводит из PRESETS.groove; здесь они
+   нужны до его запуска (флеш первой отрисовки) и вне Vue-контекста. Значения
+   hex-фолбэка в конце файла посчитаны из тех же формул тонов. */
 :root {
-  --ref-primary-h:    256.5;
-  --ref-primary-c:    0.19;
+  --ref-primary-h:    41.7;
+  --ref-primary-c:    0.1916;
   /* --ref-*-l — реальная светлота выбранного цвета (OKLCH L).
      Используется в светлой теме для тона 40, чтобы светлый/тёмный hex
      действительно влиял на цвет кнопки. */
-  --ref-primary-l:    0.547;
+  --ref-primary-l:    0.644;
 
-  --ref-secondary-h:  245.9;
-  --ref-secondary-c:  0.157;
-  --ref-secondary-l:  0.66;
+  --ref-secondary-h:  259.8;
+  --ref-secondary-c:  0.0149;
+  --ref-secondary-l:  0.408;
 
-  --ref-tertiary-h:   245.9;
-  --ref-tertiary-c:   0.157;
-  --ref-tertiary-l:   0.66;
+  --ref-tertiary-h:   72.3;
+  --ref-tertiary-c:   0.1585;
+  --ref-tertiary-l:   0.782;
 
   /* Fixed hues — unaffected by theme colour changes */
   --ref-error-h:      22;
@@ -49,8 +50,8 @@
      -c: множитель насыщенности тинта (1 = едва заметный, как было;
          0 = чистый серый/белый; 2–4 = выраженная цветная гамма фона).
      theme.js перезаписывает их при выборе нейтрального цвета темы. */
-  --ref-neutral-h:    var(--ref-primary-h);
-  --ref-neutral-c:    1;
+  --ref-neutral-h:    67.8;
+  --ref-neutral-c:    0.432;
 }
 
 
@@ -198,8 +199,12 @@
 [data-dark="true"] {
   --color-primary:                var(--_p-80);
   --color-on-primary:             var(--_p-20);
-  --color-primary-container:      var(--_p-30);
-  --color-on-primary-container:   var(--_p-90);
+  /* Контейнер акцента в темноте — светлее тона 30 и вдвое спокойнее по
+     насыщенности: на L 0.38 с полной насыщенностью тёплые акценты выходили
+     за охват sRGB и становились бордовыми (выбранные строки, плитки и свои
+     пузыри выглядели как ошибка). */
+  --color-primary-container:      oklch(0.52 calc(var(--ref-primary-c) * 0.62) var(--ref-primary-h));
+  --color-on-primary-container:   var(--_p-95);
 
   --color-secondary:              var(--_s-80);
   --color-on-secondary:           var(--_s-20);
@@ -226,18 +231,21 @@
   --color-warning-container:      oklch(0.27 calc(var(--ref-warning-c) * 0.86) var(--ref-warning-h));
   --color-on-warning-container:   var(--_w-90);
 
-  --color-bg:                     var(--_n-10);
-  --color-surface:                oklch(0.14 calc(0.010 * var(--ref-neutral-c)) var(--ref-neutral-h));
-  --color-surface-low:            oklch(0.17 calc(0.010 * var(--ref-neutral-c)) var(--ref-neutral-h));
-  --color-surface-high:           oklch(0.20 calc(0.010 * var(--ref-neutral-c)) var(--ref-neutral-h));
-  --color-surface-highest:        oklch(0.25 calc(0.010 * var(--ref-neutral-c)) var(--ref-neutral-h));
+  /* Тёмная тема — мягкий тёмно-серый графит, а не чёрный: матовому soft
+     touch нужна поверхность, на которой видны и фаска, и тень. Подложка
+     темнее карточек — приподнятое читается светлее. */
+  --color-bg:                     oklch(0.255 calc(0.010 * var(--ref-neutral-c)) var(--ref-neutral-h));
+  --color-surface:                oklch(0.295 calc(0.010 * var(--ref-neutral-c)) var(--ref-neutral-h));
+  --color-surface-low:            oklch(0.275 calc(0.010 * var(--ref-neutral-c)) var(--ref-neutral-h));
+  --color-surface-high:           oklch(0.33 calc(0.010 * var(--ref-neutral-c)) var(--ref-neutral-h));
+  --color-surface-highest:        oklch(0.37 calc(0.010 * var(--ref-neutral-c)) var(--ref-neutral-h));
   --color-surface-variant:        var(--color-surface-high);
 
   --color-text:                   var(--_nv-90);
   --color-text-dim:               var(--_nv-60);
 
   --color-outline:                var(--_nv-60);
-  --color-outline-dim:            var(--_nv-30);
+  --color-outline-dim:            oklch(0.45 calc(0.018 * var(--ref-neutral-c)) var(--ref-neutral-h));
 }
 
 
@@ -250,12 +258,23 @@
   --color-error-hover:     color-mix(in oklch, var(--color-error)     85%, black);
   --color-success-hover:   color-mix(in oklch, var(--color-success)   85%, black);
 
-  /* Tinted elevation shadows derived from primary */
-  --shadow-color: color-mix(in oklch, var(--color-primary) 18%, transparent);
-  --shadow-sm:    0 1px 3px var(--shadow-color);
-  --shadow-md:    0 2px 8px var(--shadow-color);
-  --shadow-lg:    0 4px 20px var(--shadow-color);
-  --shadow-xl:    0 8px 40px var(--shadow-color);
+  /* Мягкие нейтральные тени soft touch: предмет не парит над поверхностью, а
+     чуть приподнят — короткая контактная тень плюс широкая рассеянная. Цвет
+     от текста, а не от акцента: оранжевая тень выглядела бы грязью. */
+  --shadow-color: color-mix(in oklch, var(--color-text) 9%, transparent);
+  --shadow-soft:  color-mix(in oklch, var(--color-text) 5%, transparent);
+  --shadow-sm:    0 1px 2px var(--shadow-color), 0 2px 6px var(--shadow-soft);
+  --shadow-md:    0 1px 3px var(--shadow-color), 0 6px 16px var(--shadow-soft);
+  --shadow-lg:    0 2px 6px var(--shadow-color), 0 14px 36px var(--shadow-soft);
+  --shadow-xl:    0 4px 10px var(--shadow-color), 0 24px 60px var(--shadow-soft);
+
+  /* ── Зерно soft touch ─────────────────────────────────────────
+     Шероховатость матовой поверхности: мелкий шум feTurbulence прямо в
+     data-URI (ни одного запроса, тайл растеризуется один раз). Это СЛОЙ
+     background-image, поэтому токены поверхностей ниже — слои «зерно, цвет»:
+     использовать их можно только в `background`, не в color-mix и не в
+     background-color. Светлая тема — тёмные крапинки, тёмная — светлые. */
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.05 0 0 0 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
 
   /* Border-radius scale */
   --radius-xs:   4px;
@@ -287,8 +306,8 @@
        backdrop-filter: var(--acrylic-blur);
      --acrylic-bg-strong — для мелких плотных элементов (бейджи, чипы),
      где за стеклом мало контента и нужна читаемость.                */
-  --acrylic-bg:        color-mix(in oklch, var(--color-surface) 62%, transparent);
-  --acrylic-bg-strong: color-mix(in oklch, var(--color-surface) 86%, transparent);
+  --acrylic-bg:        var(--grain), color-mix(in oklch, var(--color-surface) 62%, transparent);
+  --acrylic-bg-strong: var(--grain), color-mix(in oklch, var(--color-surface) 86%, transparent);
   --acrylic-blur:      blur(28px) saturate(1.7);
   /* Сильнее обычного — для полноэкранных панелей мобильного каркаса (Hola,
      центр уведомлений): за ними обои и плитки стартового экрана, сквозь
@@ -309,7 +328,7 @@
   /* Полупрозрачные поверхности вне акрила: окно стола и его шапка, боковая
      панель карточки задачи, колонки расписания, пузыри сообщений. Токенами —
      чтобы «Меньше прозрачности» делал их непрозрачными (блок в конце файла). */
-  --window-bg:          color-mix(in oklch, var(--color-surface) 88%, transparent);
+  --window-bg:          var(--grain), color-mix(in oklch, var(--color-surface) 88%, transparent);
   --window-bar-bg:      color-mix(in oklch, var(--color-surface-low) 45%, transparent);
   --panel-tint-bg:      color-mix(in oklch, var(--color-surface-low) 55%, transparent);
   --bubble-bg:          color-mix(in oklch, var(--color-surface-high) 90%, transparent);
@@ -328,15 +347,65 @@
      Светлая тема — «молочный» иней от surface (дымка от тёмного текста
      выглядела грязно-серой), hover-«запотевание» ЗАТЕМНЯЕТ; тёмная
      (см. [data-dark]) — светлая дымка от цвета текста, hover светлит. */
-  --glass-bg: linear-gradient(155deg,
-    color-mix(in oklch, var(--color-surface) 78%, transparent),
-    color-mix(in oklch, var(--color-surface) 48%, transparent) 45%,
-    color-mix(in oklch, var(--color-surface) 65%, transparent));
-  --glass-edge: inset 0 1px 0 color-mix(in oklch, white 80%, transparent);
+  /* Soft touch: вместо блика стекла — матовый «купол». Свет сверху чуть
+     светлее, низ чуть темнее, по кромке мягкая фаска (glass-edge) — элемент
+     читается приподнятым и тёплым на ощупь, а зерно даёт шероховатость. */
+  --glass-bg: var(--grain), linear-gradient(180deg,
+    color-mix(in oklch, white 55%, transparent),
+    color-mix(in oklch, var(--color-surface-high) 55%, transparent));
+  --glass-edge: inset 0 1px 0 color-mix(in oklch, white 70%, transparent),
+    inset 0 -1px 0 color-mix(in oklch, var(--color-text) 6%, transparent);
   --glass-hover-bg: linear-gradient(155deg,
     color-mix(in oklch, var(--color-text) 7%, transparent),
     color-mix(in oklch, var(--color-text) 3%, transparent) 55%,
     color-mix(in oklch, var(--color-text) 5%, transparent));
+
+  /* ── Скеоморфный материал ─────────────────────────────────────
+     Ядро интерфейса (components/ui) собрано из четырёх физических состояний
+     одного материала — матового пластика soft touch:
+       raised  — приподнятое: кнопки, чипы, активная вкладка; свет падает
+                 сверху, поэтому верх чуть светлее, по верхней кромке блик,
+                 по нижней — тёмная фаска и короткая тень;
+       pressed — вдавленное: то же под пальцем, тень уходит внутрь;
+       well    — углубление: поля ввода, дорожки вкладок и тумблеров;
+                 тень сверху ВНУТРИ, нижняя кромка ловит свет;
+       panel   — лист: карточки, панели и диалоги — фаска и рассеянная тень.
+     Акцентное тело (filled-кнопка, тумблер «вкл») строится в компоненте от
+     своего цвета теми же приёмами: токен на :root чужой цвет не подставит. */
+  --sk-raised-bg: var(--grain), linear-gradient(180deg,
+    color-mix(in oklch, var(--color-surface) 55%, white),
+    color-mix(in oklch, var(--color-surface-high) 80%, var(--color-surface)));
+  --sk-raised-hover-bg: var(--grain), linear-gradient(180deg,
+    white,
+    color-mix(in oklch, var(--color-surface-high) 45%, var(--color-surface)));
+  --sk-raised-shadow:
+    inset 0 1px 0 color-mix(in oklch, white 90%, transparent),
+    inset 0 -1px 0 color-mix(in oklch, var(--color-text) 9%, transparent),
+    0 1px 2px var(--shadow-color),
+    0 3px 8px var(--shadow-soft);
+  --sk-pressed-bg: var(--grain), linear-gradient(180deg,
+    var(--color-surface-highest),
+    var(--color-surface-high));
+  --sk-pressed-shadow:
+    inset 0 2px 4px color-mix(in oklch, var(--color-text) 14%, transparent),
+    inset 0 1px 1px color-mix(in oklch, var(--color-text) 10%, transparent);
+  --sk-well-bg: var(--grain), linear-gradient(180deg,
+    var(--color-surface-highest),
+    var(--color-surface-high) 70%);
+  --sk-well-shadow:
+    inset 0 2px 4px color-mix(in oklch, var(--color-text) 12%, transparent),
+    inset 0 1px 1px color-mix(in oklch, var(--color-text) 8%, transparent),
+    0 1px 0 color-mix(in oklch, white 85%, transparent);
+  --sk-panel-shadow:
+    inset 0 1px 0 color-mix(in oklch, white 75%, transparent),
+    0 1px 2px var(--shadow-color),
+    0 6px 18px var(--shadow-soft);
+  --sk-knob-bg: linear-gradient(180deg, white, color-mix(in oklch, var(--color-surface-high) 70%, white));
+  --sk-knob-shadow:
+    inset 0 -1px 0 color-mix(in oklch, var(--color-text) 10%, transparent),
+    0 1px 2px color-mix(in oklch, var(--color-text) 25%, transparent),
+    0 2px 5px var(--shadow-soft);
+  --sk-edge: color-mix(in oklch, var(--color-text) 11%, transparent);
 
   /* ── Градиент фона приложения (опция в настройках внешнего вида) ──
      Слои --bgg-1..4 пишет theme.js из пользовательского рецепта: цвета
@@ -373,17 +442,60 @@
   /* Акрил в тёмной теме плотнее: за стеклом тёмный контент, при 72%
      непрозрачности текст на нём терял контраст. --acrylic-card-bg следует
      за --acrylic-bg автоматически (см. светлую тему). */
-  --acrylic-bg:        color-mix(in oklch, var(--color-surface) 72%, transparent);
-  --acrylic-bg-strong: color-mix(in oklch, var(--color-surface) 90%, transparent);
+  --acrylic-bg:        var(--grain), color-mix(in oklch, var(--color-surface) 72%, transparent);
+  --acrylic-bg-strong: var(--grain), color-mix(in oklch, var(--color-surface) 90%, transparent);
 
-  /* Иней тёмной темы — светлая дымка от цвета текста; hover-запотевание —
-     тот же иней (светлит). */
-  --glass-bg: linear-gradient(155deg,
-    color-mix(in oklch, var(--color-text) 12%, transparent),
-    color-mix(in oklch, var(--color-text) 4%, transparent) 45%,
-    color-mix(in oklch, var(--color-text) 8%, transparent));
-  --glass-edge: inset 0 1px 0 color-mix(in oklch, var(--color-text) 16%, transparent);
+  /* Тени в темноте — от чёрного: от светлого текста они светились бы. */
+  --shadow-color: color-mix(in oklch, black 45%, transparent);
+  --shadow-soft:  color-mix(in oklch, black 28%, transparent);
+
+  /* Зерно тёмной темы — светлые крапинки. */
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0.045 0 0 0 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
+
+  /* Матовый купол тёмной темы — светлая дымка от цвета текста, свет сверху. */
+  --glass-bg: var(--grain), linear-gradient(180deg,
+    color-mix(in oklch, var(--color-text) 10%, transparent),
+    color-mix(in oklch, var(--color-text) 4%, transparent));
+  --glass-edge: inset 0 1px 0 color-mix(in oklch, var(--color-text) 12%, transparent),
+    inset 0 -1px 0 color-mix(in oklch, black 30%, transparent);
   --glass-hover-bg: var(--glass-bg);
+
+  /* Скеоморфный материал в темноте: блик кромки — слабый светлый, тени и
+     фаски — от чёрного, приподнятое светлее подложки. */
+  --sk-raised-bg: var(--grain), linear-gradient(180deg,
+    var(--color-surface-highest),
+    var(--color-surface-high));
+  --sk-raised-hover-bg: var(--grain), linear-gradient(180deg,
+    color-mix(in oklch, var(--color-surface-highest) 85%, white),
+    var(--color-surface-highest));
+  --sk-raised-shadow:
+    inset 0 1px 0 color-mix(in oklch, white 10%, transparent),
+    inset 0 -1px 0 color-mix(in oklch, black 30%, transparent),
+    0 1px 2px color-mix(in oklch, black 40%, transparent),
+    0 3px 8px color-mix(in oklch, black 22%, transparent);
+  --sk-pressed-bg: var(--grain), linear-gradient(180deg,
+    var(--color-bg),
+    var(--color-surface-low));
+  --sk-pressed-shadow:
+    inset 0 2px 5px color-mix(in oklch, black 45%, transparent),
+    inset 0 1px 1px color-mix(in oklch, black 35%, transparent);
+  --sk-well-bg: var(--grain), linear-gradient(180deg,
+    color-mix(in oklch, var(--color-bg) 80%, black),
+    var(--color-bg) 70%);
+  --sk-well-shadow:
+    inset 0 2px 5px color-mix(in oklch, black 45%, transparent),
+    inset 0 1px 1px color-mix(in oklch, black 30%, transparent),
+    0 1px 0 color-mix(in oklch, white 7%, transparent);
+  --sk-panel-shadow:
+    inset 0 1px 0 color-mix(in oklch, white 7%, transparent),
+    0 1px 2px color-mix(in oklch, black 35%, transparent),
+    0 8px 22px color-mix(in oklch, black 22%, transparent);
+  --sk-knob-bg: linear-gradient(180deg, oklch(0.86 0.003 70), oklch(0.74 0.004 70));
+  --sk-knob-shadow:
+    inset 0 -1px 0 color-mix(in oklch, black 18%, transparent),
+    0 1px 2px color-mix(in oklch, black 50%, transparent),
+    0 2px 5px color-mix(in oklch, black 30%, transparent);
+  --sk-edge: color-mix(in oklch, black 40%, transparent);
 
   /* Пастельные тона палитры (тон 80) на тёмном фоне светятся сильнее —
      градиент фона приглушаем, не меняя пользовательский рецепт. */
@@ -483,7 +595,7 @@
    Условие проверяет ОБЕ функции: Safari 15.4–16.1 понимает oklch, но не
    color-mix — без второй проверки у него отваливались hover-токены и тени.
 
-   Здесь даём плоский hex-фолбэк дефолтной (классической) темы для светлого
+   Здесь даём плоский hex-фолбэк дефолтной (флагманской) темы для светлого
    и тёмного режима — приложение остаётся видимым и читаемым. Кастомные
    акценты из конструктора тем на таких устройствах не применяются (палитра
    выводится через oklch), но базовая работоспособность восстанавливается.
@@ -491,23 +603,23 @@
 ══════════════════════════════════════════════════════════════════ */
 @supports not ((color: oklch(0 0 0)) and (color: color-mix(in oklch, red, blue))) {
   :root {
-    --color-primary:                #006cdc;
+    --color-primary:                #e8590c;
     --color-on-primary:             #ffffff;
-    --color-primary-container:      #e1effb;
-    --color-on-primary-container:   #002a55;
-    --color-primary-hover:          #0059b8;
+    --color-primary-container:      #ffd3be;
+    --color-on-primary-container:   #310000;
+    --color-primary-hover:          #bb4607;
 
-    --color-secondary:              #2499ec;
+    --color-secondary:              #454a52;
     --color-on-secondary:           #ffffff;
-    --color-secondary-container:    #d6ebfc;
-    --color-on-secondary-container: #072f4e;
-    --color-secondary-hover:        #1d84cd;
+    --color-secondary-container:    #dfe1e5;
+    --color-on-secondary-container: #090b10;
+    --color-secondary-hover:        #363a40;
 
-    --color-tertiary:               #2499ec;
-    --color-on-tertiary:            #ffffff;
-    --color-tertiary-container:     #d6ebfc;
-    --color-on-tertiary-container:  #072f4e;
-    --color-tertiary-hover:         #1d84cd;
+    --color-tertiary:               #f5a524;
+    --color-on-tertiary:            #290400;
+    --color-tertiary-container:     #f9dcb8;
+    --color-on-tertiary-container:  #240000;
+    --color-tertiary-hover:         #c5841b;
 
     --color-error:                  #d32f2f;
     --color-on-error:               #ffffff;
@@ -526,18 +638,18 @@
     --color-warning-container:      #ffe08a;
     --color-on-warning-container:   #261a00;
 
-    --color-bg:                     #f7fafd;
-    --color-surface:                #ffffff;
-    --color-surface-low:            #eff4fa;
-    --color-surface-high:           #e5edf6;
-    --color-surface-highest:        #dae6f1;
-    --color-surface-variant:        #e5edf6;
+    --color-bg:                     #fdfcfb;
+    --color-surface:                #fefdfc;
+    --color-surface-low:            #f3f2f1;
+    --color-surface-high:           #eeeceb;
+    --color-surface-highest:        #e2e1df;
+    --color-surface-variant:        #eeeceb;
 
-    --color-text:                   #1a1c1f;
-    --color-text-dim:               #59616d;
+    --color-text:                   #0d0b09;
+    --color-text-dim:               #7d7975;
 
-    --color-outline:                #73808f;
-    --color-outline-dim:            #c8d3e0;
+    --color-outline:                #7d7975;
+    --color-outline-dim:            #cac7c4;
 
     --groove-coin-rim:              #d9a514;
     --groove-coin-face:             #f3c83b;
@@ -549,9 +661,9 @@
 
     /* Градиенты и акрил — плоский фолбэк без color-mix. Акрил остаётся
        полупрозрачным (rgba), blur работает и на старых Safari. */
-    --grad-primary:      linear-gradient(90deg, #006cdc, #79b6f2);
-    --grad-primary-soft: linear-gradient(90deg, #e1effb, #f3f9fe);
-    --grad-hero:         linear-gradient(135deg, #006cdc, #2499ec);
+    --grad-primary:      linear-gradient(90deg, #e8590c, #f5a524);
+    --grad-primary-soft: linear-gradient(90deg, #ffd3be, #fefdfc);
+    --grad-hero:         linear-gradient(135deg, #e8590c, #f5a524);
     --acrylic-bg:        rgba(255, 255, 255, 0.62);
     --acrylic-bg-strong: rgba(255, 255, 255, 0.86);
     --acrylic-border:    rgba(202, 196, 208, 0.55);
@@ -565,6 +677,18 @@
     --glass-bg:          linear-gradient(155deg, rgba(255, 255, 255, 0.78), rgba(255, 255, 255, 0.48) 45%, rgba(255, 255, 255, 0.65));
     --glass-edge:        inset 0 1px 0 rgba(255, 255, 255, 0.8);
     --glass-hover-bg:    linear-gradient(155deg, rgba(27, 27, 31, 0.07), rgba(27, 27, 31, 0.03) 55%, rgba(27, 27, 31, 0.05));
+    /* Скеоморфный материал — плоские значения без color-mix. */
+    --sk-raised-bg:       linear-gradient(180deg, #ffffff, #f0eeec);
+    --sk-raised-hover-bg: linear-gradient(180deg, #ffffff, #f6f5f3);
+    --sk-raised-shadow:   inset 0 1px 0 rgba(255, 255, 255, 0.9), inset 0 -1px 0 rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.12), 0 3px 8px rgba(0, 0, 0, 0.06);
+    --sk-pressed-bg:      linear-gradient(180deg, #e2e1df, #eeeceb);
+    --sk-pressed-shadow:  inset 0 2px 4px rgba(0, 0, 0, 0.14), inset 0 1px 1px rgba(0, 0, 0, 0.1);
+    --sk-well-bg:         linear-gradient(180deg, #e2e1df, #eeeceb 70%);
+    --sk-well-shadow:     inset 0 2px 4px rgba(0, 0, 0, 0.12), inset 0 1px 1px rgba(0, 0, 0, 0.08), 0 1px 0 rgba(255, 255, 255, 0.85);
+    --sk-panel-shadow:    inset 0 1px 0 rgba(255, 255, 255, 0.75), 0 1px 2px rgba(0, 0, 0, 0.1), 0 6px 18px rgba(0, 0, 0, 0.05);
+    --sk-knob-bg:         linear-gradient(180deg, #ffffff, #f2f0ee);
+    --sk-knob-shadow:     inset 0 -1px 0 rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.25), 0 2px 5px rgba(0, 0, 0, 0.06);
+    --sk-edge:            rgba(0, 0, 0, 0.11);
 
     /* Цвета-теги задач — мягкие пастельные заливки */
     --tag-red-surface: #fbeae8;    --tag-red-border: #f3c3bc;    --tag-red-accent: #d35344;
@@ -578,23 +702,23 @@
   }
 
   [data-dark="true"] {
-    --color-primary:                #9ccaff;
-    --color-on-primary:             #002f5e;
-    --color-primary-container:      #14497e;
-    --color-on-primary-container:   #d6e7ff;
-    --color-primary-hover:          #b3d7ff;
+    --color-primary:                #ffad8a;
+    --color-on-primary:             #5e0000;
+    --color-primary-container:      #a04e2d;
+    --color-on-primary-container:   #ffd3be;
+    --color-primary-hover:          #ffba9c;
 
-    --color-secondary:              #86c4f5;
-    --color-on-secondary:           #0a3050;
-    --color-secondary-container:    #1a5480;
-    --color-on-secondary-container: #d6ebfc;
-    --color-secondary-hover:        #a0d1f8;
+    --color-secondary:              #c4c7cd;
+    --color-on-secondary:           #23272d;
+    --color-secondary-container:    #3e434b;
+    --color-on-secondary-container: #dfe1e5;
+    --color-secondary-hover:        #ccd0d5;
 
-    --color-tertiary:               #86c4f5;
-    --color-on-tertiary:            #0a3050;
-    --color-tertiary-container:     #1a5480;
-    --color-on-tertiary-container:  #d6ebfc;
-    --color-tertiary-hover:         #a0d1f8;
+    --color-tertiary:               #efbd7e;
+    --color-on-tertiary:            #4b0f00;
+    --color-tertiary-container:     #722a00;
+    --color-on-tertiary-container:  #f9dcb8;
+    --color-tertiary-hover:         #f2c793;
 
     --color-error:                  #ffb4ab;
     --color-on-error:               #690005;
@@ -613,29 +737,29 @@
     --color-warning-container:      #5c4800;
     --color-on-warning-container:   #ffe08a;
 
-    --color-bg:                     #12161c;
-    --color-surface:                #181d24;
-    --color-surface-low:            #1d232c;
-    --color-surface-high:           #262e39;
-    --color-surface-highest:        #303a47;
-    --color-surface-variant:        #262e39;
+    --color-bg:                     #242221;
+    --color-surface:                #2e2c2a;
+    --color-surface-low:            #292725;
+    --color-surface-high:           #373533;
+    --color-surface-highest:        #413f3d;
+    --color-surface-variant:        #373533;
 
-    --color-text:                   #e2e7ee;
-    --color-text-dim:               #c2ccd8;
+    --color-text:                   #e3e1de;
+    --color-text-dim:               #95918e;
 
-    --color-outline:                #8e9aa9;
-    --color-outline-dim:            #45505d;
+    --color-outline:                #95918e;
+    --color-outline-dim:            #585451;
 
     --color-scrim:                  rgba(0, 0, 0, 0.5);
     --shadow-color:                 rgba(0, 0, 0, 0.4);
 
-    --grad-primary:      linear-gradient(90deg, #9ccaff, #4a7cb8);
-    --grad-primary-soft: linear-gradient(90deg, #1d3a5c, #1c2530);
-    --grad-hero:         linear-gradient(135deg, #9ccaff, #86c4f5);
-    --acrylic-bg:        rgba(24, 29, 36, 0.72);
-    --acrylic-bg-strong: rgba(24, 29, 36, 0.9);
-    --acrylic-border:    rgba(69, 80, 93, 0.55);
-    --acrylic-card-bg:   rgba(24, 29, 36, 0.74);
+    --grad-primary:      linear-gradient(90deg, #ffad8a, #8b0000);
+    --grad-primary-soft: linear-gradient(90deg, #8b0000, #2e2c2a);
+    --grad-hero:         linear-gradient(135deg, #ffad8a, #efbd7e);
+    --acrylic-bg:        rgba(46, 44, 42, 0.72);
+    --acrylic-bg-strong: rgba(46, 44, 42, 0.9);
+    --acrylic-border:    rgba(98, 95, 92, 0.55);
+    --acrylic-card-bg:   rgba(46, 44, 42, 0.74);
     /* Поверхности вне акрила — плотные: без color-mix полупрозрачность не выразить. */
     --window-bg:         var(--color-surface);
     --window-bar-bg:     var(--color-surface-low);
@@ -645,6 +769,17 @@
     --glass-bg:          linear-gradient(155deg, rgba(227, 226, 230, 0.12), rgba(227, 226, 230, 0.04) 45%, rgba(227, 226, 230, 0.08));
     --glass-edge:        inset 0 1px 0 rgba(227, 226, 230, 0.16);
     --glass-hover-bg:    linear-gradient(155deg, rgba(227, 226, 230, 0.12), rgba(227, 226, 230, 0.04) 45%, rgba(227, 226, 230, 0.08));
+    --sk-raised-bg:       linear-gradient(180deg, #43403e, #3a3836);
+    --sk-raised-hover-bg: linear-gradient(180deg, #4b4846, #43403e);
+    --sk-raised-shadow:   inset 0 1px 0 rgba(255, 255, 255, 0.1), inset 0 -1px 0 rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.4), 0 3px 8px rgba(0, 0, 0, 0.22);
+    --sk-pressed-bg:      linear-gradient(180deg, #242221, #2a2826);
+    --sk-pressed-shadow:  inset 0 2px 5px rgba(0, 0, 0, 0.45), inset 0 1px 1px rgba(0, 0, 0, 0.35);
+    --sk-well-bg:         linear-gradient(180deg, #1d1b1a, #242221 70%);
+    --sk-well-shadow:     inset 0 2px 5px rgba(0, 0, 0, 0.45), inset 0 1px 1px rgba(0, 0, 0, 0.3), 0 1px 0 rgba(255, 255, 255, 0.07);
+    --sk-panel-shadow:    inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 1px 2px rgba(0, 0, 0, 0.35), 0 8px 22px rgba(0, 0, 0, 0.22);
+    --sk-knob-bg:         linear-gradient(180deg, #d7d5d2, #b3b0ad);
+    --sk-knob-shadow:     inset 0 -1px 0 rgba(0, 0, 0, 0.18), 0 1px 2px rgba(0, 0, 0, 0.5), 0 2px 5px rgba(0, 0, 0, 0.3);
+    --sk-edge:            rgba(0, 0, 0, 0.4);
 
     --tag-red-surface: #3a2422;    --tag-red-border: #5e3a35;    --tag-red-accent: #f0a59a;
     --tag-orange-surface: #3a2c1a; --tag-orange-border: #5e482c; --tag-orange-accent: #e8b87e;
@@ -702,11 +837,11 @@
    остаётся — это оттенок поверх подложки и единственная заливка кнопок. */
 :root[data-opaque],
 :root[data-opaque] [data-dark] {
-  --acrylic-bg:          var(--color-surface);
-  --acrylic-bg-strong:   var(--color-surface);
-  --acrylic-card-bg:     var(--color-surface);
+  --acrylic-bg:          var(--grain), var(--color-surface);
+  --acrylic-bg-strong:   var(--grain), var(--color-surface);
+  --acrylic-card-bg:     var(--grain), var(--color-surface);
   --acrylic-border:      var(--color-outline-dim);
-  --window-bg:           var(--color-surface);
+  --window-bg:           var(--grain), var(--color-surface);
   --window-bar-bg:       var(--color-surface-low);
   --panel-tint-bg:       var(--color-surface-low);
   --bubble-bg:           var(--color-surface-high);

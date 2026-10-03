@@ -65,7 +65,7 @@ const canSelectAll = computed(() => !props.allSelected && props.total > props.co
   gap: 10px;
   max-width: min(680px, calc(100% - 28px));
   padding: 6px 6px 6px 16px;
-  border: 1px solid var(--acrylic-border);
+  border: 1px solid var(--sk-edge);
   border-radius: var(--radius-full);
   /* Плашка лежит ВНУТРИ акриловой панели раздела, а та — backdrop root:
      настоящий backdrop-filter здесь размывать нечего, и плашка выглядела
@@ -73,11 +73,8 @@ const canSelectAll = computed(() => !props.allSelected && props.total > props.co
      подложки) плюс blur для случая, когда панели-акрила над нами нет.
      -webkit-префикс идёт ПЕРЕД стандартным — минификатор иначе выбрасывает
      стандартное свойство. */
-  background: var(--color-surface-high);
-  background: var(--glass-bg), var(--acrylic-bg-strong);
-  -webkit-backdrop-filter: var(--acrylic-blur);
-  backdrop-filter: var(--acrylic-blur);
-  box-shadow: var(--glass-edge), var(--shadow-lg, var(--shadow-md));
+  background: var(--sk-raised-bg);
+  box-shadow: var(--sk-raised-shadow), var(--shadow-lg);
   color: var(--color-text);
 }
 

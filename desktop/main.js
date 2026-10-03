@@ -157,7 +157,7 @@ function createWindow(appUrl) {
         minHeight: 600,
         show: false,
         autoHideMenuBar: true,
-        backgroundColor: '#1a1c1e',
+        backgroundColor: '#242221',
         webPreferences: {
             // Удалённая страница: никакого Node в рендерере; узкий мост
             // window.GrooveDesktop (обновление обёртки) — через preload.

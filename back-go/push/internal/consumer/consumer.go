@@ -15,14 +15,12 @@ import (
 // Channels — каналы, из которых берём события для пушей:
 //
 //	messenger — message:new; tasks — task:created; gateway — call:incoming
-//	(ринг-фазу звонков публикует gatewaysvc в свой канал); pets —
-//	kudos:received (входящий перевод кудо-банка); portal — post:new;
+//	(ринг-фазу звонков публикует gatewaysvc в свой канал); portal — post:new;
 //	forms — form:assigned и form:due (назначенная форма и срок ответа).
 var Channels = []string{
 	"gw2:messenger:events",
 	"gw2:tasks:events",
 	"gw2:gateway:events",
-	"gw2:pets:events",
 	"gw2:portal:events",
 	"gw2:reminder:events",
 	"gw2:forms:events",

@@ -80,6 +80,14 @@ func (s *Server) CheckStorage(ctx context.Context, in *billingpb.CheckStorageReq
 	}, nil
 }
 
+func (s *Server) MoveStorage(ctx context.Context, in *billingpb.MoveStorageRequest) (*billingpb.MoveStorageResponse, error) {
+	moved, err := s.svc.MoveStorage(ctx, in.GetUserId(), in.GetCompanyId(), in.GetKeys())
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	return &billingpb.MoveStorageResponse{Moved: moved}, nil
+}
+
 func (s *Server) TrackStorage(ctx context.Context, in *billingpb.TrackStorageRequest) (*billingpb.TrackStorageResponse, error) {
 	added := make([]*domain.StoredFile, 0, len(in.GetAdded()))
 	for _, f := range in.GetAdded() {

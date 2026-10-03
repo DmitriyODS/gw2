@@ -1,7 +1,6 @@
 <template>
   <!-- Экран входа ведёт три шага в ОДНОЙ карточке: учётные данные, выбор
-       компании и обязательная смена пароля. Отдельных модалок больше нет —
-       так шаги живут в общем языке экранов входа. -->
+       компании и обязательная смена пароля. -->
   <AuthShell
     :title="stepTitle"
     :subtitle="stepSubtitle"
@@ -12,106 +11,115 @@
     <form v-if="step === 'credentials'" class="auth-form" @submit.prevent="handleLogin">
       <AuthField
         v-model="loginForm.login"
-        label="логин"
-        placeholder="логин"
+        label="Логин"
+        placeholder="Ваш логин"
         autocomplete="username"
         :disabled="isLoginDisabled"
       />
       <AuthField
         v-model="loginForm.password"
-        label="пароль"
+        label="Пароль"
         type="password"
-        placeholder="пароль"
+        placeholder="Пароль"
         autocomplete="current-password"
         :disabled="isLoginDisabled"
       />
 
-      <div v-if="cooldownSec > 0" class="auth-error" role="status" aria-live="polite">
-        <span class="material-symbols-outlined">lock_clock</span>
-        <span>
-          Слишком много неудачных попыток — попробуйте через {{ formattedCooldown }}
-        </span>
+      <div class="lg-forgot">
+        <AppButton tag="router-link" to="/forgot-password" variant="text" size="sm" label="Забыли пароль?" />
       </div>
-      <p v-else-if="loginError" class="auth-error">{{ loginError }}</p>
 
-      <button type="submit" class="auth-submit" :disabled="isLoginDisabled">
-        {{ loginButtonLabel }}
-      </button>
+      <AppInfoBar
+        v-if="cooldownSec > 0"
+        tone="warning"
+        icon="lock_clock"
+        inline
+        :message="`Слишком много неудачных попыток — попробуйте через ${formattedCooldown}`"
+      />
+      <AppInfoBar v-else-if="loginError" tone="error" inline :message="loginError" />
+
+      <AppButton
+        type="submit"
+        variant="filled"
+        size="lg"
+        block
+        :loading="loading"
+        :disabled="cooldownSec > 0"
+        :label="loginButtonLabel"
+      />
+
+      <div class="auth-divider"><span>или</span></div>
 
       <div class="lg-alts">
-        <button type="button" class="auth-alt" @click="goYandex">
+        <AppButton class="lg-yandex" block @click="goYandex">
           <YandexLogo :size="16" />
-          Войти через Яндекс
-        </button>
-        <RouterLink to="/qr-login" class="auth-alt">
-          <span class="material-symbols-outlined">qr_code_2</span>
-          Войти по QR-коду
-        </RouterLink>
-        <RouterLink to="/tv-activate" class="auth-alt">
-          <span class="material-symbols-outlined">tv</span>
-          ТВ-режим
-        </RouterLink>
-        <RouterLink to="/forgot-password" class="auth-alt">
-          <span class="material-symbols-outlined">lock_reset</span>
-          Сбросить пароль
-        </RouterLink>
+          Яндекс ID
+        </AppButton>
+        <AppButton tag="router-link" to="/qr-login" icon="qr_code_2" label="QR-код" block />
+        <AppButton tag="router-link" to="/tv-activate" icon="tv" label="ТВ-режим" block />
       </div>
 
-      <p class="lg-switch">
+      <p class="auth-switch">
         Нет аккаунта?
-        <RouterLink to="/register">создать</RouterLink>
+        <AppButton tag="router-link" to="/register" variant="text" size="sm" label="Создать" />
       </p>
     </form>
 
     <!-- ── Шаг 2: выбор компании ─────────────────────────────── -->
     <div v-else-if="step === 'company'" class="auth-form">
-      <div class="lg-companies">
-        <button
+      <AppCard variant="group" :gap="6">
+        <AppRow
           v-for="c in pickerCompanies"
           :key="c.company_id"
-          type="button"
-          class="lg-company"
-          :class="{ active: pickerSelected === c.company_id }"
+          :title="c.company_name"
+          :hint="c.is_active ? c.role_name : `${c.role_name} · отключена`"
+          icon="apartment"
+          clickable
+          :selected="pickerSelected === c.company_id"
           :disabled="!c.is_active"
+          :chevron-icon="pickerSelected === c.company_id ? 'check_circle' : 'radio_button_unchecked'"
           @click="pickerSelected = c.company_id"
-        >
-          <span class="lg-company-main">
-            <span class="lg-company-name">{{ c.company_name }}</span>
-            <span class="lg-company-role">
-              {{ c.role_name }}<template v-if="!c.is_active"> · отключена</template>
-            </span>
-          </span>
-          <span v-if="pickerSelected === c.company_id" class="material-symbols-outlined">check_circle</span>
-        </button>
-      </div>
-      <p v-if="loginError" class="auth-error">{{ loginError }}</p>
-      <button type="button" class="auth-submit" :disabled="loading || !pickerSelected" @click="confirmCompany">
-        {{ loading ? 'входим…' : 'войти' }}
-      </button>
+        />
+      </AppCard>
+      <AppInfoBar v-if="loginError" tone="error" inline :message="loginError" />
+      <AppButton
+        variant="filled"
+        size="lg"
+        block
+        :loading="loading"
+        :disabled="!pickerSelected"
+        label="Войти"
+        @click="confirmCompany"
+      />
     </div>
 
     <!-- ── Шаг 3: обязательная смена пароля ──────────────────── -->
     <form v-else class="auth-form" @submit.prevent="handleChangeDefault">
       <AuthField
         v-model="changeForm.password"
-        label="новый пароль"
+        label="Новый пароль"
         type="password"
-        placeholder="не короче 8 символов"
+        placeholder="Не короче 8 символов"
         autocomplete="new-password"
         :disabled="changeLoading"
       />
       <AuthField
         v-model="changeForm.confirmPassword"
-        label="повторите пароль"
+        label="Повторите пароль"
         type="password"
-        placeholder="ещё раз"
+        placeholder="Ещё раз"
         autocomplete="new-password"
         :disabled="changeLoading"
       />
-      <p v-if="changeError" class="auth-error">{{ changeError }}</p>
-      <button type="submit" class="auth-submit" :disabled="changeLoading">
-        {{ changeLoading ? 'сохраняем…' : 'сохранить и войти' }}
-      </button>
+      <AppInfoBar v-if="changeError" tone="error" inline :message="changeError" />
+      <AppButton
+        type="submit"
+        variant="filled"
+        size="lg"
+        block
+        :loading="changeLoading"
+        label="Сохранить и войти"
+      />
     </form>
   </AuthShell>
 </template>
@@ -123,6 +131,10 @@ import { useAuthStore } from '@/stores/auth.js'
 import { connectSocket } from '@/socket/index.js'
 import AuthShell from '@/components/auth/AuthShell.vue'
 import AuthField from '@/components/auth/AuthField.vue'
+import AppButton from '@/components/ui/AppButton.vue'
+import AppCard from '@/components/ui/AppCard.vue'
+import AppRow from '@/components/ui/AppRow.vue'
+import AppInfoBar from '@/components/ui/AppInfoBar.vue'
 import YandexLogo from '@/components/common/YandexLogo.vue'
 import { yandexConfig, yandexAuthURL } from '@/api/auth.js'
 import { inAppShell } from '@/utils/appShell.js'
@@ -168,15 +180,15 @@ const changeLoading = ref(false)
 const isLoginDisabled = computed(() => loading.value || cooldownSec.value > 0)
 
 const stepTitle = computed(() => {
-  if (step.value === 'company') return 'выбор компании'
-  if (step.value === 'change-password') return 'смена пароля'
-  return 'вход в аккаунт'
+  if (step.value === 'company') return 'Выбор компании'
+  if (step.value === 'change-password') return 'Смена пароля'
+  return 'Вход в аккаунт'
 })
 
 const stepSubtitle = computed(() => {
   if (step.value === 'company') return 'Вы состоите в нескольких компаниях — в какую войти?'
   if (step.value === 'change-password') return 'Пароль по умолчанию нужно сменить перед началом работы.'
-  return ''
+  return 'С возвращением — продолжим с того места, где вы остановились.'
 })
 
 const formattedCooldown = computed(() => {
@@ -188,8 +200,8 @@ const formattedCooldown = computed(() => {
 })
 
 const loginButtonLabel = computed(() => {
-  if (cooldownSec.value > 0) return `подождите ${formattedCooldown.value}`
-  return loading.value ? 'входим…' : 'войти'
+  if (cooldownSec.value > 0) return `Подождите ${formattedCooldown.value}`
+  return 'Войти'
 })
 
 function startCooldown(seconds) {
@@ -309,70 +321,27 @@ async function handleChangeDefault() {
 </script>
 
 <style scoped>
-/* Форма, кнопки и плашка ошибки — общие классы экранов входа (main.css);
-   здесь только специфика: сетка альтернативных способов и выбор компании. */
+/* Форма, разделитель «или» и строка «нет аккаунта» — общие классы экранов
+   входа (main.css); здесь только специфика экрана. */
+.lg-forgot {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: -8px;
+}
+
 .lg-alts {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
 }
 
-.lg-switch {
-  margin: 0;
-  text-align: center;
-  font-size: 13.5px;
-  color: var(--color-text-dim);
-}
-
-.lg-switch a {
-  color: var(--color-primary);
-  font-weight: 600;
-  text-decoration: none;
-  margin-left: 4px;
-}
-
-.lg-switch a:hover { text-decoration: underline; }
-
-/* Выбор компании */
-.lg-companies {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.lg-company {
-  display: flex;
+.lg-yandex :deep(.btn-label) {
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 13px 16px;
-  border: 1px solid var(--acrylic-border);
-  border-radius: var(--radius-md);
-  background: color-mix(in oklch, var(--color-surface) 60%, transparent);
-  color: var(--color-text);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-  transition: border-color 0.15s, background 0.15s;
+  gap: 7px;
 }
-
-.lg-company:hover:not(:disabled) {
-  border-color: color-mix(in oklch, var(--color-primary) 35%, var(--acrylic-border));
-}
-
-.lg-company.active {
-  border-color: var(--color-primary);
-  background: color-mix(in oklch, var(--color-primary) 14%, var(--color-surface));
-}
-
-.lg-company:disabled { opacity: 0.5; cursor: not-allowed; }
-
-.lg-company-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.lg-company-name { font-size: 15px; font-weight: 600; }
-.lg-company-role { font-size: 12px; color: var(--color-text-dim); }
-.lg-company .material-symbols-outlined { color: var(--color-primary); }
 
 @media (max-width: 560px) {
-  .lg-alts { grid-template-columns: 1fr; }
+  .lg-alts { grid-template-columns: minmax(0, 1fr); }
 }
 </style>

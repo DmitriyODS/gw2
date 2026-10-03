@@ -242,7 +242,7 @@ defineExpose({ scrollDown })
 }
 
 .hc-row.mine .hc-bubble {
-  background: color-mix(in oklch, var(--color-primary) 10%, var(--glass-bg));
+  background: linear-gradient(color-mix(in oklch, var(--color-primary) 10%, transparent), color-mix(in oklch, var(--color-primary) 10%, transparent)), var(--glass-bg);
   border-color: color-mix(in oklch, var(--color-primary) 26%, var(--acrylic-border));
 }
 

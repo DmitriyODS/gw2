@@ -20,8 +20,12 @@ var (
 
 	// Права. Существование чужой формы не раскрываем — на чтение отвечаем 404,
 	// нехватку уровня различаем только тому, кто форму уже видит.
-	ErrForbidden  = NewError("FORBIDDEN", "Недостаточно прав для этого действия", 403)
-	ErrOwnerOnly  = NewError("FORBIDDEN", "Это может сделать только владелец формы", 403)
+	ErrForbidden = NewError("FORBIDDEN", "Недостаточно прав для этого действия", 403)
+	ErrOwnerOnly = NewError("FORBIDDEN", "Это может сделать только владелец формы", 403)
+	// ErrNotTeamMember — положить форму можно только в свою команду.
+	ErrNotTeamMember = NewError("NOT_TEAM_MEMBER", "Вы не состоите в этой команде", 403)
+	// ErrMoveFailed — не удалось перенести учёт файлов, и форма осталась на месте.
+	ErrMoveFailed = NewError("MOVE_FAILED", "Не удалось перенести форму, попробуйте ещё раз", 503)
 	ErrShareSelf  = NewError("VALIDATION", "Форма и так ваша", 400)
 	ErrNoAudience = NewError("VALIDATION", "Не выбрано, с кем поделиться", 400)
 

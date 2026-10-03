@@ -175,13 +175,14 @@ func (r *Repo) NormalizeItemWeeks(ctx context.Context, scheduleID int64, cycleWe
 	return int(tag.RowsAffected()), nil
 }
 
-// accessJoin — занятия всех расписаний, доступных пользователю: своих и
-// открытых ему адресно. Одним запросом — плитка и поиск идут сразу по всем.
+// accessJoin — занятия всех расписаний, доступных пользователю: его
+// пространств и открытых ему адресно. Одним запросом — плитка и поиск идут
+// сразу по всем.
 const accessJoin = `
 	  FROM schedule_items i
 	  JOIN schedules s ON s.id = i.schedule_id
 	  LEFT JOIN schedule_categories c ON c.id = i.category_id
-	 WHERE (s.owner_id = $1 OR ` + sharedCondition + `)`
+	 WHERE ` + visibleCond
 
 // ItemsForDay — занятия на день недели по всем доступным расписаниям. Какая
 // сейчас неделя цикла, решает сервис: правило повтора живёт в домене.

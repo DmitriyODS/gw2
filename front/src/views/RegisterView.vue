@@ -1,26 +1,29 @@
 <template>
-  <AuthShell title="создание аккаунта" size="lg" back="/welcome">
+  <AuthShell
+    title="Создание аккаунта"
+    subtitle="Пароль мы уже придумали — его можно сменить или скопировать."
+    size="lg"
+    back="/welcome"
+  >
     <form class="rg" @submit.prevent="handleRegister">
       <div class="rg-main">
         <!-- Фото профиля: обрезается сразу, а уходит на сервер после
              подтверждения почты (до неё сессии нет). -->
         <div class="rg-photo">
-          <button type="button" class="rg-photo-tile" @click="cropping = true">
+          <button type="button" class="rg-photo-tile" aria-label="Выбрать фото профиля" @click="cropping = true">
             <img v-if="avatarPreview" loading="lazy" decoding="async" :src="avatarPreview" alt="" class="rg-photo-img" />
             <template v-else>
-              <span class="material-symbols-outlined">person</span>
-              <span class="rg-photo-hint">нажмите, чтобы выбрать фото</span>
+              <span class="material-symbols-outlined">add_a_photo</span>
+              <span class="rg-photo-hint">Фото профиля</span>
             </template>
           </button>
-          <button v-if="avatarPreview" type="button" class="rg-photo-btn ghost" @click="dropAvatar">
-            убрать фото
-          </button>
+          <AppButton v-if="avatarPreview" variant="text" size="sm" label="Убрать фото" @click="dropAvatar" />
         </div>
 
         <div class="rg-fields">
           <AuthField
             v-model="form.fio"
-            label="фио"
+            label="ФИО"
             placeholder="Фамилия Имя Отчество"
             autocomplete="name"
             :disabled="loading"
@@ -28,15 +31,15 @@
           />
           <AuthField
             v-model="form.login"
-            label="логин"
-            placeholder="подставим из ФИО"
+            label="Логин"
+            placeholder="Подставим из ФИО"
             autocomplete="username"
             :disabled="loading"
             @update:model-value="loginTouched = true"
           />
           <AuthField
             v-model="form.email"
-            label="email"
+            label="Email"
             type="email"
             placeholder="name@example.com"
             autocomplete="email"
@@ -44,26 +47,32 @@
           />
           <AuthField
             v-model="form.password"
-            label="пароль"
+            label="Пароль"
             type="password"
-            placeholder="не короче 8 символов"
+            placeholder="Не короче 8 символов"
             autocomplete="new-password"
             :disabled="loading"
             hint="Сохраните пароль — он понадобится для входа."
           >
             <template #tools>
-              <button type="button" class="af-tool" title="Сгенерировать новый" tabindex="-1" @click="regeneratePassword">
-                <span class="material-symbols-outlined">autorenew</span>
-              </button>
-              <button
-                type="button"
-                class="af-tool"
-                :title="copied ? 'Скопировано' : 'Скопировать'"
+              <AppButton
+                variant="text"
+                size="sm"
+                icon="autorenew"
                 tabindex="-1"
+                aria-label="Сгенерировать новый"
+                title="Сгенерировать новый"
+                @click="regeneratePassword"
+              />
+              <AppButton
+                variant="text"
+                size="sm"
+                tabindex="-1"
+                :icon="copied ? 'check' : 'content_copy'"
+                :aria-label="copied ? 'Скопировано' : 'Скопировать'"
+                :title="copied ? 'Скопировано' : 'Скопировать'"
                 @click="copyPassword"
-              >
-                <span class="material-symbols-outlined">{{ copied ? 'check' : 'content_copy' }}</span>
-              </button>
+              />
             </template>
           </AuthField>
         </div>
@@ -72,15 +81,7 @@
       <!-- Оформление выбирается сразу, как в первоначальной настройке системы. -->
       <AuthThemeTiles class="rg-themes" />
 
-      <p v-if="error" class="auth-error">{{ error }}</p>
-
-      <div class="rg-alt">
-        <button type="button" class="auth-alt" @click="goYandex">
-          <YandexLogo :size="16" />
-          Войти через Яндекс
-        </button>
-        <RouterLink to="/login" class="rg-switch">уже есть аккаунт</RouterLink>
-      </div>
+      <AppInfoBar v-if="error" tone="error" inline :message="error" />
 
       <!-- Согласие берётся плашкой после подтверждения почты (там его нужно
            прочитать и подтвердить галочками), здесь — только доступ к текстам:
@@ -93,9 +94,13 @@
     </form>
 
     <template #actions>
-      <button type="button" class="rg-submit" :disabled="loading" @click="handleRegister">
-        {{ loading ? 'создаём…' : 'создать' }}
-      </button>
+      <AppButton class="rg-yandex" @click="goYandex">
+        <YandexLogo :size="16" />
+        Через Яндекс ID
+      </AppButton>
+      <span class="rg-gap" />
+      <AppButton tag="router-link" to="/login" variant="text" label="Уже есть аккаунт" />
+      <AppButton variant="filled" :loading="loading" label="Создать аккаунт" @click="handleRegister" />
     </template>
 
     <template #overlays>
@@ -126,6 +131,8 @@ import AuthShell from '@/components/auth/AuthShell.vue'
 import AuthField from '@/components/auth/AuthField.vue'
 import AuthThemeTiles from '@/components/auth/AuthThemeTiles.vue'
 import AppDialog from '@/components/ui/AppDialog.vue'
+import AppButton from '@/components/ui/AppButton.vue'
+import AppInfoBar from '@/components/ui/AppInfoBar.vue'
 import AvatarCropper from '@/components/settings/AvatarCropper.vue'
 import YandexLogo from '@/components/common/YandexLogo.vue'
 
@@ -256,21 +263,22 @@ async function handleRegister() {
 .rg {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 22px;
 }
 
 .rg-main {
   display: grid;
-  grid-template-columns: 176px minmax(0, 1fr);
-  gap: 22px;
+  grid-template-columns: 160px minmax(0, 1fr);
+  gap: 24px;
   align-items: start;
 }
 
-/* ── Фото ─────────────────────────────────────────────────────── */
+/* ── Фото: углубление в листе, куда «кладут» снимок ───────────── */
 .rg-photo {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  align-items: center;
+  gap: 6px;
 }
 
 .rg-photo-tile {
@@ -282,26 +290,27 @@ async function handleRegister() {
   width: 100%;
   aspect-ratio: 1 / 1;
   padding: 12px;
-  border: 1px dashed color-mix(in oklch, var(--color-outline) 55%, transparent);
+  border: 1px solid var(--sk-edge);
   border-radius: var(--radius-lg);
-  background: color-mix(in oklch, var(--color-surface) 55%, transparent);
+  background: var(--sk-well-bg);
+  box-shadow: var(--sk-well-shadow);
   color: var(--color-text-dim);
   font: inherit;
   cursor: pointer;
   overflow: hidden;
-  transition: border-color 0.15s, background 0.15s;
+  transition: color 0.15s, border-color 0.15s;
 }
 
 .rg-photo-tile:hover {
-  border-color: var(--color-primary);
+  border-color: color-mix(in oklch, var(--color-primary) 45%, var(--sk-edge));
   color: var(--color-primary);
 }
 
-.rg-photo-tile .material-symbols-outlined { font-size: 44px; }
+.rg-photo-tile .material-symbols-outlined { font-size: 38px; }
 
 .rg-photo-hint {
-  font-size: 11.5px;
-  line-height: 1.35;
+  font-size: 12.5px;
+  font-weight: 600;
   text-align: center;
 }
 
@@ -312,56 +321,22 @@ async function handleRegister() {
   border-radius: var(--radius-md);
 }
 
-.rg-photo-btn {
-  height: 34px;
-  border: 1px solid var(--acrylic-border);
-  border-radius: var(--radius-full);
-  background: var(--glass-bg), color-mix(in oklch, var(--color-surface) 45%, transparent);
-  box-shadow: var(--glass-edge);
-  color: var(--color-text);
-  font: inherit;
-  font-size: 12.5px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: border-color 0.15s, color 0.15s;
-}
-
-.rg-photo-btn:hover { color: var(--color-primary); border-color: color-mix(in oklch, var(--color-primary) 30%, var(--acrylic-border)); }
-.rg-photo-btn.ghost { background: none; box-shadow: none; border-color: transparent; color: var(--color-text-dim); }
-
 /* ── Поля ─────────────────────────────────────────────────────── */
 .rg-fields {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 14px 18px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px 18px;
   align-items: start;
 }
 
 .rg-themes {
-  padding-top: 4px;
-  border-top: 1px solid color-mix(in oklch, var(--acrylic-border) 70%, transparent);
+  padding-top: 20px;
+  border-top: 1px solid var(--color-outline-dim);
 }
-
-.rg-alt {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 14px;
-  flex-wrap: wrap;
-}
-
-.rg-switch {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--color-text-dim);
-  text-decoration: none;
-}
-
-.rg-switch:hover { color: var(--color-primary); }
 
 .rg-legal {
-  margin: 12px 0 0;
-  font-size: 12px;
+  margin: 0;
+  font-size: 12.5px;
   line-height: 1.45;
   color: var(--color-text-dim);
   text-align: center;
@@ -372,31 +347,26 @@ async function handleRegister() {
   text-decoration: none;
 }
 
-.rg-submit {
-  height: 40px;
-  padding: 0 28px;
-  border: none;
-  border-radius: var(--radius-full);
-  background: var(--grad-primary);
-  color: var(--color-on-primary);
-  font: inherit;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  box-shadow: var(--shadow-sm);
-  transition: filter 0.15s, box-shadow 0.15s;
+.rg-gap { flex: 1 1 auto; }
+
+.rg-yandex :deep(.btn-label) {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
 }
 
-.rg-submit:hover:not(:disabled) { filter: brightness(1.06); box-shadow: var(--shadow-md); }
-.rg-submit:disabled { opacity: 0.55; cursor: not-allowed; }
-
-/* Раскладка считается от ширины ОКНА карточки, а не экрана. */
 @media (max-width: 760px) {
-  .rg-main { grid-template-columns: 1fr; }
-  .rg-photo { flex-direction: row; align-items: center; }
-  .rg-photo-tile { width: 92px; aspect-ratio: 1 / 1; flex-shrink: 0; }
-  .rg-photo-tile .material-symbols-outlined { font-size: 30px; }
+  .rg-main { grid-template-columns: minmax(0, 1fr); }
+  .rg-photo { flex-direction: row; justify-content: flex-start; gap: 12px; }
+  .rg-photo-tile { width: 88px; flex-shrink: 0; }
+  .rg-photo-tile .material-symbols-outlined { font-size: 28px; }
   .rg-photo-hint { display: none; }
-  .rg-fields { grid-template-columns: 1fr; }
+  .rg-fields { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Узкий подвал: главное действие — первым и во всю ширину. */
+@media (max-width: 560px) {
+  .rg-gap { display: none; }
+  :deep(.auth-foot) { flex-direction: column-reverse; align-items: stretch; }
 }
 </style>

@@ -8,15 +8,17 @@ type Ctx = context.Context
 // ScheduleRepository — персистентность расписаний, их структуры, занятий и шаринга.
 type ScheduleRepository interface {
 	// ── Расписания ──
-	// ListOwned — свои расписания (вкладка «Мои»).
-	ListOwned(ctx Ctx, ownerID int64) ([]*Schedule, error)
+	// ListOwned — расписания пространств человека: личные и всех его команд
+	// (вкладка «Мои»).
+	ListOwned(ctx Ctx, userID int64, companyIDs []int64) ([]*Schedule, error)
 	// ListShared — чужие расписания, открытые пользователю лично или его
 	// компании (вкладка «Поделились»), с именем владельца. Read-only.
 	ListShared(ctx Ctx, userID int64, companyIDs []int64) ([]*Schedule, error)
 	GetSchedule(ctx Ctx, id int64) (*Schedule, error)
-	// HasAccess — открыто ли расписание пользователю адресно (лично или его
-	// компании). Владение проверяется отдельно — по owner_id.
-	HasAccess(ctx Ctx, scheduleID, userID int64, companyIDs []int64) (bool, error)
+	// AccessOf — уровень человека к расписанию ("" — доступа нет).
+	AccessOf(ctx Ctx, scheduleID, userID int64, companyIDs []int64) (string, error)
+	// MoveSchedule — сменить пространство, хозяина и уровень участников.
+	MoveSchedule(ctx Ctx, id, ownerID int64, companyID *int64, teamAccess string) error
 	NextPosition(ctx Ctx, ownerID int64) (int, error)
 	CreateSchedule(ctx Ctx, s *Schedule) error
 	UpdateSchedule(ctx Ctx, s *Schedule) error

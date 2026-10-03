@@ -348,7 +348,7 @@ func (r *Repo) CountUnread(ctx context.Context, convIDs []int64, userID int64, s
 		hidden = ` AND ` + hiddenCol(side) + ` = FALSE`
 	}
 	// Явный OR sender IS NULL: иначе трёхзначная логика SQL молча теряет
-	// бот-сообщения (Грувик и автоответ техподдержки идут с sender NULL).
+	// бот-сообщения (автоответ техподдержки идёт с sender NULL).
 	rows, err := r.q(ctx).Query(ctx, `
 		SELECT conversation_id, COUNT(id) FROM messages
 		WHERE conversation_id = ANY($1)

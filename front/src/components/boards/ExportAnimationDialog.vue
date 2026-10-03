@@ -159,6 +159,6 @@ function close() {
 .ea-format-hint { font-size: 11px; opacity: 0.75; line-height: 1.3; }
 
 .ea-field { display: flex; flex-direction: column; gap: 6px; }
-.ea-label { font-size: 12px; color: var(--color-text-muted); }
-.ea-hint { margin: 0; font-size: 11px; color: var(--color-text-muted); line-height: 1.4; }
+.ea-label { font-size: 12px; color: var(--color-text-dim); }
+.ea-hint { margin: 0; font-size: 11px; color: var(--color-text-dim); line-height: 1.4; }
 </style>

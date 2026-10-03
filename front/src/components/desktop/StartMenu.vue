@@ -867,7 +867,7 @@ function onGroupMenuSelect(action) {
 
 .sm-tile:hover {
   border-color: color-mix(in oklch, var(--color-primary) 30%, var(--acrylic-border));
-  background: color-mix(in oklch, var(--color-primary) 6%, var(--glass-bg));
+  background: linear-gradient(color-mix(in oklch, var(--color-primary) 6%, transparent), color-mix(in oklch, var(--color-primary) 6%, transparent)), var(--glass-bg);
 }
 
 .sm-tile-badge,

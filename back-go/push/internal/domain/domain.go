@@ -29,9 +29,7 @@ const (
 	ChannelMessages = "messages"
 	ChannelTasks    = "tasks"
 	ChannelCalls    = "calls"
-	ChannelKudos    = "kudos"
 	ChannelPortal   = "portal"
-	ChannelPets     = "pets"
 	// ChannelReminders — сработавшие напоминания пользователя.
 	ChannelReminders = "reminders"
 	// ChannelForms — назначенные формы и напоминания об их сроке.

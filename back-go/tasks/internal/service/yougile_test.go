@@ -175,7 +175,7 @@ type ygEnv struct {
 }
 
 func newYGEnv() *ygEnv {
-	svc, store, _, _, bus, users := newTestService()
+	svc, store, _, bus, users := newTestService()
 	repo := newFakeYGRepo(store)
 	api := &fakeYGAPI{}
 	yg := NewYougile(YougileDeps{

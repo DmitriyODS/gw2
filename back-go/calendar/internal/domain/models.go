@@ -34,17 +34,27 @@ var FieldTypes = records.FieldTypes
 // Calendar — календарь компании: набор полей карточки + записи, привязанные
 // к дате/времени (см. Entry.EventAt).
 type Calendar struct {
-	ID        int64     `json:"id"`
-	CompanyID int64     `json:"company_id"`
-	Name      string    `json:"name"`
-	Position  int       `json:"position"`
-	CreatedBy *int64    `json:"created_by"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID int64 `json:"id"`
+	// OwnerID — хозяин личного календаря либо автор календаря команды.
+	OwnerID int64 `json:"owner_id"`
+	// CompanyID — пространство: nil — личное, иначе календарь команды. Оно же
+	// решает, чья квота платит за файлы записей.
+	CompanyID *int64 `json:"company_id"`
+	// TeamAccess — уровень рядовых участников команды (см. access.go).
+	TeamAccess string    `json:"team_access"`
+	Name       string    `json:"name"`
+	Position   int       `json:"position"`
+	CreatedBy  *int64    `json:"created_by"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
 	// Fields — заполняется при чтении одного календаря / списка с полями.
 	// Без omitempty: календарь без полей должен отдавать [] (а не отсутствующий
 	// ключ), иначе на клиенте cal.fields === undefined.
 	Fields []Field `json:"fields"`
+	// MyAccess — эффективный уровень спрашивающего; считает сервер.
+	MyAccess string `json:"my_access"`
+	// CompanyName — название команды-пространства (список группируется по ним).
+	CompanyName string `json:"company_name,omitempty"`
 }
 
 // Field — поле (часть карточки) записи. Config хранит настройки конкретного
@@ -90,11 +100,11 @@ type EntryScope struct {
 	Entry        *Entry
 	CalendarID   int64
 	CalendarName string
-	CompanyID    int64
+	CompanyID    int64 // 0 — личный календарь
 }
 
 // AgendaRow — запись вместе с названием своего календаря: выборка ближайших
-// событий компании сразу по всем календарям (живая плитка рабочего стола).
+// событий сразу по всем доступным календарям (живая плитка, экран «Сегодня»).
 type AgendaRow struct {
 	CalendarID   int64
 	CalendarName string

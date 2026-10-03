@@ -74,9 +74,12 @@ func (h *handlers) searchEntries(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"items": items})
 }
 
-/* agenda — невыполненные дела за период по всем доступным ежедневникам
-   (живая плитка рабочего стола). Период приходит от клиента: день считается в
-   его зоне, сервер её не знает. */
+/*
+agenda — невыполненные дела за период по всем доступным ежедневникам
+
+	(живая плитка рабочего стола). Период приходит от клиента: день считается в
+	его зоне, сервер её не знает.
+*/
 func (h *handlers) agenda(c *fiber.Ctx) error {
 	from, to := parseTime(c.Query("from")), parseTime(c.Query("to"))
 	if from == nil || to == nil {
@@ -117,6 +120,8 @@ func (h *handlers) getDiary(c *fiber.Ctx) error {
 func (h *handlers) createDiary(c *fiber.Ctx) error {
 	var body struct {
 		Name string `json:"name"`
+		// CompanyID — пространство: нет ключа или null — личное.
+		CompanyID *int64 `json:"company_id"`
 	}
 	parseBody(c, &body)
 	name := strings.TrimSpace(body.Name)
@@ -126,7 +131,9 @@ func (h *handlers) createDiary(c *fiber.Ctx) error {
 	if len([]rune(name)) > 120 {
 		return validationError(c, "Название слишком длинное (макс. 120)")
 	}
-	resp, err := h.eps.CreateDiary(c.Context(), endpoint.CreateDiaryReq{UserID: currentUserID(c), Name: name})
+	resp, err := h.eps.CreateDiary(c.Context(), endpoint.CreateDiaryReq{
+		UserID: currentUserID(c), CompanyID: body.CompanyID, Name: name,
+	})
 	if err != nil {
 		return h.respondError(c, err)
 	}
@@ -147,6 +154,53 @@ func (h *handlers) updateDiary(c *fiber.Ctx) error {
 	}
 	resp, err := h.eps.UpdateDiary(c.Context(), endpoint.UpdateDiaryReq{
 		UserID: currentUserID(c), ID: pathID(c), Name: name,
+	})
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(resp)
+}
+
+// moveDiary — сменить пространство ежедневника и уровень участников команды.
+func (h *handlers) moveDiary(c *fiber.Ctx) error {
+	var body struct {
+		CompanyID  *int64 `json:"company_id"`
+		TeamAccess string `json:"team_access"`
+	}
+	parseBody(c, &body)
+	resp, err := h.eps.MoveDiary(c.Context(), endpoint.MoveDiaryReq{
+		UserID: currentUserID(c), ID: pathID(c), CompanyID: body.CompanyID, TeamAccess: body.TeamAccess,
+	})
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(resp)
+}
+
+// myDay — скрытый «Мой день» (заводится при первом обращении): в него
+// раздел кладёт дела «во время».
+func (h *handlers) myDay(c *fiber.Ctx) error {
+	resp, err := h.eps.MyDay(c.Context(), endpoint.UserReq{UserID: currentUserID(c)})
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(resp)
+}
+
+/*
+today — экран «Сегодня»: дела по сегодня, «Потом» и число закрытых за день.
+
+	date — дата дня, from/to — его границы моментами времени: зона клиента
+	серверу неизвестна.
+*/
+func (h *handlers) today(c *fiber.Ctx) error {
+	day := parseTime(c.Query("date"))
+	from, to := parseTime(c.Query("from")), parseTime(c.Query("to"))
+	if day == nil || from == nil || to == nil {
+		return validationError(c, "Укажите день (date, from, to)")
+	}
+	resp, err := h.eps.Today(c.Context(), endpoint.TodayReq{
+		UserID: currentUserID(c), Day: *day, From: *from, To: *to,
 	})
 	if err != nil {
 		return h.respondError(c, err)
@@ -183,20 +237,26 @@ func (h *handlers) getEntry(c *fiber.Ctx) error {
 	return c.JSON(resp)
 }
 
-// entryBody — тело записи: день + опциональное время + название/описание.
+// entryBody — тело записи: день (пустой — без срока, только в «Моём дне») +
+// опциональное время + название/описание + вложения (нет ключа — не трогать).
 type entryBody struct {
-	EntryDate   string `json:"entry_date"`
-	StartMin    *int   `json:"start_min"`
-	EndMin      *int   `json:"end_min"`
-	Title       string `json:"title"`
-	Description string `json:"description"`
+	EntryDate   *string              `json:"entry_date"`
+	StartMin    *int                 `json:"start_min"`
+	EndMin      *int                 `json:"end_min"`
+	Title       string               `json:"title"`
+	Description string               `json:"description"`
+	Attachments *[]domain.Attachment `json:"attachments"`
 }
 
 func (b entryBody) toInput(c *fiber.Ctx) (service.EntryInput, bool) {
-	at := parseTime(b.EntryDate)
-	if at == nil {
-		_ = validationError(c, "Укажите дату записи")
-		return service.EntryInput{}, false
+	var date time.Time
+	if b.EntryDate != nil && strings.TrimSpace(*b.EntryDate) != "" {
+		at := parseTime(*b.EntryDate)
+		if at == nil {
+			_ = validationError(c, "Не удалось разобрать дату записи")
+			return service.EntryInput{}, false
+		}
+		date = *at
 	}
 	title := strings.TrimSpace(b.Title)
 	if title == "" {
@@ -208,8 +268,9 @@ func (b entryBody) toInput(c *fiber.Ctx) (service.EntryInput, bool) {
 		return service.EntryInput{}, false
 	}
 	return service.EntryInput{
-		Date: *at, StartMin: clampMin(b.StartMin), EndMin: clampMin(b.EndMin),
+		Date: date, StartMin: clampMin(b.StartMin), EndMin: clampMin(b.EndMin),
 		Title: title, Description: strings.TrimSpace(b.Description),
+		Attachments: b.Attachments,
 	}, true
 }
 

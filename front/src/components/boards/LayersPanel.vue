@@ -448,7 +448,7 @@ function marks(l) {
   border-radius: var(--radius-lg);
   /* Плотная подложка, как у панели свойств: под панелью рисунок. */
   background: var(--color-surface);
-  box-shadow: var(--shadow-2);
+  box-shadow: var(--shadow-md);
 }
 
 .lp-head { display: flex; align-items: center; gap: 6px; }
@@ -530,5 +530,5 @@ function marks(l) {
 .lp-icon .material-symbols-outlined { font-size: 17px; }
 .lp-caret .material-symbols-outlined { font-size: 18px; }
 
-.lp-hint { margin: 0; font-size: 11px; color: var(--color-text-muted); line-height: 1.4; }
+.lp-hint { margin: 0; font-size: 11px; color: var(--color-text-dim); line-height: 1.4; }
 </style>

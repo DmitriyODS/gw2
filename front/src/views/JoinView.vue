@@ -1,6 +1,6 @@
 <template>
   <AuthShell
-    :title="loading ? 'подключаем к компании' : 'приглашение недоступно'"
+    :title="loading ? 'Подключаем к компании' : 'Приглашение недоступно'"
     :subtitle="loading ? 'Секунду, оформляем членство.' : message"
     size="sm"
   >
@@ -11,8 +11,8 @@
         tag="router-link"
         to="/home"
         variant="filled"
-        label="на главную"
-        class="jn-wide"
+        label="На главную"
+        size="lg" block
       />
     </div>
   </AuthShell>
@@ -54,10 +54,4 @@ onMounted(async () => {
   gap: 12px;
 }
 
-.jn-wide {
-  width: 100%;
-  justify-content: center;
-  height: 44px;
-  text-decoration: none;
-}
 </style>

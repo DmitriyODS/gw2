@@ -9,7 +9,7 @@ import (
 )
 
 func TestTagsCRUDAndAssign(t *testing.T) {
-	svc, store, _, _, bus, _ := newTestService()
+	svc, store, _, bus, _ := newTestService()
 	ctx := context.Background()
 
 	tag, err := svc.CreateTag(ctx, 1, "Срочно", "red")

@@ -110,8 +110,6 @@ type AuthService interface {
 	ImportCompany(ctx context.Context, actor *domain.User, archive []byte, name string) (*TransferResult, error)
 	GetWeekendSettings(ctx context.Context, actor *domain.User, companyID int64) (*dto.WeekendSettings, error)
 	UpdateWeekendSettings(ctx context.Context, actor *domain.User, companyID int64, days []int) (*dto.WeekendSettings, error)
-	GetGrooveSettings(ctx context.Context, actor *domain.User, companyID int64) (*dto.GrooveSettings, error)
-	UpdateGrooveSettings(ctx context.Context, actor *domain.User, companyID int64, enabled bool) (*dto.GrooveSettings, error)
 
 	ExportBackup(ctx context.Context, sections []string) ([]byte, error)
 	ImportBackup(ctx context.Context, zipBytes []byte, sections []string) error
@@ -279,9 +277,16 @@ func (s *Service) session(ctx context.Context, u *domain.User, activeCompanyID *
 	return sess, nil
 }
 
-// startSession — выдать сессию после успешной аутентификации (login/register/
-// change-default). Супер-админ и пользователь без компаний входят без активной
-// компании; одна компания — автоактивна; несколько — этап выбора (login-gate).
+/*
+startSession — выдать сессию после успешной аутентификации (login/register/
+change-default).
+
+	Шага «выберите компанию» при входе нет: команда больше не глобальный режим
+	приложения — личным пространством и инструментами пользуются без неё, а
+	переключают команду внутри командных разделов (задачи, портал, сотрудники).
+	Поэтому активной становится первая включённая команда, а человек без команд
+	и супер-админ входят без активной.
+*/
 func (s *Service) startSession(ctx context.Context, u *domain.User) (*dto.Session, error) {
 	if u.IsSuperAdmin {
 		return s.session(ctx, u, nil, true)
@@ -290,31 +295,10 @@ func (s *Service) startSession(ctx context.Context, u *domain.User) (*dto.Sessio
 	if err != nil {
 		return nil, err
 	}
-	/* Ни одной компании — заводим личную и входим сразу в неё: к компании
-	   привязана вся работа (задачи, юниты, статистика), и без неё человек
-	   попадал бы в приложение, где половина разделов просит «выберите
-	   компанию». Не получилось завести — входим как раньше, без активной. */
-	if len(memberships) == 0 {
-		s.EnsurePersonalCompany(ctx, u)
-		if memberships, err = s.repo.ListMemberships(ctx, u.ID); err != nil {
-			return nil, err
+	for _, m := range memberships {
+		if m.Company != nil && m.Company.IsActive {
+			return s.session(ctx, u, &m.CompanyID, true)
 		}
 	}
-	switch len(memberships) {
-	case 0:
-		return s.session(ctx, u, nil, true)
-	case 1:
-		return s.session(ctx, u, &memberships[0].CompanyID, true)
-	default:
-		selectTok, err := s.tokens.SelectToken(u.ID)
-		if err != nil {
-			return nil, err
-		}
-		return &dto.Session{
-			UserID:                u.ID,
-			NeedsCompanySelection: true,
-			SelectToken:           selectTok,
-			Companies:             dto.NewMemberships(memberships),
-		}, nil
-	}
+	return s.session(ctx, u, nil, true)
 }

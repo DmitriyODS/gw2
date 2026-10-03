@@ -25,21 +25,21 @@ const entriesLimit = 2000
 
 // ListEntries — записи календаря за диапазон дат (для просмотра дня/недели/
 // месяца) с опциональным сквозным поиском.
-func (s *Service) ListEntries(ctx context.Context, companyID, calendarID int64, p EntryListParams) (*EntryList, error) {
-	if _, err := s.requireCalendar(ctx, companyID, calendarID); err != nil {
+func (s *Service) ListEntries(ctx context.Context, userID, calendarID int64, p EntryListParams) (*EntryList, error) {
+	if _, err := s.requireCalendar(ctx, userID, calendarID, domain.AccessView); err != nil {
 		return nil, err
 	}
 	return s.listEntriesByCalendar(ctx, calendarID, p)
 }
 
-// Agenda — ближайшие события всех календарей компании за период (живая плитка
-// рабочего стола). Заголовок карточки считает сервер: поля календарей грузим
-// одним батчем, поэтому N+1 нет ни по записям, ни по структуре.
-func (s *Service) Agenda(ctx context.Context, companyID int64, from, to time.Time, limit int) (*domain.Agenda, error) {
+// Agenda — ближайшие события всех доступных календарей за период (живая
+// плитка, экран «Сегодня»). Заголовок карточки считает сервер: поля календарей
+// грузим одним батчем, поэтому N+1 нет ни по записям, ни по структуре.
+func (s *Service) Agenda(ctx context.Context, userID int64, from, to time.Time, limit int) (*domain.Agenda, error) {
 	if limit <= 0 || limit > 50 {
 		limit = 10
 	}
-	rows, total, err := s.repo.CompanyEntries(ctx, companyID, from, to, limit)
+	rows, total, err := s.repo.AgendaEntries(ctx, userID, from, to, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -102,10 +102,15 @@ func (s *Service) listEntriesByCalendar(ctx context.Context, calendarID int64, p
 	return &EntryList{Items: items}, nil
 }
 
-func (s *Service) GetEntry(ctx context.Context, companyID, calendarID, entryID int64) (*domain.Entry, error) {
-	if _, err := s.requireCalendar(ctx, companyID, calendarID); err != nil {
+func (s *Service) GetEntry(ctx context.Context, userID, calendarID, entryID int64) (*domain.Entry, error) {
+	if _, err := s.requireCalendar(ctx, userID, calendarID, domain.AccessView); err != nil {
 		return nil, err
 	}
+	return s.entryOf(ctx, calendarID, entryID)
+}
+
+// entryOf — запись именно этого календаря.
+func (s *Service) entryOf(ctx context.Context, calendarID, entryID int64) (*domain.Entry, error) {
 	e, err := s.repo.GetEntry(ctx, entryID)
 	if err != nil {
 		return nil, err
@@ -116,8 +121,8 @@ func (s *Service) GetEntry(ctx context.Context, companyID, calendarID, entryID i
 	return e, nil
 }
 
-func (s *Service) CreateEntry(ctx context.Context, companyID, calendarID, userID int64, eventAt time.Time, data map[string]any) (*domain.Entry, error) {
-	if _, err := s.requireCalendar(ctx, companyID, calendarID); err != nil {
+func (s *Service) CreateEntry(ctx context.Context, userID, calendarID int64, eventAt time.Time, data map[string]any) (*domain.Entry, error) {
+	if _, err := s.requireCalendar(ctx, userID, calendarID, domain.AccessEdit); err != nil {
 		return nil, err
 	}
 	if eventAt.IsZero() {
@@ -135,12 +140,15 @@ func (s *Service) CreateEntry(ctx context.Context, companyID, calendarID, userID
 	if err := s.repo.CreateEntry(ctx, e, buildSearchText(fields, clean)); err != nil {
 		return nil, err
 	}
-	s.bus.Publish(ctx, "entry:created", companyRoom(companyID), entryPayload(companyID, e))
+	s.publish(ctx, calendarID, "entry:created", entryPayload(e))
 	return e, nil
 }
 
-func (s *Service) UpdateEntry(ctx context.Context, companyID, calendarID, entryID int64, eventAt time.Time, data map[string]any) (*domain.Entry, error) {
-	e, err := s.GetEntry(ctx, companyID, calendarID, entryID)
+func (s *Service) UpdateEntry(ctx context.Context, userID, calendarID, entryID int64, eventAt time.Time, data map[string]any) (*domain.Entry, error) {
+	if _, err := s.requireCalendar(ctx, userID, calendarID, domain.AccessEdit); err != nil {
+		return nil, err
+	}
+	e, err := s.entryOf(ctx, calendarID, entryID)
 	if err != nil {
 		return nil, err
 	}
@@ -161,28 +169,33 @@ func (s *Service) UpdateEntry(ctx context.Context, companyID, calendarID, entryI
 	}
 	e.EventAt = at
 	e.Data = clean
-	s.bus.Publish(ctx, "entry:updated", companyRoom(companyID), entryPayload(companyID, e))
+	s.publish(ctx, calendarID, "entry:updated", entryPayload(e))
 	return e, nil
 }
 
-func (s *Service) DeleteEntry(ctx context.Context, companyID, calendarID, entryID int64) error {
-	e, err := s.GetEntry(ctx, companyID, calendarID, entryID)
+func (s *Service) DeleteEntry(ctx context.Context, userID, calendarID, entryID int64) error {
+	cal, err := s.requireCalendar(ctx, userID, calendarID, domain.AccessEdit)
+	if err != nil {
+		return err
+	}
+	e, err := s.entryOf(ctx, calendarID, entryID)
 	if err != nil {
 		return err
 	}
 	if err := s.repo.DeleteEntry(ctx, entryID); err != nil {
 		return err
 	}
-	s.removeEntryFiles(ctx, companyID, e)
-	s.bus.Publish(ctx, "entry:deleted", companyRoom(companyID), map[string]any{
-		"id": entryID, "calendar_id": calendarID, "company_id": companyID,
+	s.removeEntryFiles(ctx, cal, e)
+	s.publish(ctx, calendarID, "entry:deleted", map[string]any{
+		"id": entryID, "calendar_id": calendarID,
 	})
 	return nil
 }
 
 // DeleteEntries — массовое удаление выбранных записей.
-func (s *Service) DeleteEntries(ctx context.Context, companyID, calendarID int64, ids []int64) (int64, error) {
-	if _, err := s.requireCalendar(ctx, companyID, calendarID); err != nil {
+func (s *Service) DeleteEntries(ctx context.Context, userID, calendarID int64, ids []int64) (int64, error) {
+	cal, err := s.requireCalendar(ctx, userID, calendarID, domain.AccessEdit)
+	if err != nil {
 		return 0, err
 	}
 	if len(ids) == 0 {
@@ -194,15 +207,15 @@ func (s *Service) DeleteEntries(ctx context.Context, companyID, calendarID int64
 	if err != nil {
 		return 0, err
 	}
-	s.removeEntryFiles(ctx, companyID, entries...)
-	s.bus.Publish(ctx, "entry:bulk-deleted", companyRoom(companyID), map[string]any{
-		"ids": ids, "calendar_id": calendarID, "company_id": companyID,
+	s.removeEntryFiles(ctx, cal, entries...)
+	s.publish(ctx, calendarID, "entry:bulk-deleted", map[string]any{
+		"ids": ids, "calendar_id": calendarID,
 	})
 	return n, nil
 }
 
 // removeEntryFiles — удалить из хранилища файлы/картинки удаляемых записей.
-func (s *Service) removeEntryFiles(ctx context.Context, companyID int64, entries ...*domain.Entry) {
+func (s *Service) removeEntryFiles(ctx context.Context, cal *domain.Calendar, entries ...*domain.Entry) {
 	var paths []string
 	for _, e := range entries {
 		if e == nil {
@@ -215,7 +228,8 @@ func (s *Service) removeEntryFiles(ctx context.Context, companyID int64, entries
 		}
 	}
 	if len(paths) > 0 {
-		s.files.RemoveFor(ctx, 0, companyID, paths)
+		userID, companyID := quotaScope(cal)
+		s.files.RemoveFor(ctx, userID, companyID, paths)
 	}
 }
 
@@ -251,9 +265,9 @@ func fieldInfos(fields []domain.Field) []records.FieldInfo {
 	return out
 }
 
-func entryPayload(companyID int64, e *domain.Entry) map[string]any {
+func entryPayload(e *domain.Entry) map[string]any {
 	return map[string]any{
-		"id": e.ID, "calendar_id": e.CalendarID, "company_id": companyID,
+		"id": e.ID, "calendar_id": e.CalendarID,
 		"event_at": e.EventAt, "data": e.Data, "created_by": e.CreatedBy,
 		"created_at": e.CreatedAt, "updated_at": e.UpdatedAt,
 	}

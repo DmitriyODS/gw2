@@ -142,8 +142,8 @@ function openBoard(b) {
 async function createAndOpen() {
   try {
     openBoard(await store.createBoard('Новая доска'))
-  } catch {
-    notify.error('Не удалось создать доску')
+  } catch (err) {
+    notify.error(err?.message || 'Не удалось создать доску')
   }
 }
 
@@ -163,6 +163,14 @@ function onCrumb(index) {
 function openBoardMenu(b, e) {
   menuBoard.value = b
   menu.value = { visible: true, x: e.clientX, y: e.clientY, kind: 'board' }
+}
+
+/** Та же менюшка от кнопки «⋯» на плитке — правый клик знают не все, а на
+    сенсорном экране его нет вовсе. */
+function openBoardMenuAt(b, e) {
+  const r = e.currentTarget.getBoundingClientRect()
+  menuBoard.value = b
+  menu.value = { visible: true, x: r.right, y: r.bottom + 4, kind: 'board' }
 }
 
 function onFolderContext({ node, event }) {
@@ -192,7 +200,12 @@ function boardMenuItems(b) {
       { label: 'Поделиться…', icon: 'share', action: 'share' },
       { divider: true },
       { label: b.archived ? 'Вернуть из архива' : 'В архив', icon: 'inventory_2', action: 'archive' },
-    ] : []),
+    ] : [
+      // Чужую доску адресат раскладывает по СВОИМ папкам и прячет в СВОЙ
+      // архив — у владельца при этом ничего не меняется.
+      { label: 'Переместить к себе…', icon: 'drive_file_move', action: 'move' },
+      { label: b.archived ? 'Вернуть из архива' : 'В архив (только у меня)', icon: 'inventory_2', action: 'archive' },
+    ]),
     { label: 'Скачать', icon: 'download', children: BOARD_EXPORT_ITEMS },
     ...(mine ? [
       { divider: true },
@@ -244,15 +257,18 @@ function boardAction(action) {
   if (format) return void downloadBoard(b, format)
   switch (action) {
     case 'open': openBoard(b); break
-    case 'pin': store.togglePinned(b); break
-    case 'archive': store.toggleArchived(b); break
-    case 'copy': store.copyBoard(b.id).catch(() => notify.error('Не удалось дублировать доску')); break
+    case 'pin': store.togglePinned(b).catch(failed('Не удалось закрепить доску')); break
+    case 'archive': store.toggleArchived(b).catch(failed('Не удалось перенести доску')); break
+    case 'copy': store.copyBoard(b.id).catch(failed('Не удалось дублировать доску')); break
     case 'move': moveSubject.value = { type: 'board', id: b.id }; moveOpen.value = true; break
     case 'share': shareSubject.value = { type: 'board', id: b.id }; shareOpen.value = true; break
     case 'delete': confirmTarget.value = { kind: 'board', item: b }; break
     default: break
   }
 }
+
+// Ошибка сервера бывает содержательной (лимит тарифа, нет места) — её и показываем.
+const failed = (fallback) => (err) => notify.error(err?.message || fallback)
 
 function folderAction(action) {
   const f = menuFolder.value
@@ -286,8 +302,8 @@ async function confirmDelete() {
       await store.removeFolder(t.item.id)
       notify.success('Папка удалена')
     }
-  } catch {
-    notify.error('Не удалось удалить')
+  } catch (err) {
+    notify.error(err?.message || 'Не удалось удалить')
   }
 }
 
@@ -307,10 +323,10 @@ async function onImportPick(e) {
   let ok = 0
   for (const file of files) {
     try {
-      await api.importBoard(file, store.activeFolderId)
+      await api.importBoard(file, store.ownFolderId)
       ok += 1
-    } catch {
-      notify.error(`Не удалось импортировать «${file.name}»`)
+    } catch (err) {
+      notify.error(err?.message || `Не удалось импортировать «${file.name}»`)
     }
   }
   if (ok) {
@@ -379,19 +395,23 @@ async function onImportPick(e) {
         @menu="toggle"
         @command="onCommand"
       >
-        <template #subhead>
+        <!-- Поиск — слотом шапки: в тесной панели сворачивается в лупу при
+             названии и не отнимает строку у крошек. -->
+        <template #search="{ narrow: tight }">
+          <SearchField
+            v-model="searchDraft"
+            placeholder="Поиск по названиям и надписям"
+            :collapsed="tight"
+            @update:model-value="onSearchInput"
+          />
+        </template>
+        <template v-if="store.path.length" #subhead>
           <FolderBreadcrumbs
             :items="store.path"
             :root-label="crumbRootLabel"
             root-icon="gesture"
             class="bv-crumbs"
             @navigate="onCrumb"
-          />
-          <SearchField
-            v-model="searchDraft"
-            placeholder="Поиск по названиям и надписям"
-            :collapsible="false"
-            @update:model-value="onSearchInput"
           />
         </template>
 
@@ -449,9 +469,21 @@ async function onImportPick(e) {
           :class="{ 'is-pinned': b.pinned_at }"
           :style="b.color ? { '--card-tint': `var(--tag-${b.color}-surface)` } : null"
           :title="b.title || 'Без названия'"
+          tabindex="0"
+          role="link"
           @click="openBoard(b)"
+          @keydown.enter="openBoard(b)"
           @contextmenu.prevent.stop="openBoardMenu(b, $event)"
         >
+          <AppButton
+            class="bv-more"
+            variant="icon"
+            size="sm"
+            icon="more_vert"
+            label="Действия с доской"
+            title="Действия с доской"
+            @click.stop="openBoardMenuAt(b, $event)"
+          />
           <div class="bv-thumb">
             <img v-if="b.preview_url" decoding="async" :src="b.preview_url" :alt="b.title || 'Доска'" loading="lazy" />
             <span v-else class="material-symbols-outlined bv-thumb-ph">gesture</span>
@@ -539,6 +571,7 @@ async function onImportPick(e) {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  container-type: inline-size;
 }
 
 /* Тело раздела идёт flush (обои крошек тянутся во всю ширину), поэтому поля
@@ -569,10 +602,26 @@ async function onImportPick(e) {
 
 .bv-card:hover {
   border-color: color-mix(in oklch, var(--color-primary) 30%, var(--glass-edge));
-  box-shadow: var(--shadow-2);
+  box-shadow: var(--shadow-md);
 }
 
 .bv-card.is-pinned { border-color: var(--color-primary); }
+.bv-card:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+
+/* «⋯» поверх эскиза: на мыши проявляется под курсором, на сенсорном экране
+   видна всегда — наведения там нет. */
+article.bv-card { position: relative; }
+.bv-more {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 1;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.bv-card:hover .bv-more,
+.bv-card:focus-within .bv-more { opacity: 1; }
+@media (hover: none) { .bv-more { opacity: 1; } }
 
 .bv-thumb {
   display: flex;
@@ -584,7 +633,7 @@ async function onImportPick(e) {
 }
 
 .bv-thumb img { width: 100%; height: 100%; object-fit: cover; }
-.bv-thumb-ph { font-size: 40px; color: var(--color-text-muted); }
+.bv-thumb-ph { font-size: 40px; color: var(--color-text-dim); }
 .bv-folder-ic { font-size: 44px; color: var(--color-primary); }
 
 .bv-card-body { display: flex; flex: 0 0 auto; flex-direction: column; gap: 2px; padding: 7px 10px 9px; }
@@ -607,19 +656,22 @@ async function onImportPick(e) {
   gap: 4px;
   min-width: 0;
   font-size: 11px;
-  color: var(--color-text-muted);
+  color: var(--color-text-dim);
   white-space: nowrap;
   overflow: hidden;
 }
 
 .bv-owner { overflow: hidden; text-overflow: ellipsis; }
-.bv-chip { padding: 1px 8px; border-radius: 999px; background: var(--color-surface-variant); }
-.bv-badge { font-size: 14px; color: var(--color-text-muted); }
+.bv-chip { padding: 1px 8px; border-radius: var(--radius-full); background: var(--color-surface-variant); }
+.bv-badge { font-size: 14px; color: var(--color-text-dim); }
 .bv-empty { margin: auto; }
 
-@media (max-width: 900px) {
-  .bv { grid-template-columns: 1fr; padding: 8px; }
-  .bv-side { display: none; }
-  .bv-grid { grid-template-columns: repeat(auto-fill, minmax(min(140px, 100%), 1fr)); }
+/* Плитки мельчают по ширине САМОГО списка (окно бывает узким и на большом
+   экране); @media — дубль для старого WebView без @container. */
+@container (max-width: 560px) {
+  .bv-grid { grid-template-columns: repeat(auto-fill, minmax(min(140px, 100%), 1fr)); padding: 12px; }
+}
+@media (max-width: 560px) {
+  .bv-grid { grid-template-columns: repeat(auto-fill, minmax(min(140px, 100%), 1fr)); padding: 12px; }
 }
 </style>

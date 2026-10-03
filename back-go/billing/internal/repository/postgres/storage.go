@@ -137,6 +137,83 @@ func (r *Repo) RemoveFiles(ctx context.Context, userID int64, keys []string) (in
 	return freed, rows.Err()
 }
 
+/*
+MoveFiles — файлы сменили плательщика.
+
+	Журнал и счётчик меняются одной транзакцией: место снимается с прежних
+	владельцев (их знает журнал) по сервисам и прибавляется новому. Строки
+	блокируются FOR UPDATE — параллельное удаление того же файла иначе сняло бы
+	его размер уже с нового владельца, а счётчик прежнего остался бы раздутым.
+*/
+func (r *Repo) MoveFiles(ctx context.Context, userID, companyID int64, keys []string) (int64, error) {
+	if len(keys) == 0 {
+		return 0, nil
+	}
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	rows, err := tx.Query(ctx, `
+		SELECT user_id, service, sum(size_bytes), count(*)
+		  FROM (SELECT user_id, service, size_bytes FROM billing_storage_files
+		         WHERE storage_key = ANY($1) AND user_id <> $2
+		         FOR UPDATE) f
+		 GROUP BY user_id, service`, keys, userID)
+	if err != nil {
+		return 0, err
+	}
+	type share struct {
+		user    int64
+		service string
+		bytes   int64
+	}
+	var (
+		shares []share
+		moved  int64
+	)
+	for rows.Next() {
+		var s share
+		var n int64
+		if err := rows.Scan(&s.user, &s.service, &s.bytes, &n); err != nil {
+			rows.Close()
+			return 0, err
+		}
+		shares = append(shares, s)
+		moved += n
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return 0, err
+	}
+
+	var company any
+	if companyID > 0 {
+		company = companyID
+	}
+	if _, err := tx.Exec(ctx, `
+		UPDATE billing_storage_files SET user_id = $2, company_id = $3
+		 WHERE storage_key = ANY($1)`, keys, userID, company); err != nil {
+		return 0, err
+	}
+	for _, s := range shares {
+		if _, err := tx.Exec(ctx, `
+			UPDATE billing_storage_usage SET bytes = GREATEST(bytes - $3, 0), updated_at = now()
+			 WHERE user_id = $1 AND service = $2`, s.user, s.service, s.bytes); err != nil {
+			return 0, err
+		}
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO billing_storage_usage (user_id, service, bytes) VALUES ($1, $2, $3)
+			ON CONFLICT (user_id, service) DO UPDATE
+			   SET bytes = billing_storage_usage.bytes + $3, updated_at = now()`,
+			userID, s.service, s.bytes); err != nil {
+			return 0, err
+		}
+	}
+	return moved, tx.Commit(ctx)
+}
+
 func (r *Repo) TopFiles(ctx context.Context, userID int64, service string, limit int) ([]*domain.StoredFile, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT storage_key, service, COALESCE(company_id, 0), file_name, size_bytes,

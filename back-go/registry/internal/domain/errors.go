@@ -24,8 +24,12 @@ var (
 
 	// Права. Существование чужого реестра не раскрываем — на чтение отвечаем
 	// 404, отказ в правке различаем только тому, кто реестр уже видит.
-	ErrForbidden  = NewError("FORBIDDEN", "Недостаточно прав для этого действия", 403)
-	ErrOwnerOnly  = NewError("FORBIDDEN", "Это может сделать только владелец реестра", 403)
+	ErrForbidden = NewError("FORBIDDEN", "Недостаточно прав для этого действия", 403)
+	ErrOwnerOnly = NewError("FORBIDDEN", "Это может сделать только владелец реестра", 403)
+	// ErrNotTeamMember — положить реестр можно только в свою команду.
+	ErrNotTeamMember = NewError("NOT_TEAM_MEMBER", "Вы не состоите в этой команде", 403)
+	// ErrMoveFailed — не удалось перенести учёт файлов, и реестр остался на месте.
+	ErrMoveFailed = NewError("MOVE_FAILED", "Не удалось перенести реестр, попробуйте ещё раз", 503)
 	ErrShareSelf  = NewError("VALIDATION", "Реестр и так ваш", 400)
 	ErrNoAudience = NewError("VALIDATION", "Не выбрано, с кем поделиться", 400)
 

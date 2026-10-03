@@ -121,18 +121,9 @@ func (s *Service) TrackStorage(ctx domain.Ctx, userID, companyID int64, service 
 	if service == "" {
 		return 0, domain.ErrValidation
 	}
-	ownerID := userID
-	if companyID > 0 {
-		owner, err := s.Identity.CompanyOwner(ctx, companyID)
-		if err != nil {
-			return 0, err
-		}
-		if owner > 0 {
-			ownerID = owner
-		}
-	}
-	if ownerID <= 0 {
-		return 0, domain.ErrValidation
+	ownerID, err := s.quotaOwner(ctx, userID, companyID)
+	if err != nil {
+		return 0, err
 	}
 
 	// Сначала снимаем удалённое — журнал знает их размеры, поэтому сервису
@@ -158,6 +149,36 @@ func (s *Service) TrackStorage(ctx domain.Ctx, userID, companyID int64, service 
 		return s.Storage.Total(ctx, ownerID)
 	}
 	return s.Storage.Track(ctx, ownerID, service, delta)
+}
+
+// MoveStorage — файлы сменили плательщика (вещь переехала между личным
+// пространством и командой). Новый владелец квоты считается так же, как в
+// TrackStorage; остаток не проверяется — файлы уже лежат в хранилище.
+func (s *Service) MoveStorage(ctx domain.Ctx, userID, companyID int64, keys []string) (int64, error) {
+	ownerID, err := s.quotaOwner(ctx, userID, companyID)
+	if err != nil {
+		return 0, err
+	}
+	return s.Storage.MoveFiles(ctx, ownerID, companyID, keys)
+}
+
+// quotaOwner — чья квота платит: создатель команды для её файлов, иначе сам
+// человек.
+func (s *Service) quotaOwner(ctx domain.Ctx, userID, companyID int64) (int64, error) {
+	ownerID := userID
+	if companyID > 0 {
+		owner, err := s.Identity.CompanyOwner(ctx, companyID)
+		if err != nil {
+			return 0, err
+		}
+		if owner > 0 {
+			ownerID = owner
+		}
+	}
+	if ownerID <= 0 {
+		return 0, domain.ErrValidation
+	}
+	return ownerID, nil
 }
 
 // CheckStorage — влезает ли файл в квоту владельца (companyID>0 — квота

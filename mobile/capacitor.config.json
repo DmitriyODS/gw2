@@ -2,7 +2,7 @@
   "appId": "com.kodass.groovework",
   "appName": "Groove Work",
   "webDir": "www",
-  "backgroundColor": "#1a1c1e",
+  "backgroundColor": "#242221",
   "appendUserAgent": "GrooveWorkApp",
   "server": {
     "url": "https://gw.kodass.ru/home",

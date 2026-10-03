@@ -108,11 +108,6 @@ export default defineConfig({
         target: 'http://localhost:8092',
         changeOrigin: true
       },
-      // Питомцы-грувики — petsvc.
-      '/api/pets': {
-        target: 'http://localhost:8094',
-        changeOrigin: true
-      },
       // Пуш-уведомления — pushsvc (регистрация токенов устройств).
       '/api/push': {
         target: 'http://localhost:8097',

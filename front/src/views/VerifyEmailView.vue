@@ -1,6 +1,6 @@
 <template>
   <AuthShell
-    :title="verifying ? 'подтверждаем почту' : 'подтверждение почты'"
+    :title="verifying ? 'Подтверждаем почту' : 'Подтверждение почты'"
     :subtitle="verifying ? 'Секунду, проверяем ссылку.' : `Мы отправили код на ${email || 'указанный адрес'}.`"
     size="sm"
     back="/login"
@@ -9,7 +9,7 @@
       <form class="auth-form" @submit.prevent="submitCode">
         <AuthField
           v-model="code"
-          label="код из письма"
+          label="Код из письма"
           placeholder="——————"
           inputmode="numeric"
           autocomplete="one-time-code"
@@ -17,21 +17,32 @@
           :disabled="loading"
           center
         />
-        <p v-if="error" class="auth-error">{{ error }}</p>
-        <button type="submit" class="auth-submit" :disabled="loading || code.length < 6">
-          {{ loading ? 'проверяем…' : 'подтвердить' }}
-        </button>
+        <AppInfoBar v-if="error" tone="error" inline :message="error" />
+        <AppButton
+          type="submit"
+          variant="filled"
+          size="lg"
+          block
+          :loading="loading"
+          :disabled="code.length < 6"
+          label="Подтвердить"
+        />
       </form>
 
-      <p class="ve-resend">
+      <p class="auth-switch ve-resend">
         Не пришло письмо?
-        <button type="button" :disabled="cooldown > 0 || !email" @click="resend">
-          {{ cooldown > 0 ? `отправить ещё раз (${cooldown})` : 'отправить ещё раз' }}
-        </button>
+        <AppButton
+          variant="text"
+          size="sm"
+          :disabled="cooldown > 0 || !email"
+          :label="cooldown > 0 ? `Отправить ещё раз (${cooldown})` : 'Отправить ещё раз'"
+          @click="resend"
+        />
       </p>
     </template>
 
-    <p v-else-if="error" class="auth-error">{{ error }}</p>
+    <BrandLoader v-else-if="!error" :size="64" class="ve-loader" />
+    <AppInfoBar v-else tone="error" inline :message="error" />
   </AuthShell>
 </template>
 
@@ -42,6 +53,9 @@ import { useAuthStore } from '@/stores/auth.js'
 import { connectSocket } from '@/socket/index.js'
 import { flushPendingAvatar } from '@/utils/pendingAvatar.js'
 import AuthShell from '@/components/auth/AuthShell.vue'
+import AppButton from '@/components/ui/AppButton.vue'
+import AppInfoBar from '@/components/ui/AppInfoBar.vue'
+import BrandLoader from '@/components/common/BrandLoader.vue'
 import AuthField from '@/components/auth/AuthField.vue'
 
 const route = useRoute()
@@ -115,25 +129,6 @@ async function resend() {
 </script>
 
 <style scoped>
-.ve-resend {
-  margin: 16px 0 0;
-  text-align: center;
-  font-size: 13.5px;
-  color: var(--color-text-dim);
-}
-
-.ve-resend button {
-  margin-left: 4px;
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--color-primary);
-  font: inherit;
-  font-size: 13.5px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.ve-resend button:disabled { opacity: 0.55; cursor: not-allowed; }
-
+.ve-resend { margin-top: 16px; }
+.ve-loader { margin: 8px auto; }
 </style>

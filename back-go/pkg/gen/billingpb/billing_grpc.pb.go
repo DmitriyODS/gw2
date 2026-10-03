@@ -29,6 +29,7 @@ const (
 	BillingService_GetEntitlements_FullMethodName = "/billing.v1.BillingService/GetEntitlements"
 	BillingService_CheckStorage_FullMethodName    = "/billing.v1.BillingService/CheckStorage"
 	BillingService_TrackStorage_FullMethodName    = "/billing.v1.BillingService/TrackStorage"
+	BillingService_MoveStorage_FullMethodName     = "/billing.v1.BillingService/MoveStorage"
 	BillingService_CheckAI_FullMethodName         = "/billing.v1.BillingService/CheckAI"
 	BillingService_ConsumeAI_FullMethodName       = "/billing.v1.BillingService/ConsumeAI"
 	BillingService_LogAction_FullMethodName       = "/billing.v1.BillingService/LogAction"
@@ -41,6 +42,7 @@ type BillingServiceClient interface {
 	GetEntitlements(ctx context.Context, in *GetEntitlementsRequest, opts ...grpc.CallOption) (*GetEntitlementsResponse, error)
 	CheckStorage(ctx context.Context, in *CheckStorageRequest, opts ...grpc.CallOption) (*CheckStorageResponse, error)
 	TrackStorage(ctx context.Context, in *TrackStorageRequest, opts ...grpc.CallOption) (*TrackStorageResponse, error)
+	MoveStorage(ctx context.Context, in *MoveStorageRequest, opts ...grpc.CallOption) (*MoveStorageResponse, error)
 	CheckAI(ctx context.Context, in *CheckAIRequest, opts ...grpc.CallOption) (*CheckAIResponse, error)
 	ConsumeAI(ctx context.Context, in *ConsumeAIRequest, opts ...grpc.CallOption) (*ConsumeAIResponse, error)
 	LogAction(ctx context.Context, in *LogActionRequest, opts ...grpc.CallOption) (*LogActionResponse, error)
@@ -84,6 +86,16 @@ func (c *billingServiceClient) TrackStorage(ctx context.Context, in *TrackStorag
 	return out, nil
 }
 
+func (c *billingServiceClient) MoveStorage(ctx context.Context, in *MoveStorageRequest, opts ...grpc.CallOption) (*MoveStorageResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(MoveStorageResponse)
+	err := c.cc.Invoke(ctx, BillingService_MoveStorage_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *billingServiceClient) CheckAI(ctx context.Context, in *CheckAIRequest, opts ...grpc.CallOption) (*CheckAIResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(CheckAIResponse)
@@ -121,6 +133,7 @@ type BillingServiceServer interface {
 	GetEntitlements(context.Context, *GetEntitlementsRequest) (*GetEntitlementsResponse, error)
 	CheckStorage(context.Context, *CheckStorageRequest) (*CheckStorageResponse, error)
 	TrackStorage(context.Context, *TrackStorageRequest) (*TrackStorageResponse, error)
+	MoveStorage(context.Context, *MoveStorageRequest) (*MoveStorageResponse, error)
 	CheckAI(context.Context, *CheckAIRequest) (*CheckAIResponse, error)
 	ConsumeAI(context.Context, *ConsumeAIRequest) (*ConsumeAIResponse, error)
 	LogAction(context.Context, *LogActionRequest) (*LogActionResponse, error)
@@ -142,6 +155,9 @@ func (UnimplementedBillingServiceServer) CheckStorage(context.Context, *CheckSto
 }
 func (UnimplementedBillingServiceServer) TrackStorage(context.Context, *TrackStorageRequest) (*TrackStorageResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method TrackStorage not implemented")
+}
+func (UnimplementedBillingServiceServer) MoveStorage(context.Context, *MoveStorageRequest) (*MoveStorageResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method MoveStorage not implemented")
 }
 func (UnimplementedBillingServiceServer) CheckAI(context.Context, *CheckAIRequest) (*CheckAIResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CheckAI not implemented")
@@ -227,6 +243,24 @@ func _BillingService_TrackStorage_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _BillingService_MoveStorage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MoveStorageRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BillingServiceServer).MoveStorage(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BillingService_MoveStorage_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BillingServiceServer).MoveStorage(ctx, req.(*MoveStorageRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _BillingService_CheckAI_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(CheckAIRequest)
 	if err := dec(in); err != nil {
@@ -299,6 +333,10 @@ var BillingService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "TrackStorage",
 			Handler:    _BillingService_TrackStorage_Handler,
+		},
+		{
+			MethodName: "MoveStorage",
+			Handler:    _BillingService_MoveStorage_Handler,
 		},
 		{
 			MethodName: "CheckAI",

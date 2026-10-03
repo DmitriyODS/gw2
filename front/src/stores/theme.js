@@ -14,6 +14,10 @@ import { saveBlob } from '@/utils/download.js'
    что и акценты. Это даёт «единое лицо» интерфейса: и кнопки, и фоны
    живут в одной палитре, а не на нейтрально-сером заднике. */
 const PRESETS = {
+  /* Флагманская тема 8-й версии — тема по умолчанию: оранжевый акцент,
+     графитовый второй цвет и тёплая серая гамма фонов (в тёмном режиме —
+     тёмный графит). */
+  groove:  { primary: '#e8590c', secondary: '#454a52', tertiary: '#f5a524', neutral: '#ece9e6' },
   classic: { primary: '#006cdc', secondary: '#2499ec', tertiary: '#2499ec', neutral: '#e1effb' },
   blue:    { primary: '#1e88e5', secondary: '#00acc1', tertiary: '#7e57c2', neutral: '#e6ecf4' },
   pink:    { primary: '#ec4899', secondary: '#e91e63', tertiary: '#ce93d8', neutral: '#f5e8ee' },
@@ -31,7 +35,11 @@ const PRESETS = {
   forest:  { primary: '#2f7d4f', secondary: '#558b2f', tertiary: '#a5a96d', neutral: '#e6ece2' },
 }
 
+// Тема «из коробки»: её видит каждый, кто свою не выбирал, и экраны входа.
+export const DEFAULT_PRESET = 'groove'
+
 const PRESET_LABELS = {
+  groove:  'Groove 8',
   classic: 'Классическая',
   blue:    'Синяя',
   pink:    'Розовая',
@@ -104,8 +112,8 @@ function hexToOklch(hex) {
 const NEUTRAL_C_THRESHOLD = 0.015
 
 function applyPaletteKey(root, name, hex) {
-  // Кривой/отсутствующий цвет → акцент классической темы, а не NaN в CSS.
-  const safeHex = normalizeHex(hex) || PRESETS.classic[name]
+  // Кривой/отсутствующий цвет → акцент темы по умолчанию, а не NaN в CSS.
+  const safeHex = normalizeHex(hex) || PRESETS[DEFAULT_PRESET][name]
   const { L, C, H } = hexToOklch(safeHex)
   const c = C < NEUTRAL_C_THRESHOLD ? C : Math.min(Math.max(C, 0.06), 0.33)
   const l = Math.min(Math.max(L, 0.30), 0.92)
@@ -241,11 +249,11 @@ function randomBgBlobs() {
 }
 
 export const useThemeStore = defineStore('theme', () => {
-  /* Resolve stored preset name — map legacy 'dark' to 'classic' */
-  const storedPreset = storageGet('gw_theme', 'classic')
+  /* Сохранённая тема; legacy-пресет 'dark' и неизвестные — к теме по умолчанию. */
+  const storedPreset = storageGet('gw_theme', DEFAULT_PRESET)
   const storedCustomThemes = storageGetJSON('gw_custom_themes', [])
   const isKnownPreset = PRESETS[storedPreset] || storedCustomThemes.some(t => t.name === storedPreset)
-  const resolvedPreset = isKnownPreset ? storedPreset : 'classic'
+  const resolvedPreset = isKnownPreset ? storedPreset : DEFAULT_PRESET
 
   const currentPreset = ref(resolvedPreset)
 
@@ -288,20 +296,21 @@ export const useThemeStore = defineStore('theme', () => {
   const dark = ref(false)
 
   /* ── Оформление экранов входа ────────────────────────────────────
-     Вход, регистрация и прочие публичные экраны встречают КЛАССИЧЕСКОЙ
+     Вход, регистрация и прочие публичные экраны встречают ФЛАГМАНСКОЙ
      темой в системном светлом/тёмном виде: личная тема пользователя туда
      не протекает (на устройство приходят и гости), а режим берётся у ОС,
      а не из личной настройки. Исключение — оформление, выбранное прямо на
      регистрации: оно применяется сразу и остаётся до конца экранов входа. */
+  const AUTH_VARS = PRESETS[DEFAULT_PRESET]
   const authPreview = ref(false)
   const authPicked = ref(false)
   const authModePicked = ref(false)
 
   /* Тема, которая ФАКТИЧЕСКИ на экране: на экранах входа до выбора плитками
-     это классическая, а не личная тема из localStorage. Её показывают плитки
-     регистрации — иначе они подписывали бы классическую палитру чужим именем. */
+     это флагманская, а не личная тема из localStorage. Её показывают плитки
+     регистрации — иначе они подписывали бы флагманскую палитру чужим именем. */
   const activePreset = computed(() => (
-    authPreview.value && !authPicked.value ? 'classic' : currentPreset.value
+    authPreview.value && !authPicked.value ? DEFAULT_PRESET : currentPreset.value
   ))
 
   /* ── Примерка оформления на регистрации ──────────────────────────
@@ -330,14 +339,14 @@ export const useThemeStore = defineStore('theme', () => {
     authModePicked.value = false
     currentPreset.value = preset
     mode.value = prevMode
-    applyVars(authPreview.value ? PRESETS.classic : getVars(preset))
+    applyVars(authPreview.value ? AUTH_VARS : getVars(preset))
     applyDark()
   }
 
   function setAuthPreview(on) {
     authPreview.value = on
     if (!on) { authPicked.value = false; authModePicked.value = false }
-    applyVars(on && !authPicked.value ? PRESETS.classic : getVars(currentPreset.value))
+    applyVars(on && !authPicked.value ? AUTH_VARS : getVars(currentPreset.value))
     applyDark()
   }
 
@@ -415,7 +424,7 @@ export const useThemeStore = defineStore('theme', () => {
   function getVars(name) {
     if (PRESETS[name]) return PRESETS[name]
     const custom = customThemes.value.find(t => t.name === name)
-    return custom?.vars || PRESETS.classic
+    return custom?.vars || PRESETS[DEFAULT_PRESET]
   }
 
   function applyVars(vars) {
@@ -444,7 +453,7 @@ export const useThemeStore = defineStore('theme', () => {
   function deleteCustomTheme(name) {
     customThemes.value = customThemes.value.filter(t => t.name !== name)
     storageSetJSON('gw_custom_themes', customThemes.value)
-    if (currentPreset.value === name) applyTheme('classic')
+    if (currentPreset.value === name) applyTheme(DEFAULT_PRESET)
   }
 
   // Промис отдаём наружу: в мобильной обёртке сохранение асинхронное и может
@@ -473,8 +482,8 @@ export const useThemeStore = defineStore('theme', () => {
   }
 
   function init() {
-    // На экранах входа палитра уже подменена классикой — не перетираем её.
-    applyVars(authPreview.value && !authPicked.value ? PRESETS.classic : getVars(currentPreset.value))
+    // На экранах входа палитра уже подменена флагманской — не перетираем её.
+    applyVars(authPreview.value && !authPicked.value ? AUTH_VARS : getVars(currentPreset.value))
     applyDark()
     applyBgGradient()
     // Живое переключение вслед за системой (addListener — старый Safari):

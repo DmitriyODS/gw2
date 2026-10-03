@@ -16,7 +16,7 @@ func (s *Service) ListForms(ctx context.Context, userID int64, scope string) ([]
 	if err != nil {
 		return nil, err
 	}
-	forms, err := s.repo.ListForms(ctx, a.UserID, a.CompanyID, domain.NormalizeScope(scope))
+	forms, err := s.repo.ListForms(ctx, a.UserID, domain.NormalizeScope(scope))
 	if err != nil {
 		return nil, err
 	}
@@ -42,7 +42,7 @@ func (s *Service) TileSummary(ctx context.Context, userID int64) (*domain.FormsS
 	if err != nil {
 		return nil, err
 	}
-	return s.repo.FormsSummary(ctx, a.UserID, a.CompanyID)
+	return s.repo.FormsSummary(ctx, a.UserID)
 }
 
 // GetForm — одна доступная форма со структурой. Ключи правильных ответов
@@ -89,15 +89,19 @@ func stripAnswerKeys(sections []domain.Section) []domain.Section {
 // предложить в «поделиться с компанией». Первый раздел заводится сразу: форма
 // без раздела — это форма, в которую некуда положить вопрос.
 func (s *Service) CreateForm(ctx context.Context, userID int64, companyID *int64, title string, quiz bool) (*domain.Form, error) {
+	if err := s.requireMember(ctx, userID, companyID); err != nil {
+		return nil, err
+	}
 	pos, err := s.repo.NextPosition(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
 	form := &domain.Form{
-		OwnerID: userID, CompanyID: companyID, Title: title, Position: pos,
+		OwnerID: userID, CompanyID: companyID, TeamAccess: domain.AccessRespond,
+		Title: title, Position: pos,
 		Status: domain.StatusDraft, AllowAnonymous: true, ShowProgress: true,
 		CollectName: true,
-		Quiz: quiz, QuizRelease: domain.QuizImmediately, QuizShowAnswers: true,
+		Quiz:        quiz, QuizRelease: domain.QuizImmediately, QuizShowAnswers: true,
 		CreatedBy: &userID,
 	}
 	if err := s.repo.CreateForm(ctx, form); err != nil {
@@ -235,8 +239,101 @@ func applyPatch(f *domain.Form, p FormPatch) {
 	}
 }
 
-// DeleteForm — только владелец: форма уходит вместе со всеми собранными
-// ответами, и такое решение не доверяют приглашённому редактору.
+// requireMember — положить форму в команду может только её участник.
+func (s *Service) requireMember(ctx context.Context, userID int64, companyID *int64) error {
+	if companyID == nil {
+		return nil
+	}
+	role, err := s.users.TeamRole(ctx, userID, *companyID)
+	if err != nil {
+		return err
+	}
+	if !role.Member {
+		return domain.ErrNotTeamMember
+	}
+	return nil
+}
+
+/*
+MoveForm — сменить пространство формы и уровень участников команды.
+
+	Распоряжается этим «владелец»: хозяин личной формы, у формы команды — автор
+	и администраторы. Забирая форму к себе, человек становится её хозяином.
+	Учёт файлов ответов переезжает ДО формы: сверка «Хранилища» стёрла бы
+	файлы, оставшиеся в журнале прежнего плательщика. Кто доступ потерял,
+	получает событие удаления.
+*/
+func (s *Service) MoveForm(ctx context.Context, userID, id int64, companyID *int64, teamAccess string) (*domain.Form, error) {
+	a, err := s.actor(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	form, err := s.require(ctx, a, id, domain.AccessOwner)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.requireMember(ctx, userID, companyID); err != nil {
+		return nil, err
+	}
+	next := *form
+	if companyID == nil {
+		next.OwnerID = userID
+	}
+	next.CompanyID = companyID
+	if teamAccess != "" {
+		next.TeamAccess = domain.NormalizeTeamAccess(teamAccess)
+	}
+
+	before := s.audience(ctx, id)
+	oldUser, oldCompany := quotaScope(form)
+	if newUser, newCompany := quotaScope(&next); newUser != oldUser || newCompany != oldCompany {
+		var paths []string
+		if err := s.repo.EachResponse(ctx, id, func(r *domain.Response) error {
+			paths = append(paths, filePaths(r.Answers)...)
+			return nil
+		}); err != nil {
+			return nil, err
+		}
+		if err := s.files.MoveFor(ctx, newUser, newCompany, paths); err != nil {
+			return nil, domain.ErrMoveFailed
+		}
+	}
+	if err := s.repo.MoveForm(ctx, id, next.OwnerID, next.CompanyID, next.TeamAccess); err != nil {
+		return nil, err
+	}
+	if next.Sections, err = s.repo.ListSections(ctx, id); err != nil {
+		return nil, err
+	}
+	after := s.audience(ctx, id)
+	if gone := missing(before, after); len(gone) > 0 {
+		s.bus.Publish(ctx, "form:deleted", gone, map[string]any{"id": id})
+	}
+	if len(after) > 0 {
+		s.bus.Publish(ctx, "form:updated", after, formPayload(&next))
+	}
+	if next.MyAccess, err = s.repo.AccessOf(ctx, id, userID); err != nil {
+		return nil, err
+	}
+	return &next, nil
+}
+
+// missing — комнаты, которые были в before и пропали из after.
+func missing(before, after []string) []string {
+	kept := make(map[string]bool, len(after))
+	for _, r := range after {
+		kept[r] = true
+	}
+	out := []string{}
+	for _, r := range before {
+		if !kept[r] {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// DeleteForm — только владелец (у формы команды — автор или администратор
+// команды): форма уходит вместе со всеми собранными ответами.
 func (s *Service) DeleteForm(ctx context.Context, userID, id int64) error {
 	a, err := s.actor(ctx, userID)
 	if err != nil {
@@ -278,6 +375,9 @@ func (s *Service) DuplicateForm(ctx context.Context, userID, id int64, companyID
 	if err != nil {
 		return nil, err
 	}
+	if err := s.requireMember(ctx, userID, companyID); err != nil {
+		return nil, err
+	}
 	sections, err := s.repo.ListSections(ctx, id)
 	if err != nil {
 		return nil, err
@@ -289,6 +389,7 @@ func (s *Service) DuplicateForm(ctx context.Context, userID, id int64, companyID
 
 	copyForm := *src
 	copyForm.ID, copyForm.OwnerID, copyForm.CompanyID = 0, userID, companyID
+	copyForm.TeamAccess = domain.AccessRespond
 	copyForm.Title = strings.TrimSpace(src.Title) + " (копия)"
 	copyForm.Position, copyForm.Status, copyForm.CreatedBy = pos, domain.StatusDraft, &userID
 	copyForm.Sections, copyForm.Responses, copyForm.MyAccess = nil, 0, domain.AccessOwner
@@ -466,5 +567,5 @@ func (s *Service) SearchForms(ctx context.Context, userID int64, query string, l
 	if err != nil {
 		return nil, err
 	}
-	return s.repo.SearchForms(ctx, a.UserID, a.CompanyID, query, limit)
+	return s.repo.SearchForms(ctx, a.UserID, query, limit)
 }

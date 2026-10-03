@@ -107,8 +107,6 @@ type Endpoints struct {
 	ImportCompany         endpoint.Endpoint
 	GetWeekendSettings    endpoint.Endpoint
 	UpdateWeekendSettings endpoint.Endpoint
-	GetGrooveSettings     endpoint.Endpoint
-	UpdateGrooveSettings  endpoint.Endpoint
 
 	ExportBackup endpoint.Endpoint
 	ImportBackup endpoint.Endpoint
@@ -344,12 +342,6 @@ type WeekendEpRequest struct {
 	Actor     *domain.User
 	CompanyID int64
 	Days      []int
-}
-
-type GrooveEpRequest struct {
-	Actor     *domain.User
-	CompanyID int64
-	Enabled   bool
 }
 
 func New(svc service.AuthService) Endpoints {
@@ -656,14 +648,6 @@ func New(svc service.AuthService) Endpoints {
 		UpdateWeekendSettings: func(ctx context.Context, request any) (any, error) {
 			req := request.(WeekendEpRequest)
 			return svc.UpdateWeekendSettings(ctx, req.Actor, req.CompanyID, req.Days)
-		},
-		GetGrooveSettings: func(ctx context.Context, request any) (any, error) {
-			req := request.(CompanyScopeEpRequest)
-			return svc.GetGrooveSettings(ctx, req.Actor, req.CompanyID)
-		},
-		UpdateGrooveSettings: func(ctx context.Context, request any) (any, error) {
-			req := request.(GrooveEpRequest)
-			return svc.UpdateGrooveSettings(ctx, req.Actor, req.CompanyID, req.Enabled)
 		},
 
 		ExportBackup: func(ctx context.Context, request any) (any, error) {

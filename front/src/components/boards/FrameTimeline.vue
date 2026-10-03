@@ -368,7 +368,7 @@ onBeforeUnmount(() => {
   -webkit-backdrop-filter: var(--acrylic-blur);
   backdrop-filter: var(--acrylic-blur);
   background: var(--acrylic-bg);
-  box-shadow: var(--shadow-2);
+  box-shadow: var(--shadow-md);
 }
 
 .ft-bar {
@@ -383,7 +383,7 @@ onBeforeUnmount(() => {
   min-width: 120px;
   padding: 0 6px;
   font-size: 12px;
-  color: var(--color-text-muted);
+  color: var(--color-text-dim);
   overflow-wrap: anywhere;
 }
 
@@ -457,7 +457,7 @@ onBeforeUnmount(() => {
   justify-content: center;
   width: 84px;
   height: 56px;
-  color: var(--color-text-muted);
+  color: var(--color-text-dim);
   font-size: 13px;
   line-height: 1;
 }
@@ -469,7 +469,7 @@ onBeforeUnmount(() => {
   padding: 0 4px;
   border-radius: var(--radius-sm);
   background: var(--color-surface-variant);
-  color: var(--color-text-muted);
+  color: var(--color-text-dim);
   font-size: 10px;
   line-height: 14px;
 }
@@ -481,7 +481,7 @@ onBeforeUnmount(() => {
   width: 84px;
   height: 56px;
   border: 1px dashed var(--color-outline-dim);
-  color: var(--color-text-muted);
+  color: var(--color-text-dim);
 }
 
 @media (max-width: 768px) {

@@ -456,5 +456,5 @@ func (s *Service) SearchRecords(ctx context.Context, userID int64, query string,
 	if err != nil {
 		return nil, err
 	}
-	return s.repo.SearchRecords(ctx, a.UserID, a.CompanyID, query, limit)
+	return s.repo.SearchRecords(ctx, a.UserID, query, limit)
 }

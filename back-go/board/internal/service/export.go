@@ -254,6 +254,9 @@ func (s *Service) Import(ctx context.Context, userID int64, title string, data [
 	if err := s.checkOwnFolder(ctx, userID, folderID); err != nil {
 		return nil, err
 	}
+	if err := s.ensureLimit(ctx, userID, 1); err != nil {
+		return nil, err
+	}
 	title = strings.TrimSpace(title)
 	scene := domain.EmptyScene()
 	if isScene {

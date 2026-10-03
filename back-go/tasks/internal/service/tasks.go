@@ -357,7 +357,6 @@ func (s *Service) ArchiveTask(ctx context.Context, taskID, actorID int64, compan
 	s.log.Info("task.archive", "task_id", taskID)
 
 	task.IsArchived, task.ArchivedAt = true, &now
-	s.pets.OnTaskClosed(task, actorID)
 
 	out, err := s.GetTask(ctx, taskID, actorID)
 	if err != nil {

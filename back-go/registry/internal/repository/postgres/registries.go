@@ -3,11 +3,13 @@ package postgres
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/DmitriyODS/gw2/back-go/pkg/spaces"
 	"github.com/DmitriyODS/gw2/back-go/registry/internal/domain"
 )
 
@@ -21,7 +23,7 @@ func NewRepo(pool *pgxpool.Pool) *Repo { return &Repo{pool: pool} }
 
 func scanRegistry(row pgx.Row) (*domain.Registry, error) {
 	var r domain.Registry
-	err := row.Scan(&r.ID, &r.OwnerID, &r.CompanyID, &r.Name, &r.Position,
+	err := row.Scan(&r.ID, &r.OwnerID, &r.CompanyID, &r.TeamAccess, &r.Name, &r.Position,
 		&r.SectionFieldID, &r.Accounting, &r.CreatedBy, &r.CreatedAt, &r.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
@@ -32,70 +34,78 @@ func scanRegistry(row pgx.Row) (*domain.Registry, error) {
 	return &r, nil
 }
 
-const registryCols = `id, owner_id, company_id, name, position, section_field_id,
+const registryCols = `id, owner_id, company_id, team_access, name, position, section_field_id,
 	accounting, created_by, created_at, updated_at`
 
+// accessRankSQL — уровень доступа числом: 'view' > 'edit' лексикографически,
+// и наивный MAX(access) молча понижал бы права. Держать в паре с domain/access.go.
+const accessRankSQL = `CASE %s WHEN 'admin' THEN 3 WHEN 'edit' THEN 2 WHEN 'view' THEN 1 ELSE 0 END`
+
 /*
-accessExpr — эффективный уровень доступа одним выражением.
+accessExpr — эффективный уровень доступа человека $1 одним выражением.
 
-	Уровень приходит человеку тремя путями сразу (он владелец, ему выдали лично,
-	выдали его компании), и брать нужно СИЛЬНЕЙШИЙ. Порядок уровней задан здесь
-	числом, а не сравнением строк: 'view' > 'edit' лексикографически, и наивный
-	MAX(access) молча понижал бы права. Держать в паре с domain/access.go.
-
-	$2 — АКТИВНАЯ компания сессии (0 — её нет): шара, выданная другой компании
-	человека, в этой компании прав не даёт, иначе список и уровень доступа
-	расходились бы.
+	«Владелец» — хозяин личного реестра, а у реестра команды — его автор и
+	администраторы команды (пока состоят в ней). Остальным уровень приходит
+	несколькими путями сразу: участникам команды — team_access, плюс личная
+	шара и шары их команд. Берётся СИЛЬНЕЙШИЙ.
 */
-const accessExpr = `
-	CASE WHEN reg.owner_id = $1 THEN 'owner' ELSE COALESCE((
-		SELECT CASE max(CASE sh.access
-		            WHEN 'admin' THEN 3 WHEN 'edit' THEN 2 ELSE 1 END)
-		         WHEN 3 THEN 'admin' WHEN 2 THEN 'edit' WHEN 1 THEN 'view' END
-		  FROM registry_user_shares sh
-		 WHERE sh.registry_id = reg.id
-		   AND (sh.user_id = $1 OR sh.company_id = $2)
-	), '') END`
+var accessExpr = `
+	CASE
+	  WHEN reg.company_id IS NULL AND reg.owner_id = $1 THEN 'owner'
+	  WHEN reg.company_id IS NOT NULL AND (` + spaces.Admin("$1", "reg.company_id") + `
+	       OR (reg.owner_id = $1 AND ` + spaces.Member("$1", "reg.company_id") + `)) THEN 'owner'
+	  ELSE COALESCE((
+		SELECT CASE max(lvl) WHEN 3 THEN 'admin' WHEN 2 THEN 'edit' WHEN 1 THEN 'view' END
+		  FROM (
+		    SELECT ` + fmt.Sprintf(accessRankSQL, "reg.team_access") + ` AS lvl
+		     WHERE reg.company_id IS NOT NULL AND ` + spaces.Member("$1", "reg.company_id") + `
+		    UNION ALL
+		    SELECT ` + fmt.Sprintf(accessRankSQL, "sh.access") + `
+		      FROM registry_user_shares sh
+		     WHERE sh.registry_id = reg.id
+		       AND (sh.user_id = $1 OR sh.company_id IN (` + spaces.MyTeams("$1") + `))
+		  ) lv
+		 WHERE lvl > 0
+	  ), '')
+	END`
 
-/* ownedCondition — свои реестры, видимые в активной компании ($2).
+// inMySpaces — реестр лежит в пространстве человека $1: личный его либо в
+// одной из его команд.
+var inMySpaces = `((reg.company_id IS NULL AND reg.owner_id = $1)
+	OR reg.company_id IN (` + spaces.MyTeams("$1") + `))`
 
-   Реестр помнит компанию, в которой заведён, и в другой компании владельцу не
-   показывается: иначе переключение компании ничего не меняло бы. Заведённые вне
-   компаний (company_id IS NULL) остаются личными и видны всегда. */
-const ownedCondition = `reg.owner_id = $1
-	AND (reg.company_id IS NULL OR reg.company_id = $2)`
+// sharedToMe — реестр расшарен человеку $1 лично или его командам.
+const sharedToMeTpl = `EXISTS (SELECT 1 FROM registry_user_shares sh
+	                 WHERE sh.registry_id = reg.id
+	                   AND (sh.user_id = $1 OR sh.company_id IN (%s)))`
+
+var sharedToMe = fmt.Sprintf(sharedToMeTpl, spaces.MyTeams("$1"))
 
 // scopeCondition — условие вкладки раздела.
 func scopeCondition(scope string) string {
 	switch scope {
 	case domain.ScopeMine:
-		return ownedCondition
+		return `reg.company_id IS NULL AND reg.owner_id = $1`
+	case domain.ScopeTeam:
+		return `reg.company_id IN (` + spaces.MyTeams("$1") + `)`
 	case domain.ScopeShared:
-		return `EXISTS (SELECT 1 FROM registry_user_shares sh
-		                 WHERE sh.registry_id = reg.id AND sh.user_id = $1)
-		        AND reg.owner_id <> $1`
-	case domain.ScopeCompany:
-		return `EXISTS (SELECT 1 FROM registry_user_shares sh
-		                 WHERE sh.registry_id = reg.id AND sh.company_id = $2)
-		        AND reg.owner_id <> $1`
+		return `NOT ` + inMySpaces + ` AND ` + sharedToMe
 	default:
-		return `((` + ownedCondition + `)
-		         OR (reg.owner_id <> $1
-		             AND EXISTS (SELECT 1 FROM registry_user_shares sh
-		                          WHERE sh.registry_id = reg.id
-		                            AND (sh.user_id = $1 OR sh.company_id = $2))))`
+		return `(` + inMySpaces + ` OR ` + sharedToMe + `)`
 	}
 }
 
-// ListRegistries — реестры выбранной области вместе с уровнем доступа и именем
-// владельца (вкладки «Поделились» и «Компания» обязаны называть хозяина).
-func (r *Repo) ListRegistries(ctx context.Context, userID, companyID int64, scope string) ([]*domain.Registry, error) {
+// ListRegistries — реестры выбранной области вместе с уровнем доступа, именем
+// автора и названием команды-пространства (список группируется по ним).
+func (r *Repo) ListRegistries(ctx context.Context, userID int64, scope string) ([]*domain.Registry, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT `+prefixed(registryCols, "reg")+`, `+accessExpr+`, COALESCE(u.fio, '')
+		SELECT `+prefixed(registryCols, "reg")+`, `+accessExpr+`,
+		       COALESCE(u.fio, ''), COALESCE(c.name, '')
 		  FROM registries reg
 		  LEFT JOIN users u ON u.id = reg.owner_id
+		  LEFT JOIN companies c ON c.id = reg.company_id
 		 WHERE `+scopeCondition(scope)+`
-		 ORDER BY reg.position, reg.id`, userID, companyID)
+		 ORDER BY reg.position, reg.id`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -103,9 +113,9 @@ func (r *Repo) ListRegistries(ctx context.Context, userID, companyID int64, scop
 	out := []*domain.Registry{}
 	for rows.Next() {
 		var reg domain.Registry
-		if err := rows.Scan(&reg.ID, &reg.OwnerID, &reg.CompanyID, &reg.Name, &reg.Position,
-			&reg.SectionFieldID, &reg.Accounting, &reg.CreatedBy, &reg.CreatedAt, &reg.UpdatedAt,
-			&reg.MyAccess, &reg.OwnerName); err != nil {
+		if err := rows.Scan(&reg.ID, &reg.OwnerID, &reg.CompanyID, &reg.TeamAccess, &reg.Name,
+			&reg.Position, &reg.SectionFieldID, &reg.Accounting, &reg.CreatedBy, &reg.CreatedAt,
+			&reg.UpdatedAt, &reg.MyAccess, &reg.OwnerName, &reg.CompanyName); err != nil {
 			return nil, err
 		}
 		out = append(out, &reg)
@@ -127,9 +137,9 @@ func (r *Repo) CountOwned(ctx context.Context, ownerID int64) (int, error) {
 
 func (r *Repo) CreateRegistry(ctx context.Context, reg *domain.Registry) error {
 	return r.pool.QueryRow(ctx,
-		`INSERT INTO registries (owner_id, company_id, name, position, accounting, created_by)
-		 VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, created_at, updated_at`,
-		reg.OwnerID, reg.CompanyID, reg.Name, reg.Position, reg.Accounting, reg.CreatedBy).
+		`INSERT INTO registries (owner_id, company_id, team_access, name, position, accounting, created_by)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, created_at, updated_at`,
+		reg.OwnerID, reg.CompanyID, reg.TeamAccess, reg.Name, reg.Position, reg.Accounting, reg.CreatedBy).
 		Scan(&reg.ID, &reg.CreatedAt, &reg.UpdatedAt)
 }
 
@@ -139,6 +149,15 @@ func (r *Repo) UpdateRegistry(ctx context.Context, id int64, name string, positi
 		    SET name = $2, position = $3, section_field_id = $4, accounting = $5, updated_at = now()
 		  WHERE id = $1`,
 		id, name, position, sectionFieldID, accounting)
+	return err
+}
+
+func (r *Repo) MoveRegistry(ctx context.Context, id, ownerID int64, companyID *int64, teamAccess string) error {
+	_, err := r.pool.Exec(ctx,
+		`UPDATE registries
+		    SET owner_id = $2, company_id = $3, team_access = $4, updated_at = now()
+		  WHERE id = $1`,
+		id, ownerID, companyID, teamAccess)
 	return err
 }
 
@@ -287,7 +306,7 @@ func (r *Repo) ReplaceFields(ctx context.Context, registryID int64, fields []dom
 	return removed, tx.Commit(ctx)
 }
 
-func (r *Repo) RegistriesSummary(ctx context.Context, userID, companyID int64, names int) (*domain.RegistriesSummary, error) {
+func (r *Repo) RegistriesSummary(ctx context.Context, userID int64, names int) (*domain.RegistriesSummary, error) {
 	out := domain.RegistriesSummary{Names: []string{}}
 	err := r.pool.QueryRow(ctx, `
 		WITH vis AS (
@@ -296,8 +315,8 @@ func (r *Repo) RegistriesSummary(ctx context.Context, userID, companyID int64, n
 		SELECT (SELECT count(*) FROM vis),
 		       COALESCE((SELECT array_agg(name ORDER BY position, id)
 		                   FROM (SELECT name, position, id FROM vis
-		                          ORDER BY position, id LIMIT $3) head), '{}')`,
-		userID, companyID, names).Scan(&out.Total, &out.Names)
+		                          ORDER BY position, id LIMIT $2) head), '{}')`,
+		userID, names).Scan(&out.Total, &out.Names)
 	if err != nil {
 		return nil, err
 	}

@@ -58,18 +58,18 @@ const slots = useSlots()
 </script>
 
 <style scoped>
-/* Собственный blur карточке не нужен: за ней ровный фон панели-каркаса,
-   поэтому «иней» имитируется градиентом --glass-bg + блик по кромке. */
+/* Карточка — лист скеоморфного материала: матовая шероховатая поверхность,
+   светлая фаска по верхней кромке и рассеянная тень (--sk-panel-shadow). */
 .card {
   display: flex;
   flex-direction: column;
   gap: 14px;
   width: 100%;
   padding: 18px;
-  border: 1px solid var(--acrylic-border);
+  border: 1px solid var(--sk-edge);
   border-radius: var(--radius-lg);
-  background: var(--glass-bg), var(--acrylic-card-bg);
-  box-shadow: var(--glass-edge);
+  background: var(--acrylic-card-bg);
+  box-shadow: var(--sk-panel-shadow);
   color: var(--color-text);
   text-align: left;
 }
@@ -85,18 +85,16 @@ const slots = useSlots()
 
 .card.clickable {
   cursor: pointer;
-  transition: border-color 0.2s ease, background 0.2s ease;
+  transition: transform 0.15s ease;
 }
 
-.card.clickable:hover {
-  border-color: color-mix(in oklch, var(--color-primary) 30%, var(--acrylic-border));
-  background: var(--glass-hover-bg, var(--glass-bg)), var(--acrylic-card-bg);
-}
+.card.clickable:hover { transform: translateY(-1px); }
+.card.clickable:active { transform: none; box-shadow: var(--sk-pressed-shadow); }
 
-.tone-primary { border-color: color-mix(in oklch, var(--color-primary) 35%, var(--acrylic-border)); }
-.tone-danger { border-color: color-mix(in oklch, var(--color-error) 35%, var(--acrylic-border)); }
-.tone-success { border-color: color-mix(in oklch, var(--color-success) 35%, var(--acrylic-border)); }
-.tone-warning { border-color: color-mix(in oklch, var(--color-warning) 35%, var(--acrylic-border)); }
+.tone-primary { border-color: color-mix(in oklch, var(--color-primary) 35%, var(--sk-edge)); }
+.tone-danger { border-color: color-mix(in oklch, var(--color-error) 35%, var(--sk-edge)); }
+.tone-success { border-color: color-mix(in oklch, var(--color-success) 35%, var(--sk-edge)); }
+.tone-warning { border-color: color-mix(in oklch, var(--color-warning) 35%, var(--sk-edge)); }
 
 /* Команды шапки переносятся ПОД заголовок, когда рядом с ним уже не помещаются
    (узкая панель, окно на телефоне): иначе кнопка держала свою ширину и рвала

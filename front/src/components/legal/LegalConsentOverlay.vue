@@ -4,7 +4,7 @@
        из состояния «не согласен» есть ровно два выхода — принять или выйти. -->
   <Teleport to="body">
     <div class="legal" role="dialog" aria-modal="true" aria-label="Правовые документы">
-      <AuthWave class="legal-wave" />
+      <AuthBackdrop class="legal-wave" />
 
       <div class="legal-card">
         <header class="legal-head">
@@ -63,7 +63,7 @@
 <script setup>
 import { computed, reactive, ref, watch } from 'vue'
 import Checkbox from 'primevue/checkbox'
-import AuthWave from '@/components/auth/AuthWave.vue'
+import AuthBackdrop from '@/components/auth/AuthBackdrop.vue'
 import BrandWordmark from '@/components/common/BrandWordmark.vue'
 import BrandLoader from '@/components/common/BrandLoader.vue'
 import MarkdownView from '@/components/common/MarkdownView.vue'
@@ -191,10 +191,10 @@ async function logout() {
      оставляет места, прокручивается карточка целиком — но не срезается. */
   overflow-y: auto;
   padding: 24px;
-  border: 1px solid var(--acrylic-border);
+  border: 1px solid var(--sk-edge);
   border-radius: var(--radius-xl);
-  background: var(--glass-bg), var(--acrylic-card-bg);
-  box-shadow: var(--glass-edge);
+  background: var(--acrylic-card-bg);
+  box-shadow: var(--sk-panel-shadow), var(--shadow-lg);
 }
 
 /* Сжиматься по высоте вправе ТОЛЬКО текст документа: у остальных частей
@@ -239,9 +239,10 @@ async function logout() {
   min-height: min(220px, 30dvh);
   overflow-y: auto;
   padding: 16px 18px;
-  border: 1px solid var(--acrylic-border);
+  border: 1px solid var(--sk-edge);
   border-radius: var(--radius-lg);
-  background: var(--color-surface-variant);
+  background: var(--sk-well-bg);
+  box-shadow: var(--sk-well-shadow);
   font-size: 0.9rem;
   line-height: 1.55;
   overflow-wrap: anywhere;

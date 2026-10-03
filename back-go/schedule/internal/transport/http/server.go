@@ -71,6 +71,7 @@ func NewServer(svc *service.Service, users domain.UserReader,
 	api.Get("/:id<int>", h.getSchedule)
 	api.Patch("/:id<int>", h.updateSchedule)
 	api.Delete("/:id<int>", h.deleteSchedule)
+	api.Put("/:id<int>/space", h.moveSchedule)
 	api.Get("/:id<int>/export", h.export) // ?format=xlsx|json
 	api.Post("/:id<int>/import", h.importInto)
 

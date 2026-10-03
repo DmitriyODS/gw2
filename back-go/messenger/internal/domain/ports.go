@@ -9,7 +9,7 @@ import (
 )
 
 // Repository — персистентность мессенджера (PostgreSQL, общая БД платформы)
-// + read-only лукапы смежных таблиц (pets, tasks, calls).
+// + read-only лукапы смежных таблиц (tasks, calls).
 type Repository interface {
 	// RunInTx — выполнить fn в одной транзакции (forward: диалоги и
 	// сообщения создаются атомарно, иначе при ошибке остаётся пустой диалог).

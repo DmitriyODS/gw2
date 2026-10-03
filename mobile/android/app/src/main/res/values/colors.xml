@@ -2,5 +2,5 @@
 <resources>
     <!-- Фон запуска и WebView до загрузки UI — тёмный, как backgroundColor
          десктоп-клиента (Electron), чтобы не мигало белым. -->
-    <color name="splashBackground">#1A1C1E</color>
+    <color name="splashBackground">#242221</color>
 </resources>

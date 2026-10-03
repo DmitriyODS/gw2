@@ -1,6 +1,6 @@
 <template>
   <AuthShell
-    title="новый пароль"
+    title="Новый пароль"
     subtitle="Придумайте новый пароль для входа в Groove Work."
     size="sm"
     back="/login"
@@ -8,29 +8,27 @@
     <form v-if="token" class="auth-form" @submit.prevent="submit">
       <AuthField
         v-model="password"
-        label="новый пароль"
+        label="Новый пароль"
         type="password"
-        placeholder="не короче 8 символов"
+        placeholder="Не короче 8 символов"
         autocomplete="new-password"
         :disabled="loading"
       />
       <AuthField
         v-model="confirm"
-        label="повторите пароль"
+        label="Повторите пароль"
         type="password"
-        placeholder="ещё раз"
+        placeholder="Ещё раз"
         autocomplete="new-password"
         :disabled="loading"
       />
-      <p v-if="error" class="auth-error">{{ error }}</p>
-      <button type="submit" class="auth-submit" :disabled="loading">
-        {{ loading ? 'сохраняем…' : 'сохранить пароль' }}
-      </button>
+      <AppInfoBar v-if="error" tone="error" inline :message="error" />
+      <AppButton type="submit" variant="filled" size="lg" block :loading="loading" label="Сохранить пароль" />
     </form>
 
     <div v-else class="auth-form">
-      <p class="auth-error">Ссылка недействительна — токен не найден. Запросите сброс пароля заново.</p>
-      <RouterLink to="/forgot-password" class="auth-submit">запросить заново</RouterLink>
+      <AppInfoBar tone="error" inline message="Ссылка недействительна — токен не найден. Запросите сброс пароля заново." />
+      <AppButton tag="router-link" to="/forgot-password" variant="filled" size="lg" block label="Запросить заново" />
     </div>
   </AuthShell>
 </template>
@@ -41,6 +39,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import AuthShell from '@/components/auth/AuthShell.vue'
+import AppButton from '@/components/ui/AppButton.vue'
+import AppInfoBar from '@/components/ui/AppInfoBar.vue'
 import AuthField from '@/components/auth/AuthField.vue'
 
 const route = useRoute()

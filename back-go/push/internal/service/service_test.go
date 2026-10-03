@@ -133,25 +133,6 @@ func TestMessagePushExcludesSenderAndUsesName(t *testing.T) {
 	}
 }
 
-func TestKudosPushToRecipient(t *testing.T) {
-	svc, tokens, sender, _ := newSvc()
-	tokens.byUser[5] = []string{"tok5"}
-
-	payload := []byte(`{"amount":15,"comment":"спасибо за ревью","company_id":10,"from":{"id":7,"fio":"Иван"}}`)
-	svc.Dispatch(context.Background(), "kudos:received", payload, []string{"user_5"})
-
-	if len(sender.sent) != 1 || sender.sent[0].token != "tok5" {
-		t.Fatalf("ожидался 1 пуш на tok5, получено %+v", sender.sent)
-	}
-	n := sender.sent[0].n
-	if n.Channel != domain.ChannelKudos || n.Title != "+15 кудосов 🎉" {
-		t.Fatalf("неверное уведомление: %+v", n)
-	}
-	if n.Body != "От Иван — «спасибо за ревью»" {
-		t.Fatalf("неверный текст: %q", n.Body)
-	}
-}
-
 func TestTaskPushToResponsibleOnly(t *testing.T) {
 	svc, tokens, sender, _ := newSvc()
 	tokens.byUser[9] = []string{"tok9"}

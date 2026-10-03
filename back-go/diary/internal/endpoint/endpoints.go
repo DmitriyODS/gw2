@@ -17,21 +17,24 @@ type Endpoints struct {
 	GetDiary    endpoint.Endpoint
 	CreateDiary endpoint.Endpoint
 	UpdateDiary endpoint.Endpoint
+	MoveDiary   endpoint.Endpoint
 	DeleteDiary endpoint.Endpoint
+	MyDay       endpoint.Endpoint
+	Today       endpoint.Endpoint
 
-	ListEntries   endpoint.Endpoint
-	SearchEntries endpoint.Endpoint
-	Agenda        endpoint.Endpoint
-	GetEntry      endpoint.Endpoint
-	CreateEntry   endpoint.Endpoint
-	UpdateEntry   endpoint.Endpoint
+	ListEntries    endpoint.Endpoint
+	SearchEntries  endpoint.Endpoint
+	Agenda         endpoint.Endpoint
+	GetEntry       endpoint.Endpoint
+	CreateEntry    endpoint.Endpoint
+	UpdateEntry    endpoint.Endpoint
 	SetDone        endpoint.Endpoint
 	SetLink        endpoint.Endpoint
 	MoveEntry      endpoint.Endpoint
 	ReorderEntries endpoint.Endpoint
-	DeleteEntry   endpoint.Endpoint
-	DeleteEntries endpoint.Endpoint
-	ExportEntries endpoint.Endpoint
+	DeleteEntry    endpoint.Endpoint
+	DeleteEntries  endpoint.Endpoint
+	ExportEntries  endpoint.Endpoint
 
 	ListShares  endpoint.Endpoint
 	CreateShare endpoint.Endpoint
@@ -57,7 +60,23 @@ type DiaryReq struct {
 
 type CreateDiaryReq struct {
 	UserID int64
-	Name   string
+	// CompanyID — пространство: nil — личное.
+	CompanyID *int64
+	Name      string
+}
+
+type MoveDiaryReq struct {
+	UserID     int64
+	ID         int64
+	CompanyID  *int64
+	TeamAccess string
+}
+
+// TodayReq — экран «Сегодня»: дата дня и его границы в зоне клиента.
+type TodayReq struct {
+	UserID   int64
+	Day      time.Time
+	From, To time.Time
 }
 
 type UpdateDiaryReq struct {
@@ -185,7 +204,18 @@ func New(s *service.Service) Endpoints {
 		},
 		CreateDiary: func(ctx context.Context, request any) (any, error) {
 			r := request.(CreateDiaryReq)
-			return s.CreateDiary(ctx, r.UserID, r.Name)
+			return s.CreateDiary(ctx, r.UserID, r.CompanyID, r.Name)
+		},
+		MoveDiary: func(ctx context.Context, request any) (any, error) {
+			r := request.(MoveDiaryReq)
+			return s.MoveDiary(ctx, r.UserID, r.ID, r.CompanyID, r.TeamAccess)
+		},
+		MyDay: func(ctx context.Context, request any) (any, error) {
+			return s.MyDay(ctx, request.(UserReq).UserID)
+		},
+		Today: func(ctx context.Context, request any) (any, error) {
+			r := request.(TodayReq)
+			return s.Today(ctx, r.UserID, r.Day, r.From, r.To)
 		},
 		UpdateDiary: func(ctx context.Context, request any) (any, error) {
 			r := request.(UpdateDiaryReq)

@@ -176,9 +176,15 @@ func (s *Service) CopyFolder(ctx context.Context, userID, id int64) (*domain.Fol
 	if err != nil {
 		return nil, err
 	}
-	newID, err := s.repo.CopyFolderTree(ctx, userID, id, f.ParentID)
+	if err := s.ensureLimit(ctx, userID, 1); err != nil {
+		return nil, err
+	}
+	newID, boards, err := s.repo.CopyFolderTree(ctx, userID, id, f.ParentID)
 	if err != nil {
 		return nil, err
+	}
+	for _, boardID := range boards {
+		s.adoptCopiedBoard(ctx, userID, boardID)
 	}
 	cp, err := s.repo.GetFolder(ctx, newID)
 	if err != nil {

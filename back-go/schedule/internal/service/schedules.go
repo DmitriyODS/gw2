@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -23,6 +24,8 @@ type ScheduleInput struct {
 	CycleWeeks  int
 	CycleAnchor time.Time
 	Timezone    string
+	// CompanyID — пространство: nil — личное.
+	CompanyID *int64
 }
 
 // ScheduleUpdate — частичная правка: nil-поля не меняются.
@@ -46,7 +49,7 @@ func (s *Service) ListSchedules(ctx context.Context, userID int64, shared bool) 
 	if shared {
 		list, err = s.repo.ListShared(ctx, a.UserID, a.Companies)
 	} else {
-		list, err = s.repo.ListOwned(ctx, a.UserID)
+		list, err = s.repo.ListOwned(ctx, a.UserID, a.Companies)
 	}
 	if err != nil {
 		return nil, err
@@ -128,6 +131,13 @@ func (s *Service) CreateSchedule(ctx context.Context, userID int64, in ScheduleI
 	if name == "" {
 		return nil, domain.ErrNameRequired
 	}
+	a, err := s.actor(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.requireMember(a, in.CompanyID); err != nil {
+		return nil, err
+	}
 	pos, err := s.repo.NextPosition(ctx, userID)
 	if err != nil {
 		return nil, err
@@ -139,6 +149,9 @@ func (s *Service) CreateSchedule(ctx context.Context, userID int64, in ScheduleI
 	}
 	sc := &domain.Schedule{
 		OwnerID:     userID,
+		CompanyID:   in.CompanyID,
+		TeamAccess:  domain.AccessView,
+		MyAccess:    domain.AccessOwner,
 		Name:        name,
 		CycleWeeks:  weeks,
 		CycleAnchor: domain.MondayOf(anchor),
@@ -208,7 +221,7 @@ func (s *Service) UpdateSchedule(ctx context.Context, userID, id int64, up Sched
 }
 
 func (s *Service) DeleteSchedule(ctx context.Context, userID, id int64) error {
-	sc, err := s.requireOwner(ctx, userID, id)
+	sc, err := s.requireManage(ctx, userID, id)
 	if err != nil {
 		return err
 	}
@@ -228,4 +241,60 @@ func normalizeTimezone(tz string) string {
 		return "Europe/Moscow"
 	}
 	return tz
+}
+
+/*
+MoveSchedule — сменить пространство расписания и уровень участников команды.
+
+	Распоряжается владелец; забирая расписание к себе, человек становится его
+	хозяином. Кто доступ потерял, получает событие удаления.
+*/
+func (s *Service) MoveSchedule(ctx context.Context, userID, id int64, companyID *int64, teamAccess string) (*View, error) {
+	a, err := s.actor(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	sc, err := s.require(ctx, a, id, domain.AccessOwner)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.requireMember(a, companyID); err != nil {
+		return nil, err
+	}
+	before, err := s.repo.Audience(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if companyID == nil {
+		sc.OwnerID = userID
+	}
+	sc.CompanyID = companyID
+	if teamAccess != "" {
+		sc.TeamAccess = domain.NormalizeTeamAccess(teamAccess)
+	}
+	if err := s.repo.MoveSchedule(ctx, id, sc.OwnerID, sc.CompanyID, sc.TeamAccess); err != nil {
+		return nil, err
+	}
+	after, err := s.repo.Audience(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	kept := make(map[int64]bool, len(after))
+	for _, uid := range after {
+		kept[uid] = true
+	}
+	gone := []string{}
+	for _, uid := range before {
+		if !kept[uid] {
+			gone = append(gone, fmt.Sprintf("user_%d", uid))
+		}
+	}
+	if len(gone) > 0 {
+		s.bus.Publish(ctx, "schedule:deleted", gone, map[string]any{"id": id})
+	}
+	s.publish(ctx, id, "schedule:updated", schedulePayload(sc))
+	if sc, err = s.require(ctx, a, id, domain.AccessView); err != nil {
+		return nil, err
+	}
+	return s.view(ctx, sc, !sc.Shared)
 }

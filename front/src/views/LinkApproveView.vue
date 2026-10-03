@@ -4,24 +4,25 @@
       <BrandLoader v-if="state === 'loading'" :size="64" />
 
       <template v-else-if="state === 'confirm'">
-        <p v-if="error" class="la-error">{{ error }}</p>
+        <AppInfoBar v-if="error" tone="error" inline :message="error" class="la-wide" />
         <div class="la-actions">
-          <AppButton label="отмена" @click="goHome" />
+          <AppButton label="Отмена" @click="goHome" />
           <AppButton
             variant="filled"
-            :disabled="loading || (isTv && authStore.companyId == null)"
+            :loading="loading"
+            :disabled="isTv && authStore.companyId == null"
             @click="approve"
-          >{{ loading ? 'подтверждаем…' : 'подтвердить' }}</AppButton>
+          >Подтвердить</AppButton>
         </div>
       </template>
 
       <template v-else-if="state === 'done'">
-        <AppButton variant="filled" label="на главную" class="la-wide" @click="goHome" />
+        <AppButton variant="filled" label="На главную" size="lg" block @click="goHome" />
       </template>
 
       <template v-else>
-        <p class="la-error">{{ error }}</p>
-        <AppButton variant="filled" label="на главную" class="la-wide" @click="goHome" />
+        <AppInfoBar tone="error" inline :message="error" class="la-wide" />
+        <AppButton variant="filled" label="На главную" size="lg" block @click="goHome" />
       </template>
     </div>
   </AuthShell>
@@ -30,6 +31,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import AppButton from '@/components/ui/AppButton.vue'
+import AppInfoBar from '@/components/ui/AppInfoBar.vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
 import { linkInfo, linkApprove } from '@/api/devicelink.js'
@@ -50,10 +52,10 @@ const code = computed(() => normalizeLinkCode(route.query.code))
 const isTv = computed(() => info.value?.kind === 'tv')
 
 const title = computed(() => {
-  if (state.value === 'loading') return 'проверяем код'
-  if (state.value === 'done') return 'готово'
-  if (state.value === 'error') return 'не получилось'
-  return isTv.value ? 'активировать ТВ-киоск?' : 'подтвердить вход?'
+  if (state.value === 'loading') return 'Проверяем код'
+  if (state.value === 'done') return 'Готово'
+  if (state.value === 'error') return 'Не получилось'
+  return isTv.value ? 'Активировать ТВ-киоск?' : 'Подтвердить вход?'
 })
 
 const subtitle = computed(() => {
@@ -130,12 +132,6 @@ function goHome() {
   justify-content: center;
 }
 
-.la-wide { width: 100%; justify-content: center; height: 44px; }
+.la-wide { width: 100%; }
 
-.la-error {
-  margin: 0;
-  font-size: 13px;
-  color: var(--color-error);
-  text-align: center;
-}
 </style>

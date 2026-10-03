@@ -3,6 +3,8 @@ package domain
 import (
 	"context"
 	"time"
+
+	"github.com/DmitriyODS/gw2/back-go/pkg/spaces"
 )
 
 // Ctx — алиас, чтобы сигнатуры портов не разбухали.
@@ -11,12 +13,21 @@ type Ctx = context.Context
 // DiaryRepository — персистентность ежедневников, их записей и шаринга.
 type DiaryRepository interface {
 	// ── Ежедневники ──
-	// ListOwned — личные ежедневники владельца (вкладка «Мои»).
-	ListOwned(ctx Ctx, ownerID int64) ([]*Diary, error)
+	// ListOwned — ежедневники пространств человека: личные и всех его команд
+	// (вкладка «Мои»), без скрытого «Моего дня».
+	ListOwned(ctx Ctx, userID int64) ([]*Diary, error)
 	// ListShared — чужие ежедневники, открытые пользователю адресно (вкладка
-	// «Поделились»), с именем/аватаром владельца. Read-only.
+	// «Поделились»), с именем/аватаром владельца.
 	ListShared(ctx Ctx, userID int64) ([]*Diary, error)
 	GetDiary(ctx Ctx, id int64) (*Diary, error)
+	// AccessOf — эффективный уровень человека к ежедневнику ("" — нет доступа).
+	AccessOf(ctx Ctx, diaryID, userID int64) (string, error)
+	// Audience — кому адресовать события ежедневника.
+	Audience(ctx Ctx, diaryID int64) ([]int64, error)
+	// MyDay — скрытый «Мой день» человека (заводится при первом обращении).
+	MyDay(ctx Ctx, ownerID int64) (*Diary, error)
+	// MoveDiary — сменить пространство, хозяина и уровень участников.
+	MoveDiary(ctx Ctx, id, ownerID int64, companyID *int64, teamAccess string) error
 	// CountDiaries — сколько ежедневников уже есть (лимит тарифа).
 	CountDiaries(ctx Ctx, owner_id int64) (int, error)
 	CreateDiary(ctx Ctx, d *Diary) error
@@ -47,6 +58,12 @@ type DiaryRepository interface {
 	// (живая плитка «Ежедневники» на рабочем столе): один запрос, без N+1.
 	// Возвращает записи по возрастанию дня и времени начала и общее их число.
 	Agenda(ctx Ctx, userID int64, from, to time.Time, limit int) (items []*SearchHit, total int, err error)
+	// TodayEntries — невыполненные дела по день day включительно из всех
+	// доступных ежедневников плюс дела «Мого дня» без срока, с названиями
+	// ежедневников.
+	TodayEntries(ctx Ctx, userID int64, day time.Time, limit int) ([]*Entry, map[int64]string, error)
+	// DoneOn — сколько дел закрыто за промежуток [from, to).
+	DoneOn(ctx Ctx, userID int64, from, to time.Time) (int, error)
 
 	// ── Публичные ссылки ──
 	CreateShare(ctx Ctx, s *Share) error
@@ -69,6 +86,8 @@ type DiaryRepository interface {
 // UserReader — read-only идентичность пользователей (владелец таблицы — authsvc).
 type UserReader interface {
 	GetUser(ctx Ctx, id int64) (*User, error)
+	// TeamRole — положение человека в команде (можно ли положить в неё ежедневник).
+	TeamRole(ctx Ctx, userID, companyID int64) (spaces.Role, error)
 }
 
 // EventBus — сокет-события клиентам через Redis gw2:diary:events

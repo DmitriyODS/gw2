@@ -11,7 +11,7 @@
 // TasksService, исходящий контракт для aisvc (статистика/поиск задач для
 // инструментов ИИ-ассистента).
 //
-// Межсервисное: petsvc (gRPC, хуки геймификации), aisvc (gRPC-клиент,
+// Межсервисное: aisvc (gRPC-клиент,
 // семантический поиск + реиндекс эмбеддингов; и gRPC-сервер — наоборот,
 // aisvc зовёт нас). Сокет-события клиентам — Redis-канал gw2:tasks:events
 // (доставляет gatewaysvc).
@@ -44,7 +44,6 @@ func main() {
 
 	dbURL := bootstrap.Env("DATABASE_URL", "postgresql://grovework:grovework_local@localhost:5432/grovework")
 	redisURL := bootstrap.Env("REDIS_URL", "redis://localhost:6379/0")
-	petsAddr := bootstrap.Env("PETS_GRPC_ADDR", "localhost:9094")
 	aiAddr := bootstrap.Env("AI_GRPC_ADDR", "localhost:9093")
 	httpAddr := bootstrap.Env("HTTP_ADDR", ":8095")
 	grpcAddr := bootstrap.Env("GRPC_ADDR", ":9095")
@@ -65,12 +64,6 @@ func main() {
 	rdb := bootstrap.MustRedis(log, redisURL)
 	defer rdb.Close()
 
-	pets, err := clients.NewPets(petsAddr, log)
-	if err != nil {
-		log.Error("pets.client_failed", "error", err)
-		os.Exit(1)
-	}
-	defer pets.Close()
 	ai, err := clients.NewAI(aiAddr, log)
 	if err != nil {
 		log.Error("ai.client_failed", "error", err)
@@ -83,7 +76,7 @@ func main() {
 	svc := service.New(service.Deps{
 		Tasks: repo, Tags: repo, Units: repo, UnitTypes: repo, Depts: repo,
 		Stages: repo, Comments: repo, Stats: repo, Users: users, Companies: users,
-		Pets: pets, AI: ai,
+		AI:  ai,
 		Bus: events.NewPublisher(rdb, log, "gw2:tasks:events"),
 		Log: log,
 	})

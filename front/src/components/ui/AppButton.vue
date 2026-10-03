@@ -111,52 +111,91 @@ function onClick(e) {
   height: 46px; min-height: 46px; max-height: 46px;
 }
 
-/* ── filled: главное действие, фирменный градиент ── */
-.v-filled {
-  background: var(--grad-primary);
-  color: var(--color-on-primary);
-  box-shadow: var(--shadow-sm);
+/* ── filled: главное действие — выпуклое тело своего цвета ──
+   Скеоморфизм: свет сверху (верх светлее, по кромке блик), снизу тёмная
+   фаска и короткая тень; под пальцем тело вдавливается. Цвет тела — локальная
+   --sk-tone: токен на :root чужой цвет не подставил бы. */
+/* Без color-mix (старые WebKit) — плоская заливка; объёмное тело ниже. */
+.v-filled { background: var(--grad-primary); color: var(--color-on-primary); box-shadow: var(--shadow-sm); }
+@supports (color: color-mix(in oklch, red, blue)) {
+  .v-filled {
+    --sk-tone: var(--color-primary);
+    border-color: color-mix(in oklch, var(--sk-tone) 70%, black);
+    background:
+      var(--grain),
+      linear-gradient(180deg,
+        color-mix(in oklch, var(--sk-tone) 82%, white),
+        var(--sk-tone) 55%,
+        color-mix(in oklch, var(--sk-tone) 88%, black));
+    color: var(--color-on-primary);
+    box-shadow:
+      inset 0 1px 0 color-mix(in oklch, white 40%, transparent),
+      inset 0 -1px 0 color-mix(in oklch, black 18%, transparent),
+      0 1px 2px color-mix(in oklch, var(--sk-tone) 40%, transparent),
+      0 4px 10px color-mix(in oklch, var(--sk-tone) 24%, transparent);
+  }
 }
-.v-filled:hover:not(:disabled) { filter: brightness(1.06); box-shadow: var(--shadow-md); }
-.v-filled.tone-danger { background: var(--color-error); color: var(--color-on-error); }
-.v-filled.tone-success { background: var(--color-success); color: var(--color-on-success); }
-.v-filled.tone-neutral { background: var(--color-surface-high); color: var(--color-text); }
+.v-filled:hover:not(:disabled) { filter: brightness(1.05); }
 
-/* ── glass / icon: стеклянное тело с бликом по кромке ── */
+@supports (color: color-mix(in oklch, red, blue)) {
+  .v-filled:active:not(:disabled) {
+    filter: brightness(0.96);
+    box-shadow:
+      inset 0 2px 5px color-mix(in oklch, black 28%, transparent),
+      inset 0 1px 1px color-mix(in oklch, black 20%, transparent);
+  }
+}
+.v-filled.tone-danger { --sk-tone: var(--color-error); color: var(--color-on-error); }
+.v-filled.tone-success { --sk-tone: var(--color-success); color: var(--color-on-success); }
+.v-filled.tone-neutral {
+  border-color: var(--sk-edge);
+  background: var(--sk-raised-bg);
+  color: var(--color-text);
+  box-shadow: var(--sk-raised-shadow);
+}
+
+/* ── glass / icon: матовое приподнятое тело ── */
 .v-glass,
 .v-icon {
-  border-color: var(--acrylic-border);
-  background: var(--glass-bg);
-  box-shadow: var(--glass-edge);
+  border-color: var(--sk-edge);
+  background: var(--sk-raised-bg);
+  box-shadow: var(--sk-raised-shadow);
   color: var(--color-text);
 }
 
 .v-glass:hover:not(:disabled),
-.v-icon:hover:not(:disabled) {
-  background: var(--glass-bg), color-mix(in oklch, var(--color-primary) 12%, transparent);
-  border-color: color-mix(in oklch, var(--color-primary) 30%, var(--acrylic-border));
+.v-icon:hover:not(:disabled),
+.v-filled.tone-neutral:hover:not(:disabled) {
+  background: var(--sk-raised-hover-bg);
+  color: var(--color-text);
+}
+
+.v-glass:active:not(:disabled),
+.v-icon:active:not(:disabled),
+.v-filled.tone-neutral:active:not(:disabled) {
+  background: var(--sk-pressed-bg);
+  box-shadow: var(--sk-pressed-shadow);
 }
 
 .v-glass.tone-danger,
-.v-icon.tone-danger {
-  color: var(--color-error);
-  border-color: color-mix(in oklch, var(--color-error) 30%, var(--color-outline-dim));
-}
+.v-icon.tone-danger { color: var(--color-error); }
 
 .v-glass.tone-danger:hover:not(:disabled),
-.v-icon.tone-danger:hover:not(:disabled) {
-  background: var(--glass-bg), color-mix(in oklch, var(--color-error) 12%, transparent);
-  border-color: color-mix(in oklch, var(--color-error) 45%, var(--acrylic-border));
-}
+.v-icon.tone-danger:hover:not(:disabled) { color: var(--color-error); }
 
 .v-glass.tone-success {
-  background: var(--color-success-container);
-  border-color: transparent;
+  border-color: color-mix(in oklch, var(--color-success) 30%, var(--sk-edge));
+  background:
+    var(--grain),
+    linear-gradient(180deg,
+      color-mix(in oklch, var(--color-success-container) 70%, white),
+      var(--color-success-container));
   color: var(--color-on-success-container);
 }
 
 .v-glass.tone-success:hover:not(:disabled) {
-  background: color-mix(in oklch, var(--color-success) 26%, var(--color-success-container));
+  background: var(--grain), color-mix(in oklch, var(--color-success) 22%, var(--color-success-container));
+  color: var(--color-on-success-container);
 }
 
 /* ── text: без тела, только подпись ── */
@@ -172,6 +211,7 @@ function onClick(e) {
 .v-text.tone-danger:hover:not(:disabled) {
   background: color-mix(in oklch, var(--color-error) 10%, transparent);
 }
+.v-text:active:not(:disabled) { box-shadow: var(--sk-pressed-shadow); }
 
 /* ── Индикатор загрузки: кольцо в размер иконки ── */
 .btn-spin {

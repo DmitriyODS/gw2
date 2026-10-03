@@ -85,8 +85,9 @@ type BoardRepository interface {
 	// (nil — в корень); используется при удалении папки.
 	ReparentChildren(ctx Ctx, folderID int64, newParent *int64) error
 	// CopyFolderTree — глубокая копия поддерева папки со всеми досками владельца;
-	// возвращает id корневой копии.
-	CopyFolderTree(ctx Ctx, ownerID, folderID int64, newParent *int64) (int64, error)
+	// возвращает id корневой копии и id скопированных досок (им ещё нужны
+	// свои файлы картинок).
+	CopyFolderTree(ctx Ctx, ownerID, folderID int64, newParent *int64) (int64, []int64, error)
 
 	// ── Публичные ссылки ──
 	ListShares(ctx Ctx, boardID int64) ([]*Share, error)

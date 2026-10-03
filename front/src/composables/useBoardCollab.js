@@ -29,6 +29,7 @@ export function useBoardCollab({ boardId, canEdit, isDrawing, getScene, getTitle
     .map(([id, p]) => ({ user_id: id, ...p })))
 
   let started = false
+  let startedFor = 0
   let heartbeatTimer = null
   let pruneTimer = null
   let cursorTimer = null
@@ -88,7 +89,7 @@ export function useBoardCollab({ boardId, canEdit, isDrawing, getScene, getTitle
     if (!notMine(p)) return
     touch(p.user_id, p.fio ? { fio: p.fio } : {})
     // Отвечаем присутствием, чтобы новоприбывший узнал о нас.
-    setTimeout(() => send({ kind: 'cursor', cursor: { from: 0, to: 0 } }), 300)
+    setTimeout(heartbeat, 300)
   }
 
   function onCursor(p) {
@@ -103,7 +104,7 @@ export function useBoardCollab({ boardId, canEdit, isDrawing, getScene, getTitle
 
   function onScene(p) {
     if (!notMine(p)) return
-    touch(p.user_id, p.cursor ? { x: p.cursor.from, y: p.cursor.to } : {})
+    touch(p.user_id)
     if (p.title != null) onRemoteTitle?.(p.title)
     // Пока идёт свой жест — чужую сцену не применяем, иначе штрих оборвётся.
     if (p.scene && !isDrawing?.()) onRemoteScene?.(p.scene)
@@ -116,9 +117,16 @@ export function useBoardCollab({ boardId, canEdit, isDrawing, getScene, getTitle
   }
 
   // ── Жизненный цикл ──
+  /* Пульс присутствия — кадр без координат: с точкой (0,0) курсор соавтора
+     раз в 10 секунд прыгал бы в начало холста. */
+  function heartbeat() { send({ kind: 'cursor' }) }
+
+  /** Подключиться к доске; другая доска в том же редакторе — переподключение. */
   function start() {
-    if (started || !boardId.value) return
+    if (!boardId.value || (started && startedFor === boardId.value)) return
+    if (started) stop()
     started = true
+    startedFor = boardId.value
     const socket = getSocket()
     socket?.on('board_collab:join', onJoin)
     socket?.on('board_collab:cursor', onCursor)
@@ -126,7 +134,7 @@ export function useBoardCollab({ boardId, canEdit, isDrawing, getScene, getTitle
     socket?.on('board_collab:scene', onScene)
     socket?.on('board_collab:ops', onOps)
     send({ kind: 'join' })
-    heartbeatTimer = setInterval(() => send({ kind: 'cursor', cursor: { from: 0, to: 0 } }), HEARTBEAT_MS)
+    heartbeatTimer = setInterval(heartbeat, HEARTBEAT_MS)
     pruneTimer = setInterval(() => {
       const now = Date.now()
       let changed = false
@@ -139,12 +147,15 @@ export function useBoardCollab({ boardId, canEdit, isDrawing, getScene, getTitle
     window.addEventListener('beforeunload', sendLeave)
   }
 
-  function sendLeave() { send({ kind: 'leave' }) }
+  function sendLeave() {
+    if (startedFor) sendCollab(startedFor, { kind: 'leave' }).catch(() => { /* collab не критичен */ })
+  }
 
   function stop() {
     if (!started) return
-    started = false
     sendLeave()
+    started = false
+    startedFor = 0
     const socket = getSocket()
     socket?.off('board_collab:join', onJoin)
     socket?.off('board_collab:cursor', onCursor)

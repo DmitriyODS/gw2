@@ -484,17 +484,6 @@ func (f *fakeUsers) setVacation(userID, companyID int64, on bool) {
 
 func (f *fakeUsers) YougileEnabled(_ context.Context, _ int64) (bool, error) { return true, nil }
 
-type fakePets struct {
-	started, stopped int
-	closedHero       int64
-}
-
-func (f *fakePets) OnUnitStarted(*domain.Unit, string) { f.started++ }
-func (f *fakePets) OnUnitStopped(*domain.Unit, string) { f.stopped++ }
-func (f *fakePets) OnTaskClosed(_ *domain.Task, actorID int64) {
-	f.closedHero = actorID
-}
-
 type fakeAI struct {
 	enabled   bool
 	hits      []int64
@@ -529,20 +518,18 @@ func (f *fakeBus) names() []string {
 
 // ── Хелперы ──────────────────────────────────────────────────────
 
-func newTestService() (*Service, *fakeStore, *fakePets, *fakeAI, *fakeBus, *fakeUsers) {
+func newTestService() (*Service, *fakeStore, *fakeAI, *fakeBus, *fakeUsers) {
 	store := newFakeStore()
-	pets := &fakePets{}
 	ai := &fakeAI{}
 	bus := &fakeBus{}
 	users := &fakeUsers{users: map[int64]*domain.User{}}
 	svc := New(Deps{
 		Tasks: store, Tags: store, Units: store, UnitTypes: store, Depts: store,
 		Stages: store, Comments: store, Stats: nil, Users: users, Companies: users,
-		Pets: pets, AI: ai, Bus: bus, Log: slog.New(slog.DiscardHandler),
+		AI: ai, Bus: bus, Log: slog.New(slog.DiscardHandler),
 	})
-	return svc, store, pets, ai, bus, users
+	return svc, store, ai, bus, users
 }
-
 
 // cid — указатель на id компании для скоуп-параметров сервисных методов.
 func cid(v int64) *int64 { return &v }
@@ -563,15 +550,12 @@ func employee(users *fakeUsers, id, companyID int64) *domain.User {
 // ── Тесты инвариантов ────────────────────────────────────────────
 
 func TestCreateUnitSecondActiveForbidden(t *testing.T) {
-	svc, store, pets, _, _, _ := newTestService()
+	svc, store, _, _, _ := newTestService()
 	task := seedTask(store, 1)
 	store.unitTypes[10] = &domain.UnitType{ID: 10, Name: "Код", CompanyID: 1}
 
 	if _, err := svc.CreateUnit(context.Background(), task.ID, 5, cid(1), "первый", 10); err != nil {
 		t.Fatalf("первый юнит: %v", err)
-	}
-	if pets.started != 1 {
-		t.Fatal("pets.OnUnitStarted не вызван")
 	}
 	_, err := svc.CreateUnit(context.Background(), task.ID, 5, cid(1), "второй", 10)
 	de := domain.AsDomainError(err)
@@ -581,7 +565,7 @@ func TestCreateUnitSecondActiveForbidden(t *testing.T) {
 }
 
 func TestCreateUnitForeignTypeForbidden(t *testing.T) {
-	svc, store, _, _, _, _ := newTestService()
+	svc, store, _, _, _ := newTestService()
 	task := seedTask(store, 1)
 	store.unitTypes[10] = &domain.UnitType{ID: 10, Name: "Чужой", CompanyID: 2}
 
@@ -593,7 +577,7 @@ func TestCreateUnitForeignTypeForbidden(t *testing.T) {
 }
 
 func TestArchiveTaskWithActiveUnitForbidden(t *testing.T) {
-	svc, store, pets, _, bus, _ := newTestService()
+	svc, store, _, bus, _ := newTestService()
 	task := seedTask(store, 1)
 	store.unitTypes[10] = &domain.UnitType{ID: 10, Name: "Код", CompanyID: 1}
 	if _, err := svc.CreateUnit(context.Background(), task.ID, 5, cid(1), "работа", 10); err != nil {
@@ -606,7 +590,7 @@ func TestArchiveTaskWithActiveUnitForbidden(t *testing.T) {
 		t.Fatalf("ожидался HAS_ACTIVE_UNIT 422, получено %v", err)
 	}
 
-	// Останавливаем юнит — архивирование проходит, хук и события на месте.
+	// Останавливаем юнит — архивирование проходит, события на месте.
 	for id := range store.units {
 		if _, err := svc.StopUnit(context.Background(), id, 5, domain.LevelEmployee, cid(1)); err != nil {
 			t.Fatalf("stop: %v", err)
@@ -614,9 +598,6 @@ func TestArchiveTaskWithActiveUnitForbidden(t *testing.T) {
 	}
 	if _, err := svc.ArchiveTask(context.Background(), task.ID, 5, cid(1)); err != nil {
 		t.Fatalf("archive: %v", err)
-	}
-	if pets.closedHero != 5 {
-		t.Fatalf("OnTaskClosed hero = %d", pets.closedHero)
 	}
 	names := bus.names()
 	found := map[string]bool{}
@@ -634,7 +615,7 @@ func TestArchiveTaskWithActiveUnitForbidden(t *testing.T) {
 }
 
 func TestStopForeignUnitNeedsManager(t *testing.T) {
-	svc, store, _, _, bus, users := newTestService()
+	svc, store, _, bus, users := newTestService()
 	task := seedTask(store, 1)
 	store.unitTypes[10] = &domain.UnitType{ID: 10, Name: "Код", CompanyID: 1}
 	employee(users, 7, 1)
@@ -663,7 +644,7 @@ func TestStopForeignUnitNeedsManager(t *testing.T) {
 }
 
 func TestUpdateTaskReindexAndBroadcast(t *testing.T) {
-	svc, store, _, ai, bus, _ := newTestService()
+	svc, store, ai, bus, _ := newTestService()
 	task := seedTask(store, 1)
 
 	newName := "Новое имя"
@@ -689,7 +670,7 @@ func TestUpdateTaskReindexAndBroadcast(t *testing.T) {
 // должна прятать задачу, которую видно по названию (в частности — только что
 // созданную, эмбеддинг которой ещё считается).
 func TestSemanticSearchComplementsTextSearch(t *testing.T) {
-	svc, store, _, ai, _, _ := newTestService()
+	svc, store, ai, _, _ := newTestService()
 	task := seedTask(store, 1)
 	ai.enabled = true
 	ai.hits = []int64{} // семантика ничего не нашла
@@ -723,7 +704,7 @@ func TestSemanticSearchComplementsTextSearch(t *testing.T) {
 // Отпуск (user_companies.on_vacation): создание/правка/закрытие задач и старт
 // юнитов закрыты кодом ON_VACATION 403; личные действия (цвет) — нет.
 func TestVacationBlocksTaskAndUnitMutations(t *testing.T) {
-	svc, store, _, _, _, users := newTestService()
+	svc, store, _, _, users := newTestService()
 	task := seedTask(store, 1)
 	store.unitTypes[10] = &domain.UnitType{ID: 10, Name: "Код", CompanyID: 1}
 	employee(users, 5, 1)
@@ -757,7 +738,7 @@ func TestVacationBlocksTaskAndUnitMutations(t *testing.T) {
 // Прямая ссылка на задачу: посторонний получает говорящий отказ, свой с другой
 // активной компанией — предложение переключиться, несуществующая — 404.
 func TestTaskLinkAccess(t *testing.T) {
-	svc, store, _, _, _, users := newTestService()
+	svc, store, _, _, users := newTestService()
 	task := seedTask(store, 10)
 	employee(users, 1, 10) // сотрудник компании задачи
 	employee(users, 2, 20) // посторонний

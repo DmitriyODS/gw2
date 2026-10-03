@@ -112,6 +112,7 @@ func NewServer(svc *service.Service, users domain.UserReader,
 	api.Get("/:id<int>", h.getRegistry)
 	api.Patch("/:id<int>", h.updateRegistry)
 	api.Delete("/:id<int>", h.deleteRegistry)
+	api.Put("/:id<int>/space", h.moveRegistry)
 	api.Put("/:id<int>/fields", h.replaceFields)
 
 	// Внешние ссылки и журнал переходов.
@@ -184,16 +185,6 @@ func userID(c *fiber.Ctx) int64 {
 		return u.ID
 	}
 	return 0
-}
-
-// activeCompany — компания сессии; nil, если человек ни в одной не состоит либо
-// не выбрал активную. Нужна только при СОЗДАНИИ реестра: она решает, чья квота
-// платит за файлы и что предложить в «поделиться с компанией».
-func activeCompany(c *fiber.Ctx) *int64 {
-	if u := currentUser(c); u != nil {
-		return u.CompanyID
-	}
-	return nil
 }
 
 // visitor — кто открывает публичную ссылку. Адрес берём из заголовков прокси:

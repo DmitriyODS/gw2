@@ -109,7 +109,7 @@ onBeforeUnmount(() => {
   border-radius: var(--radius-lg);
   /* Плотная подложка, как у панелей редактора: под попапом рисунок. */
   background: var(--color-surface);
-  box-shadow: var(--shadow-3);
+  box-shadow: var(--shadow-lg);
 }
 
 .sp-head { display: flex; align-items: center; gap: 6px; }

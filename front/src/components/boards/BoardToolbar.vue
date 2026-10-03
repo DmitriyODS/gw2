@@ -25,6 +25,10 @@ const props = defineProps({
   polygonStar: { type: Boolean, default: false },
   zoom: { type: Number, default: 1 },
   hasSelection: { type: Boolean, default: false },
+  /* Гость публичной ссылки не загружает картинки (ему некуда) и не ведёт
+     обсуждений (у него нет имени), поэтому эти инструменты ему не показываем. */
+  images: { type: Boolean, default: true },
+  comments: { type: Boolean, default: true },
 })
 
 const emit = defineEmits([
@@ -93,7 +97,7 @@ const sizePopover = ref({ open: false, anchor: { x: 0, y: 0 }, kind: 'width' })
 // инструмента в сцене нет, различает флаг polygonStar.
 const activeKey = computed(() => (props.tool === 'polygon' && props.polygonStar ? 'star' : props.tool))
 
-const groupState = computed(() => GROUPS.map((g) => {
+const groupState = computed(() => GROUPS.filter((g) => props.comments || g.id !== 'comment').map((g) => {
   const pickedKey = g.items.length > 1 ? (chosen.value[g.id] || g.items[0].key) : g.items[0].key
   const item = g.items.find((i) => i.key === pickedKey) || g.items[0]
   const active = g.items.some((i) => i.key === activeKey.value)
@@ -232,7 +236,7 @@ function onColorSelect(value) {
       >
         <span class="material-symbols-outlined">{{ g.shown.icon }}</span>
       </button>
-      <button type="button" class="bt-btn" title="Картинка" aria-label="Картинка" @click="emit('add-image')">
+      <button v-if="images" type="button" class="bt-btn" title="Картинка" aria-label="Картинка" @click="emit('add-image')">
         <span class="material-symbols-outlined">image</span>
       </button>
     </div>
@@ -383,7 +387,7 @@ function onColorSelect(value) {
   -webkit-backdrop-filter: var(--acrylic-blur);
   backdrop-filter: var(--acrylic-blur);
   background: var(--acrylic-bg);
-  box-shadow: var(--shadow-2);
+  box-shadow: var(--shadow-md);
 }
 
 .bt::-webkit-scrollbar { display: none; }
@@ -394,7 +398,7 @@ function onColorSelect(value) {
   align-items: center;
   gap: 4px;
   padding-right: 6px;
-  border-right: 1px solid var(--color-outline-variant);
+  border-right: 1px solid var(--color-outline-dim);
 }
 
 .bt-group:last-child { border-right: none; padding-right: 0; }
@@ -456,7 +460,7 @@ function onColorSelect(value) {
   border: 2px solid var(--color-outline-dim);
   border-radius: 50%;
   background: var(--color-text);
-  color: var(--color-text-muted);
+  color: var(--color-text-dim);
   cursor: pointer;
 }
 
@@ -468,7 +472,7 @@ function onColorSelect(value) {
   min-width: 44px;
   text-align: center;
   font-size: 12px;
-  color: var(--color-text-muted);
+  color: var(--color-text-dim);
 }
 
 @media (max-width: 768px) {

@@ -13,21 +13,13 @@
           hint="Светлая или тёмная тема, как в системе либо по расписанию."
           stack
         >
-          <div class="mode-seg" role="tablist">
-            <button
-              v-for="m in THEME_MODES"
-              :key="m.value"
-              class="mode-btn"
-              :class="{ active: themeStore.mode === m.value }"
-              role="tab"
-              type="button"
-              :aria-selected="themeStore.mode === m.value"
-              @click="themeStore.setMode(m.value)"
-            >
-              <span class="material-symbols-outlined">{{ m.icon }}</span>
-              <span class="mode-label">{{ m.label }}</span>
-            </button>
-          </div>
+          <AppTabs
+            variant="tint"
+            full-width
+            :model-value="themeStore.mode"
+            :tabs="THEME_MODES"
+            @update:model-value="themeStore.setMode"
+          />
         </AppRow>
 
         <Transition name="ts-reveal">
@@ -218,46 +210,6 @@ async function onImport(event) {
   gap: 18px;
 }
 
-/* ── Сегментированный переключатель режима ── */
-.mode-seg {
-  display: flex;
-  width: 100%;
-  gap: 4px;
-  padding: 5px;
-  border-radius: 999px;
-  background: var(--color-surface-low);
-  border: 1px solid var(--acrylic-border);
-}
-
-.mode-btn {
-  flex: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  min-width: 0;
-  padding: 9px 12px;
-  border: none;
-  border-radius: 999px;
-  background: none;
-  color: var(--color-text-dim);
-  font-size: 0.88rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.2s ease, color 0.2s ease;
-}
-
-.mode-btn .material-symbols-outlined { font-size: 20px; }
-
-.mode-btn:hover:not(.active) { background: var(--color-surface-high); }
-
-.mode-btn.active {
-  background: var(--color-primary-container);
-  color: var(--color-on-primary-container);
-}
-
-.mode-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
 .mode-times {
   display: grid;
   width: 100%;
@@ -281,33 +233,33 @@ async function onImport(event) {
 /* ── Сетка тем ── */
 .theme-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(190px, 100%), 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(min(140px, 100%), 1fr));
+  gap: 12px;
 }
 
+/* Пустое гнездо под новый образец: углубление той же формы, что выкраска. */
 .theme-new {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 6px;
+  min-height: 128px;
   padding: 12px;
-  border: 1px dashed var(--color-outline-dim);
+  border: 1px solid var(--sk-edge);
   border-radius: var(--radius-lg);
-  background: none;
+  background: var(--sk-well-bg);
+  box-shadow: var(--sk-well-shadow);
   color: var(--color-text-dim);
-  font-size: 0.88rem;
+  font-size: 0.85rem;
   font-weight: 600;
   cursor: pointer;
-  transition: border-color 0.2s ease, color 0.2s ease, background 0.2s ease;
+  transition: color 0.2s ease;
 }
 
-.theme-new:hover {
-  border-color: var(--color-primary);
-  color: var(--color-primary);
-  background: var(--color-surface-low);
-}
+.theme-new:hover { color: var(--color-primary); }
 
-.theme-new .material-symbols-outlined { font-size: 20px; }
+.theme-new .material-symbols-outlined { font-size: 26px; }
 
 /* ── Импорт/экспорт и кнопки-действия секций ── */
 .ts-io {
@@ -328,39 +280,13 @@ async function onImport(event) {
 }
 
 /* Узкая ПАНЕЛЬ раздела (её контейнер объявляет SettingsView), а не экран:
-   в половинном окне рабочего стола четыре сегмента в строку не помещаются —
-   становимся сеткой 2×2. Дорожка при этом теряет форму пилюли: скругление
-   999px на двух рядах выглядит сломанным. */
+   время включения и выключения встают друг под другом. Дубль @media — для
+   заводского WebView старых Android, который @container не знает. */
 @container (max-width: 640px) {
-  .mode-seg {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 6px;
-    border-radius: var(--radius-lg);
-  }
-  .mode-btn { justify-content: flex-start; padding: 10px 14px; }
   .mode-times { grid-template-columns: 1fr; }
 }
 
-/* Дубль для заводского WebView старых Android (chrome87 не знает @container);
-   там окно всё равно во весь экран. */
 @media (max-width: 640px) {
-  .mode-seg {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 6px;
-    border-radius: var(--radius-lg);
-  }
-  .mode-btn { justify-content: flex-start; padding: 10px 14px; }
   .mode-times { grid-template-columns: 1fr; }
-}
-
-/* Совсем узко (одна колонка) — четыре строки списком. */
-@container (max-width: 380px) {
-  .mode-seg { grid-template-columns: 1fr; }
-}
-
-@media (max-width: 380px) {
-  .mode-seg { grid-template-columns: 1fr; }
 }
 </style>

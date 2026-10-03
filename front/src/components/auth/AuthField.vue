@@ -1,40 +1,48 @@
 <template>
-  <label class="af" :class="{ 'is-invalid': invalid }">
-    <span v-if="label" class="af-label">{{ label }}</span>
-    <span class="af-box">
-      <input
-        class="af-input"
-        :class="{ center }"
-        :type="inputType"
-        :value="modelValue"
-        :placeholder="placeholder"
-        :disabled="disabled"
-        :autocomplete="autocomplete"
-        :inputmode="inputmode || undefined"
-        :maxlength="maxlength || undefined"
-        @input="$emit('update:modelValue', $event.target.value)"
-        @keyup.enter="$emit('enter')"
-      />
-      <span class="af-tools">
-        <slot name="tools" />
-        <button
-          v-if="type === 'password'"
-          type="button"
-          class="af-tool"
-          tabindex="-1"
-          :title="revealed ? 'Скрыть пароль' : 'Показать пароль'"
-          @click="revealed = !revealed"
-        >
-          <span class="material-symbols-outlined">{{ revealed ? 'visibility_off' : 'visibility' }}</span>
-        </button>
-      </span>
-    </span>
-    <span v-if="hint" class="af-hint">{{ hint }}</span>
-  </label>
+  <AppField :label="label" :hint="hint">
+    <template #default="{ id }">
+      <div class="af" :class="{ center }">
+        <InputText
+          :id="id"
+          :model-value="modelValue"
+          class="af-input"
+          :style="toolsWidth ? { paddingRight: `${toolsWidth + 12}px` } : undefined"
+          :type="inputType"
+          :placeholder="placeholder"
+          :disabled="disabled"
+          :invalid="invalid"
+          :autocomplete="autocomplete"
+          :inputmode="inputmode || undefined"
+          :maxlength="maxlength || undefined"
+          @update:model-value="$emit('update:modelValue', $event ?? '')"
+          @keyup.enter="$emit('enter')"
+        />
+        <span v-if="$slots.tools || type === 'password'" ref="toolsEl" class="af-tools">
+          <slot name="tools" />
+          <AppButton
+            v-if="type === 'password'"
+            variant="text"
+            size="sm"
+            tabindex="-1"
+            :icon="revealed ? 'visibility_off' : 'visibility'"
+            :aria-label="revealed ? 'Скрыть пароль' : 'Показать пароль'"
+            :title="revealed ? 'Скрыть пароль' : 'Показать пароль'"
+            @click="revealed = !revealed"
+          />
+        </span>
+      </div>
+    </template>
+  </AppField>
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+/* Поле форм входа — поле ядра (AppField + InputText) с кнопками внутри справа
+   (показать пароль, сгенерировать, скопировать). Кнопки в слот `tools` кладутся
+   готовыми AppButton variant="text" size="sm". */
+import { computed, onMounted, ref } from 'vue'
+import InputText from 'primevue/inputtext'
+import AppField from '@/components/ui/AppField.vue'
+import AppButton from '@/components/ui/AppButton.vue'
 
 const props = defineProps({
   modelValue: { type: String, default: '' },
@@ -55,23 +63,16 @@ defineEmits(['update:modelValue', 'enter'])
 
 const revealed = ref(false)
 const inputType = computed(() => (props.type === 'password' && revealed.value ? 'text' : props.type))
+
+// Текст не должен уходить под кнопки: правый отступ поля — по их ширине.
+// Набор кнопок у поля постоянный, поэтому достаточно одного замера.
+const toolsEl = ref(null)
+const toolsWidth = ref(0)
+onMounted(() => { toolsWidth.value = toolsEl.value?.offsetWidth || 0 })
 </script>
 
 <style scoped>
 .af {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-width: 0;
-}
-
-.af-label {
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--color-text-dim);
-}
-
-.af-box {
   position: relative;
   display: flex;
   align-items: center;
@@ -79,80 +80,25 @@ const inputType = computed(() => (props.type === 'password' && revealed.value ? 
 
 .af-input {
   width: 100%;
-  height: 44px;
-  box-sizing: border-box;
+  height: 46px;
   padding: 0 14px;
-  border-radius: var(--radius-md);
-  border: 1px solid color-mix(in oklch, var(--color-outline) 42%, transparent);
-  background: color-mix(in oklch, var(--color-surface) 72%, transparent);
-  color: var(--color-text);
-  font: inherit;
   font-size: 15px;
-  outline: none;
-  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
 }
 
-.af-input::placeholder { color: var(--color-text-dim); opacity: 0.75; }
-
-.af-input:focus {
-  border-color: var(--color-primary);
-  background: color-mix(in oklch, var(--color-surface) 92%, transparent);
-  box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-primary) 16%, transparent);
-}
-
-.af-input:disabled { opacity: 0.55; cursor: not-allowed; }
-
-.af-input.center {
+.center .af-input {
+  height: 56px;
   text-align: center;
   letter-spacing: 0.42em;
+  text-indent: 0.42em;
   font-size: 22px;
   font-weight: 600;
-  padding-right: 0;
-  text-indent: 0.42em;
 }
 
-.is-invalid .af-input {
-  border-color: color-mix(in oklch, var(--color-error) 55%, transparent);
-}
-
-/* Кнопки внутри поля (глаз, сгенерировать, скопировать) */
 .af-tools {
   position: absolute;
-  right: 8px;
+  right: 6px;
   display: flex;
   align-items: center;
   gap: 2px;
-}
-
-.af-tools :deep(.af-tool),
-.af-tool {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  min-width: 30px;
-  min-height: 30px;
-  padding: 0;
-  border: none;
-  border-radius: 50%;
-  background: none;
-  color: var(--color-text-dim);
-  cursor: pointer;
-  transition: color 0.15s, background 0.15s;
-}
-
-.af-tools :deep(.af-tool):hover,
-.af-tool:hover {
-  color: var(--color-primary);
-  background: color-mix(in oklch, var(--color-primary) 12%, transparent);
-}
-
-.af-tools :deep(.af-tool) .material-symbols-outlined,
-.af-tool .material-symbols-outlined { font-size: 19px; }
-
-.af-hint {
-  font-size: 12px;
-  color: var(--color-text-dim);
 }
 </style>

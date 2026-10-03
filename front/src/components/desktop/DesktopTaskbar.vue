@@ -611,7 +611,7 @@ function onMenuSelect(action) {
 
 .tb-hola:hover,
 .tb-hola.active {
-  background: color-mix(in oklch, var(--color-primary) 14%, var(--acrylic-card-bg));
+  background: var(--grain), color-mix(in oklch, var(--color-primary) 14%, var(--color-surface));
   color: var(--color-primary);
 }
 
@@ -682,7 +682,7 @@ function onMenuSelect(action) {
 }
 
 .tb-win:hover {
-  background: color-mix(in oklch, var(--color-primary) 12%, var(--acrylic-card-bg));
+  background: var(--grain), color-mix(in oklch, var(--color-primary) 12%, var(--color-surface));
   border-color: color-mix(in oklch, var(--color-primary) 35%, var(--acrylic-border));
 }
 
@@ -764,7 +764,7 @@ function onMenuSelect(action) {
   transition: background 0.15s;
 }
 
-.tb-clock:hover { background: color-mix(in oklch, var(--color-primary) 12%, var(--acrylic-card-bg)); }
+.tb-clock:hover { background: var(--grain), color-mix(in oklch, var(--color-primary) 12%, var(--color-surface)); }
 
 .tb-time { font-size: 15px; font-weight: 800; color: var(--color-text); }
 .tb-date { font-size: 11.5px; color: var(--color-text-dim); }
@@ -789,7 +789,7 @@ function onMenuSelect(action) {
 
 .tb-bell:hover,
 .tb-bell.active {
-  background: color-mix(in oklch, var(--color-primary) 14%, var(--acrylic-card-bg));
+  background: var(--grain), color-mix(in oklch, var(--color-primary) 14%, var(--color-surface));
   color: var(--color-primary);
 }
 

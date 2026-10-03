@@ -177,36 +177,6 @@ func (h *handlers) updateWeekendSettings(c *fiber.Ctx) error {
 	return c.JSON(resp)
 }
 
-func (h *handlers) getGrooveSettings(c *fiber.Ctx) error {
-	resp, err := h.eps.GetGrooveSettings(c.Context(), endpoint.CompanyScopeEpRequest{
-		Actor: currentUser(c), CompanyID: pathID(c),
-	})
-	if err != nil {
-		return h.respondError(c, err)
-	}
-	return c.JSON(resp)
-}
-
-func (h *handlers) updateGrooveSettings(c *fiber.Ctx) error {
-	enabled, details := parseGrooveEnabled(c.Body())
-	if details != nil {
-		// Тот же порядок, что у weekend-settings: сначала 404/403, потом тело.
-		if _, err := h.eps.GetGrooveSettings(c.Context(), endpoint.CompanyScopeEpRequest{
-			Actor: currentUser(c), CompanyID: pathID(c),
-		}); err != nil {
-			return h.respondError(c, err)
-		}
-		return validationError(c, details)
-	}
-	resp, err := h.eps.UpdateGrooveSettings(c.Context(), endpoint.GrooveEpRequest{
-		Actor: currentUser(c), CompanyID: pathID(c), Enabled: enabled,
-	})
-	if err != nil {
-		return h.respondError(c, err)
-	}
-	return c.JSON(resp)
-}
-
 // ── Валидация тел (формы marshmallow-схем companies) ─────────────
 
 func validationError(c *fiber.Ctx, details map[string]any) error {
@@ -340,32 +310,6 @@ func parseWeekendDays(body []byte) ([]int, map[string]any) {
 	return days, nil
 }
 
-func parseGrooveEnabled(body []byte) (bool, map[string]any) {
-	var raw map[string]json.RawMessage
-	_ = json.Unmarshal(body, &raw)
-
-	details := map[string]any{}
-	var enabled bool
-	if v, ok := raw["enabled"]; ok {
-		if b, ok := asJSONBool(v); ok {
-			enabled = b
-		} else {
-			details["enabled"] = []string{"Not a valid boolean."}
-		}
-	} else {
-		details["enabled"] = []string{"Missing data for required field."}
-	}
-	for field := range raw {
-		if field != "enabled" {
-			addFieldError(details, field, "Unknown field.")
-		}
-	}
-	if len(details) > 0 {
-		return false, details
-	}
-	return enabled, nil
-}
-
 func parseToggleActive(body []byte) (bool, map[string]any) {
 	var raw map[string]json.RawMessage
 	_ = json.Unmarshal(body, &raw)
@@ -404,7 +348,7 @@ func parseCompanySettings(raw json.RawMessage, partial bool) (map[string]any, ma
 	out := map[string]any{}
 	for field, value := range fields {
 		switch field {
-		case "uses_yougile", "uses_stages", "uses_calls", "uses_groove":
+		case "uses_yougile", "uses_stages", "uses_calls":
 			if b, ok := asJSONBool(value); ok {
 				out[field] = b
 			} else {
@@ -430,9 +374,6 @@ func parseCompanySettings(raw json.RawMessage, partial bool) (map[string]any, ma
 		}
 		if _, ok := fields["uses_calls"]; !ok {
 			out["uses_calls"] = true
-		}
-		if _, ok := fields["uses_groove"]; !ok {
-			out["uses_groove"] = true
 		}
 		if _, ok := fields["weekend_days"]; !ok {
 			out["weekend_days"] = []int{5, 6}
@@ -494,7 +435,7 @@ func parseCompanyCreate(body []byte) (dto.CompanyCreate, map[string]any) {
 		// load_default=dict + load-дефолты вложенной схемы.
 		req.Settings = map[string]any{
 			"uses_yougile": false, "uses_stages": false, "uses_calls": true,
-			"uses_groove": true, "weekend_days": []int{5, 6},
+			"weekend_days": []int{5, 6},
 		}
 	}
 	if len(details) > 0 {

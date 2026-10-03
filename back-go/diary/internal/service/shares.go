@@ -10,14 +10,14 @@ import (
 // ── Управление публичными ссылками (владелец) ──
 
 func (s *Service) ListShares(ctx context.Context, userID, diaryID int64) ([]*domain.Share, error) {
-	if _, err := s.requireOwned(ctx, userID, diaryID); err != nil {
+	if _, err := s.requireManaged(ctx, userID, diaryID); err != nil {
 		return nil, err
 	}
 	return s.repo.ListShares(ctx, diaryID)
 }
 
 func (s *Service) CreateShare(ctx context.Context, userID, diaryID int64) (*domain.Share, error) {
-	if _, err := s.requireOwned(ctx, userID, diaryID); err != nil {
+	if _, err := s.requireManaged(ctx, userID, diaryID); err != nil {
 		return nil, err
 	}
 	code, err := records.NewShareCode()
@@ -32,7 +32,7 @@ func (s *Service) CreateShare(ctx context.Context, userID, diaryID int64) (*doma
 }
 
 func (s *Service) RevokeShare(ctx context.Context, userID, diaryID, shareID int64) error {
-	if _, err := s.requireOwned(ctx, userID, diaryID); err != nil {
+	if _, err := s.requireManaged(ctx, userID, diaryID); err != nil {
 		return err
 	}
 	return s.repo.DeleteShare(ctx, shareID, diaryID)

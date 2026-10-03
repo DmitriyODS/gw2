@@ -15,8 +15,8 @@ import (
 // записи, иначе все записи по фильтру (диапазон дат + поиск). Колонка A — день
 // недели и дата (ячейки объединяются по дням), B — время внутри дня, далее —
 // выбранные поля; картинки/файлы исключаются.
-func (s *Service) ExportEntries(ctx context.Context, companyID, calendarID int64, fieldIDs []int64, p EntryListParams, ids []int64) ([]byte, string, error) {
-	cal, err := s.requireCalendar(ctx, companyID, calendarID)
+func (s *Service) ExportEntries(ctx context.Context, userID, calendarID int64, fieldIDs []int64, p EntryListParams, ids []int64) ([]byte, string, error) {
+	cal, err := s.requireCalendar(ctx, userID, calendarID, domain.AccessView)
 	if err != nil {
 		return nil, "", err
 	}

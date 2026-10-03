@@ -64,7 +64,7 @@ defineProps({
 
 .wp-tile:hover {
   border-color: color-mix(in oklch, var(--color-primary) 30%, var(--acrylic-border));
-  background: color-mix(in oklch, var(--color-primary) 6%, var(--glass-bg));
+  background: linear-gradient(color-mix(in oklch, var(--color-primary) 6%, transparent), color-mix(in oklch, var(--color-primary) 6%, transparent)), var(--glass-bg);
 }
 
 .wp-tile.dragging { opacity: 0.45; }
@@ -84,7 +84,7 @@ defineProps({
 
 .wp-tile.active {
   border-color: color-mix(in oklch, var(--color-primary) 45%, var(--acrylic-border));
-  background: color-mix(in oklch, var(--color-primary) 12%, var(--glass-bg));
+  background: linear-gradient(color-mix(in oklch, var(--color-primary) 12%, transparent), color-mix(in oklch, var(--color-primary) 12%, transparent)), var(--glass-bg);
 }
 
 .wp-tile.active::before { background: var(--color-primary); top: 12%; bottom: 12%; }

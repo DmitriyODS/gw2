@@ -9,17 +9,17 @@ import (
 
 var errShareNotFound = domain.NewError("NOT_FOUND", "Ссылка не найдена или отозвана", 404)
 
-// ── Управление ссылками (требует прав участника компании) ──
+// ── Управление ссылками (уровень admin: ссылка выводит календарь наружу) ──
 
-func (s *Service) ListShares(ctx context.Context, companyID, calendarID int64) ([]*domain.Share, error) {
-	if _, err := s.requireCalendar(ctx, companyID, calendarID); err != nil {
+func (s *Service) ListShares(ctx context.Context, userID, calendarID int64) ([]*domain.Share, error) {
+	if _, err := s.requireCalendar(ctx, userID, calendarID, domain.AccessAdmin); err != nil {
 		return nil, err
 	}
 	return s.repo.ListShares(ctx, calendarID)
 }
 
-func (s *Service) CreateShare(ctx context.Context, companyID, calendarID, userID int64) (*domain.Share, error) {
-	if _, err := s.requireCalendar(ctx, companyID, calendarID); err != nil {
+func (s *Service) CreateShare(ctx context.Context, userID, calendarID int64) (*domain.Share, error) {
+	if _, err := s.requireCalendar(ctx, userID, calendarID, domain.AccessAdmin); err != nil {
 		return nil, err
 	}
 	code, err := records.NewShareCode()
@@ -33,8 +33,8 @@ func (s *Service) CreateShare(ctx context.Context, companyID, calendarID, userID
 	return share, nil
 }
 
-func (s *Service) RevokeShare(ctx context.Context, companyID, calendarID, shareID int64) error {
-	if _, err := s.requireCalendar(ctx, companyID, calendarID); err != nil {
+func (s *Service) RevokeShare(ctx context.Context, userID, calendarID, shareID int64) error {
+	if _, err := s.requireCalendar(ctx, userID, calendarID, domain.AccessAdmin); err != nil {
 		return err
 	}
 	return s.repo.DeleteShare(ctx, shareID, calendarID)

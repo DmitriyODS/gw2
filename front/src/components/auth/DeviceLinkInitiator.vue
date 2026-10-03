@@ -4,7 +4,7 @@
       <div class="dl-expired">
         <span class="material-symbols-outlined">timer_off</span>
         <p>{{ error || 'Код устарел' }}</p>
-        <button type="button" class="dl-refresh" @click="start">обновить код</button>
+        <AppButton icon="refresh" label="Обновить код" @click="start" />
       </div>
     </template>
 
@@ -17,7 +17,7 @@
 
       <p class="dl-status">
         <span class="dl-spinner" aria-hidden="true" />
-        ждём подтверждения…
+        Ждём подтверждения…
       </p>
       <p v-if="error" class="dl-error">{{ error }}</p>
     </template>
@@ -28,6 +28,7 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { linkStart, linkClaim } from '@/api/devicelink.js'
 import QrImage from '@/components/common/QrImage.vue'
+import AppButton from '@/components/ui/AppButton.vue'
 
 const props = defineProps({
   // 'login' — обычный вход по QR; 'tv' — авторизация ТВ-киоска.
@@ -120,7 +121,7 @@ onBeforeUnmount(stop)
   padding: 16px 16px 12px;
   border-radius: var(--radius-lg);
   background: white;
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--sk-raised-shadow);
 }
 
 .dl-qr.loading { opacity: 0.55; }
@@ -151,21 +152,6 @@ onBeforeUnmount(stop)
 }
 
 .dl-error { margin: 0; color: var(--color-error); font-size: 13px; }
-
-.dl-refresh {
-  padding: 9px 18px;
-  border: 1px solid var(--acrylic-border);
-  border-radius: var(--radius-full);
-  background: var(--glass-bg), color-mix(in oklch, var(--color-surface) 45%, transparent);
-  box-shadow: var(--glass-edge);
-  color: var(--color-text);
-  font: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.dl-refresh:hover { color: var(--color-primary); }
 
 .dl-expired {
   display: flex;

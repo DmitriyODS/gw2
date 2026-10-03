@@ -262,20 +262,10 @@ public class MainActivity extends BridgeActivity {
         calls.setDescription("Входящие звонки и видеозвонки");
         nm.createNotificationChannel(calls);
 
-        NotificationChannel kudos = new NotificationChannel(
-            "kudos", "Кудосы", NotificationManager.IMPORTANCE_DEFAULT);
-        kudos.setDescription("Входящие переводы кудосов от коллег");
-        nm.createNotificationChannel(kudos);
-
         NotificationChannel portal = new NotificationChannel(
             "portal", "Портал", NotificationManager.IMPORTANCE_DEFAULT);
         portal.setDescription("Новые посты корпоративного портала");
         nm.createNotificationChannel(portal);
-
-        NotificationChannel pets = new NotificationChannel(
-            "pets", "Питомцы", NotificationManager.IMPORTANCE_DEFAULT);
-        pets.setDescription("Грувик заболел или сбежал");
-        nm.createNotificationChannel(pets);
 
         NotificationChannel forms = new NotificationChannel(
             "forms", "Формы и опросы", NotificationManager.IMPORTANCE_DEFAULT);
@@ -289,5 +279,10 @@ public class MainActivity extends BridgeActivity {
             "reminders", "Напоминания", NotificationManager.IMPORTANCE_HIGH);
         reminders.setDescription("Сработавшие напоминания");
         nm.createNotificationChannel(reminders);
+
+        // Каналы снятых разделов убираем и с уже установленных копий, иначе
+        // они так и висят в системных настройках уведомлений.
+        nm.deleteNotificationChannel("kudos");
+        nm.deleteNotificationChannel("pets");
     }
 }

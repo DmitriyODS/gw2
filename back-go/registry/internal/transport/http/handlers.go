@@ -142,6 +142,8 @@ func (h *handlers) createRegistry(c *fiber.Ctx) error {
 	var body struct {
 		Name       string `json:"name"`
 		Accounting bool   `json:"accounting"`
+		// CompanyID — пространство: нет ключа или null — личное.
+		CompanyID *int64 `json:"company_id"`
 	}
 	parseBody(c, &body)
 	name := strings.TrimSpace(body.Name)
@@ -151,7 +153,7 @@ func (h *handlers) createRegistry(c *fiber.Ctx) error {
 	if len([]rune(name)) > 120 {
 		return validationError(c, "Название слишком длинное (макс. 120)")
 	}
-	reg, err := h.svc.CreateRegistry(c.Context(), userID(c), activeCompany(c), name, body.Accounting)
+	reg, err := h.svc.CreateRegistry(c.Context(), userID(c), body.CompanyID, name, body.Accounting)
 	if err != nil {
 		return h.respondError(c, err)
 	}
@@ -189,6 +191,20 @@ func (h *handlers) updateRegistry(c *fiber.Ctx) error {
 		return validationError(c, msg)
 	}
 	reg, err := h.svc.UpdateRegistry(c.Context(), userID(c), pathID(c), p)
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(reg)
+}
+
+// moveRegistry — сменить пространство реестра и уровень участников команды.
+func (h *handlers) moveRegistry(c *fiber.Ctx) error {
+	var body struct {
+		CompanyID  *int64 `json:"company_id"`
+		TeamAccess string `json:"team_access"`
+	}
+	parseBody(c, &body)
+	reg, err := h.svc.MoveRegistry(c.Context(), userID(c), pathID(c), body.CompanyID, body.TeamAccess)
 	if err != nil {
 		return h.respondError(c, err)
 	}

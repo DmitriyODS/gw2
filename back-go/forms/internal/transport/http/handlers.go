@@ -67,6 +67,8 @@ func (h *handlers) createForm(c *fiber.Ctx) error {
 	var body struct {
 		Title string `json:"title"`
 		Quiz  bool   `json:"quiz"`
+		// CompanyID — пространство: нет ключа или null — личное.
+		CompanyID *int64 `json:"company_id"`
 	}
 	parseBody(c, &body)
 	title := strings.TrimSpace(body.Title)
@@ -76,7 +78,7 @@ func (h *handlers) createForm(c *fiber.Ctx) error {
 	if len([]rune(title)) > 200 {
 		return validationError(c, "Название слишком длинное (макс. 200)")
 	}
-	form, err := h.svc.CreateForm(c.Context(), userID(c), activeCompany(c), title, body.Quiz)
+	form, err := h.svc.CreateForm(c.Context(), userID(c), body.CompanyID, title, body.Quiz)
 	if err != nil {
 		return h.respondError(c, err)
 	}
@@ -183,8 +185,27 @@ func (h *handlers) deleteForm(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"deleted": true})
 }
 
+// moveForm — сменить пространство формы и уровень участников команды.
+func (h *handlers) moveForm(c *fiber.Ctx) error {
+	var body struct {
+		CompanyID  *int64 `json:"company_id"`
+		TeamAccess string `json:"team_access"`
+	}
+	parseBody(c, &body)
+	form, err := h.svc.MoveForm(c.Context(), userID(c), pathID(c), body.CompanyID, body.TeamAccess)
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(form)
+}
+
+// duplicateForm — копия формы в выбранное пространство (по умолчанию — личное).
 func (h *handlers) duplicateForm(c *fiber.Ctx) error {
-	form, err := h.svc.DuplicateForm(c.Context(), userID(c), pathID(c), activeCompany(c))
+	var body struct {
+		CompanyID *int64 `json:"company_id"`
+	}
+	parseBody(c, &body)
+	form, err := h.svc.DuplicateForm(c.Context(), userID(c), pathID(c), body.CompanyID)
 	if err != nil {
 		return h.respondError(c, err)
 	}

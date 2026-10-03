@@ -40,9 +40,17 @@ func pbDiary(d *domain.Diary) *diarypb.Diary {
 
 func pbEntry(e *domain.Entry) *diarypb.Entry {
 	return &diarypb.Entry{
-		Id: e.ID, DiaryId: e.DiaryID, Date: e.Date.Format(dayLayout),
+		Id: e.ID, DiaryId: e.DiaryID, Date: dayOrEmpty(e.Date),
 		Title: e.Title, Description: e.Description, Done: e.Done,
 	}
+}
+
+// dayOrEmpty — день записи для Алисы; у дела без срока — пустая строка.
+func dayOrEmpty(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.Format(dayLayout)
 }
 
 func parseDay(raw string) (time.Time, error) {
@@ -67,7 +75,7 @@ func (s *Server) ListDiaries(ctx context.Context, req *diarypb.ListDiariesReques
 }
 
 func (s *Server) CreateDiary(ctx context.Context, req *diarypb.CreateDiaryRequest) (*diarypb.CreateDiaryResponse, error) {
-	d, err := s.svc.CreateDiary(ctx, req.GetUserId(), req.GetName())
+	d, err := s.svc.CreateDiary(ctx, req.GetUserId(), nil, req.GetName())
 	if err != nil {
 		pe, ierr := pbError(err)
 		return &diarypb.CreateDiaryResponse{Error: pe}, ierr

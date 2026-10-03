@@ -8,8 +8,8 @@
           <img v-if="preview.avatar_path" loading="lazy" decoding="async" :src="`/uploads/${preview.avatar_path}`" alt="" />
           <span v-else class="material-symbols-outlined">groups</span>
         </div>
-        <AppButton variant="filled" class="jg-wide" :disabled="joining" @click="join">{{ joining ? 'вступаем…' : 'вступить в группу' }}</AppButton>
-        <RouterLink to="/messenger" class="jg-later">не сейчас</RouterLink>
+        <AppButton variant="filled" size="lg" block :loading="joining" @click="join">Вступить в группу</AppButton>
+        <AppButton tag="router-link" to="/messenger" variant="text" label="Не сейчас" />
       </template>
 
       <template v-else>
@@ -17,8 +17,8 @@
           tag="router-link"
           to="/messenger"
           variant="filled"
-          label="к сообщениям"
-          class="jg-wide"
+          label="К сообщениям"
+          size="lg" block
         />
       </template>
     </div>
@@ -51,8 +51,8 @@ function plural(n) {
 }
 
 const title = computed(() => {
-  if (loading.value) return 'загружаем группу'
-  return preview.value ? preview.value.title : 'ссылка не работает'
+  if (loading.value) return 'Загружаем группу'
+  return preview.value ? preview.value.title : 'Ссылка не работает'
 })
 
 const subtitle = computed(() => {
@@ -107,19 +107,6 @@ async function join() {
 .jg-avatar img { width: 100%; height: 100%; object-fit: cover; }
 .jg-avatar .material-symbols-outlined { font-size: 40px; font-variation-settings: 'FILL' 1; }
 
-.jg-wide {
-  width: 100%;
-  justify-content: center;
-  height: 44px;
-  text-decoration: none;
-}
 
-.jg-later {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--color-text-dim);
-  text-decoration: none;
-}
 
-.jg-later:hover { color: var(--color-primary); }
 </style>

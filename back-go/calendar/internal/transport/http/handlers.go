@@ -62,11 +62,7 @@ func entryParams(c *fiber.Ctx) service.EntryListParams {
 // ── Календари ────────────────────────────────────────────────────
 
 func (h *handlers) listCalendars(c *fiber.Ctx) error {
-	companyID, ok := companyScope(c)
-	if !ok {
-		return nil
-	}
-	resp, err := h.eps.ListCalendars(c.Context(), endpoint.CompanyReq{CompanyID: companyID})
+	resp, err := h.eps.ListCalendars(c.Context(), endpoint.UserReq{UserID: currentUser(c).ID})
 	if err != nil {
 		return h.respondError(c, err)
 	}
@@ -74,11 +70,7 @@ func (h *handlers) listCalendars(c *fiber.Ctx) error {
 }
 
 func (h *handlers) getCalendar(c *fiber.Ctx) error {
-	companyID, ok := companyScope(c)
-	if !ok {
-		return nil
-	}
-	resp, err := h.eps.GetCalendar(c.Context(), endpoint.CalendarReq{CompanyID: companyID, ID: pathID(c)})
+	resp, err := h.eps.GetCalendar(c.Context(), endpoint.CalendarReq{UserID: currentUser(c).ID, ID: pathID(c)})
 	if err != nil {
 		return h.respondError(c, err)
 	}
@@ -86,12 +78,10 @@ func (h *handlers) getCalendar(c *fiber.Ctx) error {
 }
 
 func (h *handlers) createCalendar(c *fiber.Ctx) error {
-	companyID, ok := companyScope(c)
-	if !ok {
-		return nil
-	}
 	var body struct {
 		Name string `json:"name"`
+		// CompanyID — пространство: нет ключа или null — личное.
+		CompanyID *int64 `json:"company_id"`
 	}
 	parseBody(c, &body)
 	name := strings.TrimSpace(body.Name)
@@ -102,7 +92,7 @@ func (h *handlers) createCalendar(c *fiber.Ctx) error {
 		return validationError(c, "Название слишком длинное (макс. 120)")
 	}
 	resp, err := h.eps.CreateCalendar(c.Context(), endpoint.CreateCalendarReq{
-		CompanyID: companyID, UserID: currentUser(c).ID, Name: name,
+		UserID: currentUser(c).ID, CompanyID: body.CompanyID, Name: name,
 	})
 	if err != nil {
 		return h.respondError(c, err)
@@ -111,10 +101,6 @@ func (h *handlers) createCalendar(c *fiber.Ctx) error {
 }
 
 func (h *handlers) updateCalendar(c *fiber.Ctx) error {
-	companyID, ok := companyScope(c)
-	if !ok {
-		return nil
-	}
 	var body struct {
 		Name string `json:"name"`
 	}
@@ -127,7 +113,24 @@ func (h *handlers) updateCalendar(c *fiber.Ctx) error {
 		return validationError(c, "Название слишком длинное (макс. 120)")
 	}
 	resp, err := h.eps.UpdateCalendar(c.Context(), endpoint.UpdateCalendarReq{
-		CompanyID: companyID, ID: pathID(c), Name: name,
+		UserID: currentUser(c).ID, ID: pathID(c), Name: name,
+	})
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(resp)
+}
+
+// moveCalendar — сменить пространство календаря и уровень участников команды.
+func (h *handlers) moveCalendar(c *fiber.Ctx) error {
+	var body struct {
+		CompanyID  *int64 `json:"company_id"`
+		TeamAccess string `json:"team_access"`
+	}
+	parseBody(c, &body)
+	resp, err := h.eps.MoveCalendar(c.Context(), endpoint.MoveCalendarReq{
+		UserID: currentUser(c).ID, ID: pathID(c),
+		CompanyID: body.CompanyID, TeamAccess: body.TeamAccess,
 	})
 	if err != nil {
 		return h.respondError(c, err)
@@ -136,21 +139,13 @@ func (h *handlers) updateCalendar(c *fiber.Ctx) error {
 }
 
 func (h *handlers) deleteCalendar(c *fiber.Ctx) error {
-	companyID, ok := companyScope(c)
-	if !ok {
-		return nil
-	}
-	if _, err := h.eps.DeleteCalendar(c.Context(), endpoint.CalendarReq{CompanyID: companyID, ID: pathID(c)}); err != nil {
+	if _, err := h.eps.DeleteCalendar(c.Context(), endpoint.CalendarReq{UserID: currentUser(c).ID, ID: pathID(c)}); err != nil {
 		return h.respondError(c, err)
 	}
 	return c.JSON(fiber.Map{"deleted": true})
 }
 
 func (h *handlers) replaceFields(c *fiber.Ctx) error {
-	companyID, ok := companyScope(c)
-	if !ok {
-		return nil
-	}
 	var body struct {
 		Fields []fieldInput `json:"fields"`
 	}
@@ -160,7 +155,7 @@ func (h *handlers) replaceFields(c *fiber.Ctx) error {
 		return validationError(c, msg)
 	}
 	resp, err := h.eps.ReplaceFields(c.Context(), endpoint.ReplaceFieldsReq{
-		CompanyID: companyID, ID: pathID(c), Fields: fields,
+		UserID: currentUser(c).ID, ID: pathID(c), Fields: fields,
 	})
 	if err != nil {
 		return h.respondError(c, err)
@@ -171,12 +166,8 @@ func (h *handlers) replaceFields(c *fiber.Ctx) error {
 // ── Записи ───────────────────────────────────────────────────────
 
 func (h *handlers) listEntries(c *fiber.Ctx) error {
-	companyID, ok := companyScope(c)
-	if !ok {
-		return nil
-	}
 	resp, err := h.eps.ListEntries(c.Context(), endpoint.ListEntriesReq{
-		CompanyID: companyID, CalendarID: pathID(c), Params: entryParams(c),
+		UserID: currentUser(c).ID, CalendarID: pathID(c), Params: entryParams(c),
 	})
 	if err != nil {
 		return h.respondError(c, err)
@@ -184,22 +175,15 @@ func (h *handlers) listEntries(c *fiber.Ctx) error {
 	return c.JSON(resp)
 }
 
-/*
-agenda — ближайшие события всех календарей компании (живая плитка рабочего
-
-	стола). Период присылает клиент: границы дня считаются в его зоне.
-*/
+// agenda — ближайшие события всех доступных календарей (живая плитка, экран
+// «Сегодня»). Период присылает клиент: границы дня считаются в его зоне.
 func (h *handlers) agenda(c *fiber.Ctx) error {
-	companyID, ok := companyScope(c)
-	if !ok {
-		return nil
-	}
 	from, to := parseTime(c.Query("from")), parseTime(c.Query("to"))
 	if from == nil || to == nil {
 		return validationError(c, "Укажите период (from, to)")
 	}
 	resp, err := h.eps.Agenda(c.Context(), endpoint.AgendaReq{
-		CompanyID: companyID, From: *from, To: *to, Limit: c.QueryInt("limit"),
+		UserID: currentUser(c).ID, From: *from, To: *to, Limit: c.QueryInt("limit"),
 	})
 	if err != nil {
 		return h.respondError(c, err)
@@ -208,12 +192,8 @@ func (h *handlers) agenda(c *fiber.Ctx) error {
 }
 
 func (h *handlers) getEntry(c *fiber.Ctx) error {
-	companyID, ok := companyScope(c)
-	if !ok {
-		return nil
-	}
 	resp, err := h.eps.GetEntry(c.Context(), endpoint.EntryReq{
-		CompanyID: companyID, CalendarID: pathID(c), EntryID: entryID(c),
+		UserID: currentUser(c).ID, CalendarID: pathID(c), EntryID: entryID(c),
 	})
 	if err != nil {
 		return h.respondError(c, err)
@@ -228,10 +208,6 @@ type entryBody struct {
 }
 
 func (h *handlers) createEntry(c *fiber.Ctx) error {
-	companyID, ok := companyScope(c)
-	if !ok {
-		return nil
-	}
 	var body entryBody
 	parseBody(c, &body)
 	at := parseTime(body.EventAt)
@@ -242,7 +218,7 @@ func (h *handlers) createEntry(c *fiber.Ctx) error {
 		body.Data = map[string]any{}
 	}
 	resp, err := h.eps.CreateEntry(c.Context(), endpoint.WriteEntryReq{
-		CompanyID: companyID, CalendarID: pathID(c), UserID: currentUser(c).ID,
+		UserID: currentUser(c).ID, CalendarID: pathID(c),
 		EventAt: *at, Data: body.Data,
 	})
 	if err != nil {
@@ -252,10 +228,6 @@ func (h *handlers) createEntry(c *fiber.Ctx) error {
 }
 
 func (h *handlers) updateEntry(c *fiber.Ctx) error {
-	companyID, ok := companyScope(c)
-	if !ok {
-		return nil
-	}
 	var body entryBody
 	parseBody(c, &body)
 	at := parseTime(body.EventAt)
@@ -266,7 +238,7 @@ func (h *handlers) updateEntry(c *fiber.Ctx) error {
 		body.Data = map[string]any{}
 	}
 	resp, err := h.eps.UpdateEntry(c.Context(), endpoint.WriteEntryReq{
-		CompanyID: companyID, CalendarID: pathID(c), EntryID: entryID(c),
+		UserID: currentUser(c).ID, CalendarID: pathID(c), EntryID: entryID(c),
 		EventAt: *at, Data: body.Data,
 	})
 	if err != nil {
@@ -276,12 +248,8 @@ func (h *handlers) updateEntry(c *fiber.Ctx) error {
 }
 
 func (h *handlers) deleteEntry(c *fiber.Ctx) error {
-	companyID, ok := companyScope(c)
-	if !ok {
-		return nil
-	}
 	if _, err := h.eps.DeleteEntry(c.Context(), endpoint.EntryReq{
-		CompanyID: companyID, CalendarID: pathID(c), EntryID: entryID(c),
+		UserID: currentUser(c).ID, CalendarID: pathID(c), EntryID: entryID(c),
 	}); err != nil {
 		return h.respondError(c, err)
 	}
@@ -289,16 +257,12 @@ func (h *handlers) deleteEntry(c *fiber.Ctx) error {
 }
 
 func (h *handlers) bulkDeleteEntries(c *fiber.Ctx) error {
-	companyID, ok := companyScope(c)
-	if !ok {
-		return nil
-	}
 	var body struct {
 		IDs []int64 `json:"ids"`
 	}
 	parseBody(c, &body)
 	resp, err := h.eps.DeleteEntries(c.Context(), endpoint.DeleteEntriesReq{
-		CompanyID: companyID, CalendarID: pathID(c), IDs: body.IDs,
+		UserID: currentUser(c).ID, CalendarID: pathID(c), IDs: body.IDs,
 	})
 	if err != nil {
 		return h.respondError(c, err)
@@ -307,12 +271,8 @@ func (h *handlers) bulkDeleteEntries(c *fiber.Ctx) error {
 }
 
 func (h *handlers) exportEntries(c *fiber.Ctx) error {
-	companyID, ok := companyScope(c)
-	if !ok {
-		return nil
-	}
 	resp, err := h.eps.ExportEntries(c.Context(), endpoint.ExportReq{
-		CompanyID: companyID, CalendarID: pathID(c),
+		UserID: currentUser(c).ID, CalendarID: pathID(c),
 		FieldIDs: csvInts(c.Query("fields")), Params: entryParams(c), IDs: csvInts(c.Query("ids")),
 	})
 	if err != nil {
@@ -324,30 +284,27 @@ func (h *handlers) exportEntries(c *fiber.Ctx) error {
 // ── Загрузка файла ───────────────────────────────────────────────
 
 /* Приём файла частями: право и потолок проверяем ДО первого байта, собираем
-   потоком. Место тратится из квоты компании — она владеет календарём. */
+   потоком. Календарь, для которого файл (?calendar_id=), решает, чья квота
+   платит: создатель команды либо хозяин личного календаря. */
 
 func (h *handlers) beginUpload(c *fiber.Ctx, in chunkupload.InitRequest, s *chunkupload.Session) error {
-	companyID, ok := companyScope(c)
-	if !ok {
-		return domain.ErrNoCompany
-	}
 	if in.Size > uploadMaxBytes {
 		return domain.NewError("FILE_TOO_BIG", "Файл слишком большой (макс. 25 МБ)", 413)
+	}
+	_, companyID, err := h.svc.UploadScope(c.Context(), currentUser(c).ID, int64(c.QueryInt("calendar_id")))
+	if err != nil {
+		return err
 	}
 	s.CompanyID = companyID
 	return nil
 }
 
 func (h *handlers) finishUpload(c *fiber.Ctx, s chunkupload.Session, r io.Reader) (any, error) {
-	return h.svc.SaveUploadStream(c.Context(), s.CompanyID, currentUser(c).ID,
+	return h.svc.SaveUploadStream(c.Context(), currentUser(c).ID, s.CompanyID,
 		s.FileName, s.Mime, s.TotalSize, r)
 }
 
 func (h *handlers) upload(c *fiber.Ctx) error {
-	companyID, ok := companyScope(c)
-	if !ok {
-		return nil
-	}
 	fileHeader, err := c.FormFile("file")
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "NO_FILE", "message": "Файл не передан"})
@@ -368,11 +325,11 @@ func (h *handlers) upload(c *fiber.Ctx) error {
 		return validationError(c, "Файл слишком большой (макс. 25 МБ)")
 	}
 	resp, err := h.eps.Upload(c.Context(), endpoint.UploadReq{
-		CompanyID: companyID,
-		UserID:    currentUser(c).ID,
-		FileName:  fileHeader.Filename,
-		Mime:      fileHeader.Header.Get(fiber.HeaderContentType),
-		Data:      data,
+		UserID:     currentUser(c).ID,
+		CalendarID: int64(c.QueryInt("calendar_id")),
+		FileName:   fileHeader.Filename,
+		Mime:       fileHeader.Header.Get(fiber.HeaderContentType),
+		Data:       data,
 	})
 	if err != nil {
 		return h.respondError(c, err)
@@ -380,14 +337,10 @@ func (h *handlers) upload(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusCreated).JSON(resp)
 }
 
-// ── Публичные ссылки: управление (участник компании) ─────────────
+// ── Публичные ссылки: управление (уровень admin) ─────────────────
 
 func (h *handlers) listShares(c *fiber.Ctx) error {
-	companyID, ok := companyScope(c)
-	if !ok {
-		return nil
-	}
-	resp, err := h.eps.ListShares(c.Context(), endpoint.ShareReq{CompanyID: companyID, CalendarID: pathID(c)})
+	resp, err := h.eps.ListShares(c.Context(), endpoint.ShareReq{UserID: currentUser(c).ID, CalendarID: pathID(c)})
 	if err != nil {
 		return h.respondError(c, err)
 	}
@@ -395,12 +348,8 @@ func (h *handlers) listShares(c *fiber.Ctx) error {
 }
 
 func (h *handlers) createShare(c *fiber.Ctx) error {
-	companyID, ok := companyScope(c)
-	if !ok {
-		return nil
-	}
 	resp, err := h.eps.CreateShare(c.Context(), endpoint.ShareReq{
-		CompanyID: companyID, CalendarID: pathID(c), UserID: currentUser(c).ID,
+		UserID: currentUser(c).ID, CalendarID: pathID(c),
 	})
 	if err != nil {
 		return h.respondError(c, err)
@@ -409,13 +358,9 @@ func (h *handlers) createShare(c *fiber.Ctx) error {
 }
 
 func (h *handlers) revokeShare(c *fiber.Ctx) error {
-	companyID, ok := companyScope(c)
-	if !ok {
-		return nil
-	}
 	shareID, _ := c.ParamsInt("shareId")
 	if _, err := h.eps.RevokeShare(c.Context(), endpoint.ShareReq{
-		CompanyID: companyID, CalendarID: pathID(c), ShareID: int64(shareID),
+		UserID: currentUser(c).ID, CalendarID: pathID(c), ShareID: int64(shareID),
 	}); err != nil {
 		return h.respondError(c, err)
 	}

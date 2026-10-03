@@ -125,6 +125,9 @@ type StorageRepository interface {
 	AddFiles(ctx Ctx, userID int64, files []*StoredFile) error
 	// RemoveFiles — снять записи по ключам, вернув сумму их размеров.
 	RemoveFiles(ctx Ctx, userID int64, keys []string) (int64, error)
+	// MoveFiles — переписать файлы на другого владельца квоты вместе со
+	// счётчиками занятого места. Возвращает, сколько файлов переехало.
+	MoveFiles(ctx Ctx, userID, companyID int64, keys []string) (int64, error)
 	// TopFiles — самые крупные файлы пользователя (service пустой — все).
 	TopFiles(ctx Ctx, userID int64, service string, limit int) ([]*StoredFile, error)
 	// AllFiles — весь журнал пользователя: сверка с владельцами и пересчёт.

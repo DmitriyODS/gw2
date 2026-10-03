@@ -1,14 +1,13 @@
 // Package service — бизнес-логика formsvc: формы и опросы, их структура,
 // приём ответов, сводка, шаринг и назначения.
 //
-// Форма принадлежит ЧЕЛОВЕКУ, а не компании: коллеги и компании получают её
-// адресным доступом трёх уровней (см. domain/access.go). Поэтому проверка прав
-// здесь — не «состоит ли в компании», а «какой у него уровень», и она стоит на
-// входе КАЖДОЙ операции.
+// Форма лежит в пространстве — личном или команды, а коллеги и команды
+// получают её ещё и адресно (см. domain/access.go). Проверка прав — «какой у
+// человека уровень», и она стоит на входе КАЖДОЙ операции.
 //
 // Сокет-события клиентам публикуются в Redis gw2:forms:events (доставляет
 // gatewaysvc) и адресуются АУДИТОРИИ формы поимённо: общей комнаты у раздела
-// нет — форма не является достоянием компании.
+// нет.
 package service
 
 import (
@@ -18,7 +17,6 @@ import (
 
 	"github.com/DmitriyODS/gw2/back-go/forms/internal/domain"
 	"github.com/DmitriyODS/gw2/back-go/pkg/chunkupload"
-	"github.com/DmitriyODS/gw2/back-go/pkg/pasetoauth"
 )
 
 type Service struct {
@@ -47,32 +45,22 @@ func New(d Deps) *Service {
 /*
 Actor — кто выполняет операцию.
 
-	Companies — ВСЕ компании человека: они нужны раздаче доступа (кому вообще
-	можно назначить форму) и справочнику коллег.
-
-	CompanyID — АКТИВНАЯ компания сессии (0 — её нет). Ею ограничены видимость и
-	права: форма живёт в компании, где заведена, а назначение компании действует,
-	пока эта компания выбрана. Иначе переключение компании не меняло бы ничего.
+	Companies — ВСЕ команды человека: они нужны раздаче доступа (кому вообще
+	можно назначить форму) и справочнику коллег. Активная компания сессии на
+	доступ не влияет: команда не прячет инструменты.
 */
 type Actor struct {
 	UserID    int64
-	CompanyID int64
 	Companies []int64
 }
 
-// actor — собрать контекст выполняющего. Активная компания приезжает контекстом
-// запроса (её кладёт мидлварь pasetoauth), поэтому сигнатуры операций про неё
-// не знают — а знать её обязана каждая проверка доступа.
+// actor — собрать контекст выполняющего.
 func (s *Service) actor(ctx context.Context, userID int64) (Actor, error) {
 	companies, err := s.users.CompaniesOf(ctx, userID)
 	if err != nil {
 		return Actor{}, err
 	}
-	return Actor{
-		UserID:    userID,
-		CompanyID: pasetoauth.CompanyFromContext(ctx),
-		Companies: companies,
-	}, nil
+	return Actor{UserID: userID, Companies: companies}, nil
 }
 
 /*
@@ -91,7 +79,7 @@ func (s *Service) require(ctx context.Context, a Actor, formID int64, want strin
 	if form == nil {
 		return nil, domain.ErrFormNotFound
 	}
-	access, err := s.repo.AccessOf(ctx, formID, a.UserID, a.CompanyID)
+	access, err := s.repo.AccessOf(ctx, formID, a.UserID)
 	if err != nil {
 		return nil, err
 	}
@@ -148,7 +136,7 @@ func rooms(ids []int64) []string {
 // открытому редактору, а он перечитывает форму сам.
 func formPayload(f *domain.Form) map[string]any {
 	return map[string]any{
-		"id": f.ID, "owner_id": f.OwnerID, "company_id": f.CompanyID,
+		"id": f.ID, "owner_id": f.OwnerID, "company_id": f.CompanyID, "team_access": f.TeamAccess,
 		"title": f.Title, "description": f.Description, "status": f.Status,
 		"quiz": f.Quiz, "position": f.Position, "responses": f.Responses,
 		"updated_at": f.UpdatedAt,

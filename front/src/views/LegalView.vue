@@ -63,9 +63,10 @@ watch(activeKey, async (key) => {
   max-height: min(60dvh, 640px);
   overflow-y: auto;
   padding: 16px 18px;
-  border: 1px solid var(--acrylic-border);
+  border: 1px solid var(--sk-edge);
   border-radius: var(--radius-lg);
-  background: var(--color-surface-variant);
+  background: var(--sk-well-bg);
+  box-shadow: var(--sk-well-shadow);
   font-size: 0.9rem;
   line-height: 1.55;
   overflow-wrap: anywhere;

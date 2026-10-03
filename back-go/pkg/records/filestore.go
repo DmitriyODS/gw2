@@ -22,6 +22,8 @@ type QuotaTracker interface {
 	EnsureStorage(ctx context.Context, userID, companyID, bytes int64) error
 	// TrackStorage — сдвинуть занятое место и пополнить журнал файлов.
 	TrackStorage(ctx context.Context, userID, companyID int64, ch billingclient.StorageChange)
+	// MoveStorage — переписать файлы на другого плательщика.
+	MoveStorage(ctx context.Context, userID, companyID int64, keys []string) error
 }
 
 // FileStore — запись загруженных файлов/картинок записей в хранилище
@@ -171,6 +173,16 @@ func (s *FileStore) RemoveFor(ctx context.Context, userID, companyID int64, path
 			Removed: paths,
 		})
 	}
+}
+
+// MoveFor — файлы вещи сменили плательщика (вещь переехала между личным
+// пространством и командой). Сами объекты остаются на месте. Ошибку обязан
+// обработать вызывающий: без учёта переезда вещь переезжать не должна.
+func (s *FileStore) MoveFor(ctx context.Context, userID, companyID int64, paths []string) error {
+	if s.quota == nil || len(paths) == 0 {
+		return nil
+	}
+	return s.quota.MoveStorage(ctx, userID, companyID, paths)
 }
 
 // Open — прочитать содержимое объекта по ключу (для встраивания картинок в

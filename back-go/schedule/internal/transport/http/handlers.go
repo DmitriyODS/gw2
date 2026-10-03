@@ -57,6 +57,8 @@ func (h *handlers) createSchedule(c *fiber.Ctx) error {
 		CycleWeeks  int    `json:"cycle_weeks"`
 		CycleAnchor string `json:"cycle_anchor"`
 		Timezone    string `json:"timezone"`
+		// CompanyID — пространство: нет ключа или null — личное.
+		CompanyID *int64 `json:"company_id"`
 	}
 	parseBody(c, &body)
 	if strings.TrimSpace(body.Name) == "" {
@@ -64,6 +66,7 @@ func (h *handlers) createSchedule(c *fiber.Ctx) error {
 	}
 	in := service.ScheduleInput{
 		Name: body.Name, CycleWeeks: body.CycleWeeks, Timezone: body.Timezone,
+		CompanyID: body.CompanyID,
 	}
 	if anchor := parseDate(body.CycleAnchor); anchor != nil {
 		in.CycleAnchor = *anchor
@@ -102,6 +105,20 @@ func (h *handlers) updateSchedule(c *fiber.Ctx) error {
 		"schedule": view.Schedule, "items": view.Items, "can_edit": view.CanEdit,
 		"adjusted_items": adjusted,
 	})
+}
+
+// moveSchedule — сменить пространство расписания и уровень участников команды.
+func (h *handlers) moveSchedule(c *fiber.Ctx) error {
+	var body struct {
+		CompanyID  *int64 `json:"company_id"`
+		TeamAccess string `json:"team_access"`
+	}
+	parseBody(c, &body)
+	view, err := h.svc.MoveSchedule(c.Context(), currentUserID(c), pathID(c), body.CompanyID, body.TeamAccess)
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(view)
 }
 
 func (h *handlers) deleteSchedule(c *fiber.Ctx) error {

@@ -1,19 +1,19 @@
 // Package service — бизнес-логика schedulesvc: расписания, их структура
 //
 // (категории и поля), занятия и шаринг.
-// Расписание принадлежит ЧЕЛОВЕКУ и не зависит от компании; другим оно доступно
-// ТОЛЬКО НА ЧТЕНИЕ — публичной ссылкой или адресно. Поэтому проверок ролей
-// компании здесь нет: на входе каждой операции стоит «владелец» либо «есть
-// доступ на чтение».
+// Расписание лежит в пространстве — личном или команды (см. domain/access.go);
+// адресно и публичной ссылкой оно открывается только на чтение. На входе
+// каждой операции стоит проверка уровня.
 // Сокет-события клиентам публикуются в Redis gw2:schedule:events (доставляет
 // gatewaysvc) и адресуются аудитории расписания ПОИМЁННО: общей комнаты у
-// раздела нет — расписание не является достоянием компании.
+// раздела нет.
 package service
 
 import (
 	"context"
 	"fmt"
 	"log/slog"
+	"slices"
 
 	"github.com/DmitriyODS/gw2/back-go/schedule/internal/domain"
 )
@@ -51,10 +51,10 @@ func (s *Service) actor(ctx context.Context, userID int64) (Actor, error) {
 	return Actor{UserID: userID, Companies: companies}, nil
 }
 
-// requireOwner — расписание во владении: правка структуры, занятий и шаринга.
-// Чужое (и несуществующее) — 404: существование чужого расписания не
-// раскрываем даже тому, кто его видит.
-func (s *Service) requireOwner(ctx context.Context, userID, id int64) (*domain.Schedule, error) {
+// require — расписание и проверка уровня доступа (см. domain/access.go).
+// Без доступа — 404: существование чужого расписания не раскрываем. Тому, кто
+// расписание видит, нехватку уровня называем честно.
+func (s *Service) require(ctx context.Context, a Actor, id int64, want string) (*domain.Schedule, error) {
 	sc, err := s.repo.GetSchedule(ctx, id)
 	if err != nil {
 		return nil, err
@@ -62,43 +62,57 @@ func (s *Service) requireOwner(ctx context.Context, userID, id int64) (*domain.S
 	if sc == nil {
 		return nil, domain.ErrScheduleNotFound
 	}
-	if sc.OwnerID != userID {
-		// Тому, кто расписание уже видит, называем причину честно: иначе
-		// кнопка правки отвечала бы «не найдено» на открытом расписании.
-		access, err := s.repo.HasAccess(ctx, id, userID, s.companiesOf(ctx, userID))
-		if err != nil {
-			return nil, err
-		}
-		if access {
-			return nil, domain.ErrReadOnly
-		}
+	access, err := s.repo.AccessOf(ctx, id, a.UserID, a.Companies)
+	if err != nil {
+		return nil, err
+	}
+	if access == domain.AccessNone {
 		return nil, domain.ErrScheduleNotFound
 	}
+	if !domain.AccessAtLeast(access, want) {
+		if want == domain.AccessOwner {
+			return nil, domain.ErrOwnerOnly
+		}
+		return nil, domain.ErrReadOnly
+	}
+	sc.MyAccess = access
+	sc.Shared = !domain.AccessAtLeast(access, domain.AccessEdit)
 	return sc, nil
 }
 
-// requireRead — расписание, доступное на чтение: своё (canEdit) либо открытое
-// адресно. Чужое без доступа — 404.
-func (s *Service) requireRead(ctx context.Context, a Actor, id int64) (sc *domain.Schedule, canEdit bool, err error) {
-	sc, err = s.repo.GetSchedule(ctx, id)
+// requireOwner — право вести расписание: структура, занятия, настройки.
+func (s *Service) requireOwner(ctx context.Context, userID, id int64) (*domain.Schedule, error) {
+	return s.requireLevel(ctx, userID, id, domain.AccessEdit)
+}
+
+// requireManage — распоряжаться расписанием: удалить, раздать, перенести.
+func (s *Service) requireManage(ctx context.Context, userID, id int64) (*domain.Schedule, error) {
+	return s.requireLevel(ctx, userID, id, domain.AccessOwner)
+}
+
+func (s *Service) requireLevel(ctx context.Context, userID, id int64, want string) (*domain.Schedule, error) {
+	a, err := s.actor(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	return s.require(ctx, a, id, want)
+}
+
+// requireRead — расписание, доступное на чтение; canEdit — можно ли его вести.
+func (s *Service) requireRead(ctx context.Context, a Actor, id int64) (*domain.Schedule, bool, error) {
+	sc, err := s.require(ctx, a, id, domain.AccessView)
 	if err != nil {
 		return nil, false, err
 	}
-	if sc == nil {
-		return nil, false, domain.ErrScheduleNotFound
+	return sc, !sc.Shared, nil
+}
+
+// requireMember — положить расписание в команду может только её участник.
+func (s *Service) requireMember(a Actor, companyID *int64) error {
+	if companyID == nil || slices.Contains(a.Companies, *companyID) {
+		return nil
 	}
-	if sc.OwnerID == a.UserID {
-		return sc, true, nil
-	}
-	ok, err := s.repo.HasAccess(ctx, id, a.UserID, a.Companies)
-	if err != nil {
-		return nil, false, err
-	}
-	if !ok {
-		return nil, false, domain.ErrScheduleNotFound
-	}
-	sc.Shared = true
-	return sc, false, nil
+	return domain.ErrNotTeamMember
 }
 
 // companiesOf — компании пользователя без падения: список нужен лишь для того,
@@ -133,7 +147,8 @@ func (s *Service) publish(ctx context.Context, scheduleID int64, event string, p
 // открытый экран перечитывает их сам.
 func schedulePayload(sc *domain.Schedule) map[string]any {
 	return map[string]any{
-		"id": sc.ID, "owner_id": sc.OwnerID, "name": sc.Name,
+		"id": sc.ID, "owner_id": sc.OwnerID, "company_id": sc.CompanyID,
+		"team_access": sc.TeamAccess, "name": sc.Name,
 		"cycle_weeks": sc.CycleWeeks, "cycle_anchor": sc.CycleAnchor.Format(domain.DateLayout),
 		"week_labels": sc.WeekLabels, "timezone": sc.Timezone, "gap_min": sc.GapMin,
 		"item_count": sc.ItemCount, "updated_at": sc.UpdatedAt,

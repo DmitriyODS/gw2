@@ -13,14 +13,14 @@ import (
    нет вовсе. */
 
 func (s *Service) ListShares(ctx context.Context, userID, scheduleID int64) ([]*domain.Share, error) {
-	if _, err := s.requireOwner(ctx, userID, scheduleID); err != nil {
+	if _, err := s.requireManage(ctx, userID, scheduleID); err != nil {
 		return nil, err
 	}
 	return s.repo.ListShares(ctx, scheduleID)
 }
 
 func (s *Service) CreateShare(ctx context.Context, userID, scheduleID int64) (*domain.Share, error) {
-	sc, err := s.requireOwner(ctx, userID, scheduleID)
+	sc, err := s.requireManage(ctx, userID, scheduleID)
 	if err != nil {
 		return nil, err
 	}
@@ -36,7 +36,7 @@ func (s *Service) CreateShare(ctx context.Context, userID, scheduleID int64) (*d
 }
 
 func (s *Service) RevokeShare(ctx context.Context, userID, scheduleID, shareID int64) error {
-	if _, err := s.requireOwner(ctx, userID, scheduleID); err != nil {
+	if _, err := s.requireManage(ctx, userID, scheduleID); err != nil {
 		return err
 	}
 	return s.repo.DeleteShare(ctx, shareID, scheduleID)
@@ -63,7 +63,7 @@ func (s *Service) SharedView(ctx context.Context, code string) (*View, error) {
 }
 
 func (s *Service) ListUserShares(ctx context.Context, userID, scheduleID int64) ([]*domain.UserShare, error) {
-	if _, err := s.requireOwner(ctx, userID, scheduleID); err != nil {
+	if _, err := s.requireManage(ctx, userID, scheduleID); err != nil {
 		return nil, err
 	}
 	return s.repo.ListUserShares(ctx, scheduleID)
@@ -71,7 +71,7 @@ func (s *Service) ListUserShares(ctx context.Context, userID, scheduleID int64) 
 
 // ShareWith — открыть расписание человеку либо компании (адресат ровно один).
 func (s *Service) ShareWith(ctx context.Context, userID, scheduleID int64, targetUser, targetCompany *int64) (*domain.UserShare, error) {
-	sc, err := s.requireOwner(ctx, userID, scheduleID)
+	sc, err := s.requireManage(ctx, userID, scheduleID)
 	if err != nil {
 		return nil, err
 	}
@@ -94,7 +94,7 @@ func (s *Service) ShareWith(ctx context.Context, userID, scheduleID int64, targe
 }
 
 func (s *Service) Unshare(ctx context.Context, userID, scheduleID int64, targetUser, targetCompany *int64) error {
-	sc, err := s.requireOwner(ctx, userID, scheduleID)
+	sc, err := s.requireManage(ctx, userID, scheduleID)
 	if err != nil {
 		return err
 	}

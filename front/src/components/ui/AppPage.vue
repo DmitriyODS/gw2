@@ -326,9 +326,10 @@ function hasHead() {
   flex-direction: column;
   flex: 1;
   min-height: 0;
-  border: 1px solid var(--acrylic-border);
+  border: 1px solid var(--sk-edge);
   border-radius: var(--radius-xl);
   background: var(--acrylic-bg);
+  box-shadow: var(--sk-panel-shadow);
   -webkit-backdrop-filter: var(--acrylic-blur);
   backdrop-filter: var(--acrylic-blur);
   container-type: inline-size;

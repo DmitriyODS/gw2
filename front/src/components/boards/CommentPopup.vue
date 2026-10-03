@@ -29,10 +29,19 @@ watch(() => props.comment?.id, () => {
   if (isNew.value) nextTick(() => (input.value?.$el || input.value)?.focus?.())
 }, { immediate: true })
 
+// Попап не уходит за край холста: булавка у правой или нижней кромки
+// открывала ветку наполовину за пределами окна.
 const style = computed(() => ({
-  left: `${Math.round(props.anchor.x)}px`,
-  top: `${Math.round(props.anchor.y)}px`,
+  left: `clamp(8px, ${Math.round(props.anchor.x)}px, calc(100% - 288px))`,
+  top: `clamp(8px, ${Math.round(props.anchor.y)}px, calc(100% - 160px))`,
 }))
+
+/* Пустая булавка — это брошенный черновик: закрытие убирает её с доски,
+   иначе на холсте копились бы обсуждения без единого слова. */
+function close() {
+  if (isNew.value && !props.readOnly) emit('delete', props.comment)
+  else emit('close')
+}
 
 function when(iso) {
   if (!iso) return ''
@@ -67,26 +76,31 @@ function toggleResolved() {
 </script>
 
 <template>
-  <div v-if="comment" class="cp" :style="style">
+  <div v-if="comment" class="cp" :style="style" @keydown.esc.stop="close">
     <header class="cp-head">
       <span class="material-symbols-outlined">chat_bubble</span>
       <span class="cp-author">{{ comment.author || 'Комментарий' }}</span>
       <span class="cp-time">{{ when(comment.created_at) }}</span>
-      <button
+      <AppButton
         v-if="!readOnly && !isNew"
-        type="button"
-        class="cp-icon"
+        variant="icon"
+        size="sm"
+        :icon="comment.resolved ? 'undo' : 'check_circle'"
+        :label="comment.resolved ? 'Вернуть в работу' : 'Пометить решённым'"
         :title="comment.resolved ? 'Вернуть в работу' : 'Пометить решённым'"
         @click="toggleResolved"
-      >
-        <span class="material-symbols-outlined">{{ comment.resolved ? 'undo' : 'check_circle' }}</span>
-      </button>
-      <button v-if="!readOnly" type="button" class="cp-icon cp-icon--danger" title="Удалить" @click="emit('delete', comment)">
-        <span class="material-symbols-outlined">delete</span>
-      </button>
-      <button type="button" class="cp-icon" title="Закрыть" @click="emit('close')">
-        <span class="material-symbols-outlined">close</span>
-      </button>
+      />
+      <AppButton
+        v-if="!readOnly && !isNew"
+        variant="icon"
+        size="sm"
+        tone="danger"
+        icon="delete"
+        label="Удалить"
+        title="Удалить"
+        @click="emit('delete', comment)"
+      />
+      <AppButton variant="icon" size="sm" icon="close" label="Закрыть" title="Закрыть" @click="close" />
     </header>
 
     <div class="cp-body">
@@ -123,9 +137,16 @@ function toggleResolved() {
             placeholder="Ответить…"
             @keydown.enter.exact.prevent="addReply"
           />
-          <button type="button" class="cp-icon" title="Отправить" @click="addReply">
-            <span class="material-symbols-outlined">send</span>
-          </button>
+          <AppButton
+            variant="icon"
+            size="sm"
+            tone="primary"
+            icon="send"
+            label="Отправить"
+            title="Отправить"
+            :disabled="!reply.trim()"
+            @click="addReply"
+          />
         </div>
       </template>
     </div>
@@ -143,7 +164,7 @@ function toggleResolved() {
   border: 1px solid var(--glass-edge);
   border-radius: var(--radius-lg);
   background: var(--acrylic-card-bg);
-  box-shadow: var(--shadow-2);
+  box-shadow: var(--shadow-md);
 }
 
 .cp-head {
@@ -154,13 +175,13 @@ function toggleResolved() {
 }
 
 .cp-author { flex: 1; min-width: 0; font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
-.cp-time { font-size: 11px; color: var(--color-text-muted); white-space: nowrap; }
+.cp-time { font-size: 11px; color: var(--color-text-dim); white-space: nowrap; }
 
 .cp-body { display: flex; flex-direction: column; gap: 8px; padding: 4px 10px 10px; overflow-y: auto; }
 .cp-text { margin: 0; font-size: 13px; line-height: 1.45; white-space: pre-wrap; word-break: break-word; }
 .cp-text.is-resolved { opacity: 0.6; text-decoration: line-through; }
 
-.cp-replies { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0 0 0 10px; list-style: none; border-left: 2px solid var(--color-outline-variant); }
+.cp-replies { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0 0 0 10px; list-style: none; border-left: 2px solid var(--color-outline-dim); }
 .cp-reply { display: flex; flex-direction: column; gap: 2px; }
 .cp-reply-author { font-size: 12px; font-weight: 600; }
 
@@ -168,22 +189,4 @@ function toggleResolved() {
 .cp-input { flex: 1; min-width: 0; font-size: 13px; }
 .cp-send { align-self: flex-end; }
 
-.cp-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 28px;
-  max-width: 28px;
-  min-height: 28px;
-  max-height: 28px;
-  border: none;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--color-text-muted);
-  cursor: pointer;
-}
-
-.cp-icon:hover { background: var(--color-surface-variant); color: var(--color-text); }
-.cp-icon--danger:hover { color: var(--color-error); }
-.cp-icon .material-symbols-outlined { font-size: 18px; }
 </style>

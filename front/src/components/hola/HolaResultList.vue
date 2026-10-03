@@ -76,7 +76,7 @@ function goIcon(item) {
 .hr-item:hover,
 .hr-item.active {
   border-color: color-mix(in oklch, var(--color-primary) 34%, var(--acrylic-border));
-  background: color-mix(in oklch, var(--color-primary) 8%, var(--glass-bg));
+  background: linear-gradient(color-mix(in oklch, var(--color-primary) 8%, transparent), color-mix(in oklch, var(--color-primary) 8%, transparent)), var(--glass-bg);
 }
 
 .hr-icon { font-size: 21px; color: var(--color-text-dim); flex-shrink: 0; }

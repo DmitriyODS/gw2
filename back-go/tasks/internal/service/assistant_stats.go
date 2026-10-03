@@ -17,7 +17,7 @@ import (
 )
 
 // assistantMSK — «дневные» периоды инструментов ассистента считаются по
-// московскому времени (как раньше у Грувика).
+// московскому времени.
 var assistantMSK = time.FixedZone("MSK", 3*60*60)
 
 const (
@@ -34,9 +34,8 @@ type AssistantPeriod struct {
 	Label string
 }
 
-// ResolveAssistantPeriod — код периода → окно дат. Поддержаны те же
-// значения, что были у tool-схем Грувика: today/yesterday/this_week/
-// last_week/this_month/last_month/7d/30d. Пустой/незнакомый код → this_week.
+// ResolveAssistantPeriod — код периода → окно дат: today/yesterday/
+// this_week/last_week/this_month/last_month/7d/30d. Пустой/незнакомый код → this_week.
 func ResolveAssistantPeriod(code string) AssistantPeriod {
 	code = strings.ToLower(strings.TrimSpace(code))
 	if code == "" {

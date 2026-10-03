@@ -51,14 +51,17 @@ function toggle(e) {
 
 .switch-label { font-size: 13px; color: var(--color-text-dim); }
 
+/* Физический тумблер: утопленная дорожка (колодец) и выпуклая рукоять,
+   которая переезжает вправо. Включённая дорожка — колодец, залитый акцентом. */
 .switch {
   position: relative;
   box-sizing: border-box;
-  width: 44px; min-width: 44px; max-width: 44px;
-  height: 24px; min-height: 24px; max-height: 24px;
-  border: 2px solid var(--color-outline, var(--color-outline-variant));
+  width: 46px; min-width: 46px; max-width: 46px;
+  height: 26px; min-height: 26px; max-height: 26px;
+  border: 1px solid var(--sk-edge);
   border-radius: var(--radius-full);
-  background: var(--color-surface-highest, var(--color-surface-high));
+  background: var(--sk-well-bg);
+  box-shadow: var(--sk-well-shadow);
   cursor: pointer;
   transition: background 0.18s, border-color 0.18s;
 }
@@ -68,26 +71,32 @@ function toggle(e) {
 .switch::after {
   content: '';
   position: absolute;
-  top: 50%;
-  left: 4px;
-  width: 12px;
-  height: 12px;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
-  background: var(--color-outline, var(--color-on-surface-variant));
-  transform: translateY(-50%);
-  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1),
-    background 0.2s, width 0.2s, height 0.2s, left 0.2s;
+  background: var(--sk-knob-bg);
+  box-shadow: var(--sk-knob-shadow);
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.switch.on {
-  background: var(--color-primary);
-  border-color: var(--color-primary);
+.switch.on { background: var(--color-primary); border-color: var(--color-primary); }
+@supports (color: color-mix(in oklch, red, blue)) {
+  .switch.on {
+    border-color: color-mix(in oklch, var(--color-primary) 70%, black);
+    background:
+      var(--grain),
+      linear-gradient(180deg,
+        color-mix(in oklch, var(--color-primary) 85%, black),
+        var(--color-primary) 70%);
+    box-shadow:
+      inset 0 2px 4px color-mix(in oklch, black 25%, transparent),
+      0 1px 0 color-mix(in oklch, white 40%, transparent);
+  }
 }
 
-.switch.on::after {
-  width: 16px;
-  height: 16px;
-  left: 24px;
-  background: var(--color-on-primary);
-}
+.switch.on::after { transform: translateX(20px); }
+
+.switch:active:not(.disabled)::after { box-shadow: var(--sk-knob-shadow), inset 0 0 0 20px color-mix(in oklch, black 4%, transparent); }
 </style>

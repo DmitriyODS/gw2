@@ -15,7 +15,7 @@ import (
 // nil → только эти записи, иначе все по фильтру (диапазон/поиск). Доступно
 // владельцу и адресату.
 func (s *Service) ExportEntries(ctx context.Context, userID, diaryID int64, p ListParams, ids []int64) ([]byte, string, error) {
-	d, _, _, err := s.requireReadable(ctx, userID, diaryID)
+	d, err := s.require(ctx, userID, diaryID, domain.AccessView)
 	if err != nil {
 		return nil, "", err
 	}
@@ -66,6 +66,9 @@ func mustCell(col, row int) string {
 }
 
 func formatDate(t time.Time) string {
+	if t.IsZero() {
+		return "Без срока"
+	}
 	return fmt.Sprintf("%02d.%02d.%d", t.Day(), int(t.Month()), t.Year())
 }
 

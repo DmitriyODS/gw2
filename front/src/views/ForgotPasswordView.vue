@@ -1,6 +1,6 @@
 <template>
   <AuthShell
-    :title="sent ? 'проверьте почту' : 'сброс пароля'"
+    :title="sent ? 'Проверьте почту' : 'Сброс пароля'"
     :subtitle="sent ? '' : 'Укажите email — пришлём ссылку для установки нового пароля.'"
     size="sm"
     back="/login"
@@ -10,22 +10,20 @@
         Если аккаунт с адресом <b>{{ email }}</b> существует, мы отправили на него
         письмо со ссылкой для сброса пароля.
       </p>
-      <RouterLink to="/login" class="auth-submit">вернуться ко входу</RouterLink>
+      <AppButton tag="router-link" to="/login" variant="filled" size="lg" block label="Вернуться ко входу" />
     </template>
 
     <form v-else class="auth-form" @submit.prevent="submit">
       <AuthField
         v-model="email"
-        label="email"
+        label="Email"
         type="email"
         placeholder="name@example.com"
         autocomplete="email"
         :disabled="loading"
       />
-      <p v-if="error" class="auth-error">{{ error }}</p>
-      <button type="submit" class="auth-submit" :disabled="loading">
-        {{ loading ? 'отправляем…' : 'отправить ссылку' }}
-      </button>
+      <AppInfoBar v-if="error" tone="error" inline :message="error" />
+      <AppButton type="submit" variant="filled" size="lg" block :loading="loading" label="Отправить ссылку" />
     </form>
   </AuthShell>
 </template>
@@ -34,6 +32,8 @@
 import { ref } from 'vue'
 import { useAuthStore } from '@/stores/auth.js'
 import AuthShell from '@/components/auth/AuthShell.vue'
+import AppButton from '@/components/ui/AppButton.vue'
+import AppInfoBar from '@/components/ui/AppInfoBar.vue'
 import AuthField from '@/components/auth/AuthField.vue'
 
 const authStore = useAuthStore()

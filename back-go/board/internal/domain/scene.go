@@ -483,6 +483,43 @@ func SceneWithoutImages(raw json.RawMessage, keys []string) (json.RawMessage, bo
 	return out, true
 }
 
+/*
+SceneWithImageKeys — сцена, где картинки смотрят на другие объекты хранилища
+
+	(копия доски получает СВОИ файлы: общий ключ удаление оригинала стёрло бы
+	и у копии). Картинки, которых нет в замене, уходят со сцены. Как и
+	SceneWithoutImages, правит сырое дерево.
+*/
+func SceneWithImageKeys(raw json.RawMessage, replace map[string]string) json.RawMessage {
+	var root map[string]any
+	if len(raw) == 0 || json.Unmarshal(raw, &root) != nil {
+		return raw
+	}
+	objects, ok := root["objects"].([]any)
+	if !ok {
+		return raw
+	}
+	kept := make([]any, 0, len(objects))
+	for _, item := range objects {
+		if obj, ok := item.(map[string]any); ok {
+			if src, _ := obj["src"].(string); src != "" && obj["type"] == ObjImage {
+				key, ok := replace[StorageKey(src)]
+				if !ok {
+					continue
+				}
+				obj["src"] = "/uploads/" + key
+			}
+		}
+		kept = append(kept, item)
+	}
+	root["objects"] = kept
+	out, err := json.Marshal(root)
+	if err != nil {
+		return raw
+	}
+	return out
+}
+
 // TextToScene — сцена из плоского текста (импорт .txt): по надписи на строку.
 func TextToScene(text string) json.RawMessage {
 	objs := []SceneObject{}

@@ -4,8 +4,7 @@ package apitest
 // сам человек (тумблер в «Аккаунте») либо создатель компании в карточке
 // сотрудника — он company-scoped, глобального отпуска «сразу везде» у
 // пользователя нет. Проверяются гарды tasksvc на создание/правку/закрытие задач
-// и старт юнитов (остановка активного юнита разрешена) и «отпуск грувика» в
-// petsvc — заморозка потребностей/болезней и запрет ухода/поглаживаний.
+// и старт юнитов (остановка активного юнита разрешена).
 
 import (
 	"fmt"
@@ -166,56 +165,6 @@ func TestVacationSetByCompanyCreator(t *testing.T) {
 		map[string]any{"on_vacation": false})
 	requireStatus(t, r, 200, "создатель снимает отпуск")
 	createTask(t, member, deptID, "После отпуска", nil)
-}
-
-// В отпуске грувик заморожен: шкалы не тают, болезнь не наступает, действия
-// владельца и поглаживания коллег отвечают PET_ON_VACATION, а DTO явно несёт
-// метку on_vacation (её рисует фронт).
-func TestVacationFreezesPet(t *testing.T) {
-	admin, m, companyID := petsCompany(t)
-
-	r := petsAPI.doJSON(t, http.MethodGet, "/api/pets/pet", m.Token, nil)
-	requireStatus(t, r, 200, "GET /pet")
-	if r.Bool("on_vacation") {
-		t.Fatalf("новый питомец не в отпуске: %s", r.Raw)
-	}
-
-	setVacation(t, admin, companyID, m, true)
-
-	// Трое суток без ухода — без отпуска сытость была бы в нуле и питомец
-	// болел бы истощением; в отпуске шкалы стоят на месте.
-	agePetNeeds(t, m.ID, 80*60)
-	r = petsAPI.doJSON(t, http.MethodGet, "/api/pets/pet", m.Token, nil)
-	requireStatus(t, r, 200, "GET /pet в отпуске")
-	if !r.Bool("on_vacation") {
-		t.Fatalf("DTO не помечен on_vacation: %s", r.Raw)
-	}
-	needs, ok := r.JSON["needs"].(map[string]any)
-	if !ok || needs["satiety"] != float64(100) {
-		t.Fatalf("в отпуске шкалы не должны таять: %s", r.Raw)
-	}
-	if r.Bool("sick") {
-		t.Fatalf("в отпуске питомец не заболевает: %s", r.Raw)
-	}
-
-	// Уход и приключения закрыты.
-	grantKudos(t, m.ID, 100)
-	r = petsAPI.doJSON(t, http.MethodPost, "/api/pets/pet/feed", m.Token, nil)
-	requireError(t, r, 422, "PET_ON_VACATION", "кормление в отпуске")
-	r = petsAPI.doJSON(t, http.MethodPost, "/api/pets/pet/adventure", m.Token, nil)
-	requireError(t, r, 422, "PET_ON_VACATION", "приключение в отпуске")
-
-	// Коллега не погладит отпускника (и кудосы владельцу не капнут).
-	petsAPI.doJSON(t, http.MethodGet, "/api/pets/pet", admin.Token, nil)
-	grantKudos(t, admin.ID, 100)
-	r = petsAPI.doJSON(t, http.MethodPost,
-		fmt.Sprintf("/api/pets/stroke/%d", m.ID), admin.Token, nil)
-	requireError(t, r, 422, "PET_ON_VACATION", "поглаживание отпускника")
-
-	setVacation(t, admin, companyID, m, false)
-	// После отпуска питомец жив-здоров и снова кормится.
-	r = petsAPI.doJSON(t, http.MethodPost, "/api/pets/pet/feed", m.Token, nil)
-	requireStatus(t, r, 200, "кормление после отпуска")
 }
 
 // Отпуск в одной компании не мешает работать в другой: у пользователя нет

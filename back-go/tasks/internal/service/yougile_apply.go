@@ -120,7 +120,6 @@ func (y *Yougile) applyUpdated(ctx context.Context, company *domain.YougileCompa
 	// yg_completed_column_id. Любого хватит.
 	completedCol := strOrEmpty(company.YgCompletedColumnID)
 	shouldArchive := incomingCompleted || (completedCol != "" && newCol == completedCol)
-	archivedNow := false
 	if shouldArchive && !task.IsArchived {
 		// Инвариант GW: нельзя архивировать задачу с активным юнитом — иначе
 		// юнит «повиснет» на архивной задаче. Пользователь закроет задачу
@@ -134,7 +133,6 @@ func (y *Yougile) applyUpdated(ctx context.Context, company *domain.YougileCompa
 		} else {
 			setField("is_archived", true)
 			setField("archived_at", time.Now().UTC())
-			archivedNow = true
 		}
 	} else if !incomingCompleted && task.IsArchived && completedCol == "" {
 		// Завершённость снимали в YG (а completed-колонка для авто-архива
@@ -151,12 +149,6 @@ func (y *Yougile) applyUpdated(ctx context.Context, company *domain.YougileCompa
 	setField("yougile_sync_hash", incomingHash)
 	if err := y.svc.tasks.UpdateTaskFields(ctx, task.ID, fields); err != nil {
 		return nil, err
-	}
-
-	// Закрытие, пришедшее из YouGile, — тоже опорная точка ленты «Мой Groove».
-	if archivedNow {
-		task.IsArchived = true
-		y.svc.pets.OnTaskClosed(task, 0)
 	}
 
 	payload, err := y.broadcastTaskUpdate(ctx, task.ID)

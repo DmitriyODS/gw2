@@ -438,13 +438,14 @@ function onDelete() {
   /* Карточка в потоке ленты: полупрозрачная подложка без blur (см. tokens.css).
      Матовое стекло с blur включается ТОЛЬКО когда задана обложка ленты — правило
      .main-content.has-feed-bg .post-card в main.css (иначе — как раньше). */
+  /* Пост — лист материала, как AppCard. */
   background: var(--acrylic-card-bg);
-  border: 1px solid var(--acrylic-border);
-  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--sk-edge);
+  box-shadow: var(--sk-panel-shadow);
 }
 
 .post-card.pinned {
-  box-shadow: var(--shadow-sm), inset 3px 0 0 0 var(--color-tertiary);
+  box-shadow: var(--sk-panel-shadow), inset 3px 0 0 0 var(--color-primary);
 }
 
 .post-head {
@@ -518,8 +519,9 @@ function onDelete() {
   font-weight: 600;
   padding: 2px 9px;
   border-radius: var(--radius-full);
-  border: 1px solid var(--color-outline-dim);
-  background: var(--color-surface-high);
+  border: 1px solid var(--sk-edge);
+  background: var(--sk-raised-bg);
+  box-shadow: var(--sk-raised-shadow);
   color: var(--color-text-dim);
 }
 
@@ -563,12 +565,12 @@ function onDelete() {
   z-index: 20;
   min-width: 190px;
   /* Плавающий поповер — стекло (Expressive Glass). */
-  background: var(--acrylic-bg);
+  background: var(--acrylic-bg-strong);
   -webkit-backdrop-filter: var(--acrylic-blur);
   backdrop-filter: var(--acrylic-blur);
-  border: 1px solid var(--acrylic-border);
+  border: 1px solid var(--sk-edge);
   border-radius: var(--radius-md);
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--sk-panel-shadow), var(--shadow-lg);
   padding: 6px;
   display: flex;
   flex-direction: column;
@@ -816,7 +818,10 @@ function onDelete() {
   font-weight: 600;
   cursor: pointer;
 }
-.post-action:hover { background: var(--glass-hover-bg); color: var(--color-text); }
+/* Действия поста — мягкие клавиши: под курсором приподнимаются, под пальцем
+   вдавливаются. */
+.post-action:hover { background: var(--sk-raised-bg); box-shadow: var(--sk-raised-shadow); color: var(--color-text); }
+.post-action:active { background: var(--sk-pressed-bg); box-shadow: var(--sk-pressed-shadow); }
 .post-action .material-symbols-outlined { font-size: 18px; }
 .post-action + .post-action { margin-left: 0; }
 

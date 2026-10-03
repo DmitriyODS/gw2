@@ -27,17 +27,20 @@ const (
 type Form struct {
 	ID      int64 `json:"id"`
 	OwnerID int64 `json:"owner_id"`
-	// CompanyID — компания, в которой форма заведена (nil — личная). Решает,
-	// чья квота платит за файлы ответов.
-	CompanyID   *int64 `json:"company_id"`
+	// CompanyID — пространство: nil — личная форма владельца, иначе форма
+	// команды, а OwnerID — её автор. Решает, чья квота платит за файлы ответов.
+	CompanyID *int64 `json:"company_id"`
+	// TeamAccess — уровень рядовых участников команды (у личной формы не
+	// действует); автор и администраторы команды распоряжаются формой целиком.
+	TeamAccess  string `json:"team_access"`
 	Title       string `json:"title"`
 	Description string `json:"description"`
 	Status      string `json:"status"`
 
-	AllowAnonymous   bool   `json:"allow_anonymous"`
-	OneResponse      bool   `json:"one_response"`
-	AllowEdit        bool   `json:"allow_edit"`
-	CollectEmail     bool   `json:"collect_email"`
+	AllowAnonymous bool `json:"allow_anonymous"`
+	OneResponse    bool `json:"one_response"`
+	AllowEdit      bool `json:"allow_edit"`
+	CollectEmail   bool `json:"collect_email"`
 	// CollectName — спрашивать имя у гостя по ссылке (вошедший подписан
 	// аккаунтом, и его не спрашивают никогда).
 	CollectName      bool   `json:"collect_name"`
@@ -67,12 +70,14 @@ type Form struct {
 	// OwnerName — чья это форма (вкладки «Поделились» и «Мне назначены»
 	// обязаны называть хозяина).
 	OwnerName string `json:"owner_name,omitempty"`
+	// CompanyName — название команды-пространства (список группируется по ним).
+	CompanyName string `json:"company_name,omitempty"`
 	// Responses — сколько ответов собрано (для карточки в списке).
 	Responses int `json:"responses"`
 	// MyDueAt / MyResponded — обязанность спрашивающего: срок ответа и
 	// ответил ли он уже. Заполняются на списке и при чтении формы.
 	MyDueAt     *time.Time `json:"my_due_at,omitempty"`
-	MyResponded bool        `json:"my_responded"`
+	MyResponded bool       `json:"my_responded"`
 }
 
 // Переход после раздела.
@@ -231,9 +236,9 @@ type ShareVisit struct {
 
 // Assignee — назначенный человек в контроле исполнения: ответил или нет.
 type Assignee struct {
-	UserID     int64      `json:"user_id"`
-	Name       string     `json:"name"`
-	AvatarPath *string    `json:"avatar_path,omitempty"`
+	UserID     int64   `json:"user_id"`
+	Name       string  `json:"name"`
+	AvatarPath *string `json:"avatar_path,omitempty"`
 	// Via — откуда обязанность: "user" (лично) или название компании.
 	Via        string     `json:"via"`
 	DueAt      *time.Time `json:"due_at,omitempty"`

@@ -10,16 +10,15 @@
     @confirm="emit('update:modelValue', false)"
   >
     <!-- Область применения -->
-    <div v-if="conversation" class="cbg-scope" role="tablist">
-      <button
-        type="button" class="cbg-scope-btn" :class="{ active: scope === 'chat' }"
-        role="tab" @click="setScope('chat')"
-      >Этот чат</button>
-      <button
-        type="button" class="cbg-scope-btn" :class="{ active: scope === 'all' }"
-        role="tab" @click="setScope('all')"
-      >Все чаты</button>
-    </div>
+    <AppTabs
+      v-if="conversation"
+      variant="tint"
+      full-width
+      class="cbg-scope"
+      :model-value="scope"
+      :tabs="SCOPES"
+      @update:model-value="setScope"
+    />
 
     <BackgroundEditor :recipe="recipe" :upload-fn="uploadFn" @update:recipe="save" />
 
@@ -33,6 +32,7 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import AppDialog from '@/components/ui/AppDialog.vue'
+import AppTabs from '@/components/ui/AppTabs.vue'
 import BackgroundEditor from '@/components/common/BackgroundEditor.vue'
 import { useMessengerStore } from '@/stores/messenger.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
@@ -51,6 +51,10 @@ const messenger = useMessengerStore()
 const notif = useNotificationsStore()
 
 const scope = ref('chat')
+const SCOPES = [
+  { value: 'chat', label: 'Этот чат' },
+  { value: 'all', label: 'Все чаты' },
+]
 const uploadFn = (file) => uploadAttachment(file)
 
 const convId = computed(() => (scope.value === 'all' ? null : props.conversation?.id ?? null))
@@ -94,33 +98,7 @@ const actions = computed(() => [
 </script>
 
 <style scoped>
-.cbg-scope {
-  display: flex;
-  gap: 4px;
-  padding: 4px;
-  margin-bottom: 14px;
-  background: var(--acrylic-card-bg);
-  border: 1px solid var(--color-outline-dim);
-  border-radius: var(--radius-lg);
-}
-
-.cbg-scope-btn {
-  flex: 1;
-  border: none;
-  background: transparent;
-  color: var(--color-text-dim);
-  font-size: 13.5px;
-  font-weight: 600;
-  padding: 8px 12px;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s;
-}
-
-.cbg-scope-btn.active {
-  background: var(--color-tertiary-container);
-  color: var(--color-on-tertiary-container);
-}
+.cbg-scope { margin-bottom: 14px; }
 
 .cbg-hint {
   margin: 18px 0 0;

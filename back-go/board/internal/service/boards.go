@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"path"
 	"strings"
 	"time"
 
@@ -148,7 +149,7 @@ func (s *Service) CreateBoard(ctx context.Context, userID int64, title string, f
 	if err := s.checkOwnFolder(ctx, userID, folderID); err != nil {
 		return nil, err
 	}
-	if err := s.ensureLimit(ctx, userID); err != nil {
+	if err := s.ensureLimit(ctx, userID, 1); err != nil {
 		return nil, err
 	}
 	n := &domain.Board{OwnerID: userID, Title: title, Scene: domain.EmptyScene(), FolderID: folderID}
@@ -287,15 +288,101 @@ func (s *Service) CopyBoard(ctx context.Context, userID, id int64) (*domain.Boar
 	if err != nil {
 		return nil, err
 	}
-	cp := &domain.Board{
-		OwnerID: userID, FolderID: src.FolderID, Title: copyTitle(src.Title),
-		Color: src.Color, Scene: src.Scene, TextContent: src.TextContent,
-	}
-	if err := s.repo.CreateBoard(ctx, cp); err != nil {
+	if err := s.ensureLimit(ctx, userID, 1); err != nil {
 		return nil, err
 	}
+	scene, copied, err := s.copySceneImages(ctx, userID, src.Scene, true)
+	if err != nil {
+		return nil, err
+	}
+	cp := &domain.Board{
+		OwnerID: userID, FolderID: src.FolderID, Title: copyTitle(src.Title),
+		Color: src.Color, Scene: scene, TextContent: src.TextContent,
+	}
+	if err := s.repo.CreateBoard(ctx, cp); err != nil {
+		s.files.RemoveFor(ctx, userID, 0, copied)
+		return nil, err
+	}
+	s.copyPreview(ctx, userID, src, cp)
 	s.publishBoard(ctx, "board:created", cp)
 	return cp, nil
+}
+
+// adoptCopiedBoard — доска из копии папки получает свои файлы картинок и
+// миниатюру. Строки уже скопированы транзакцией, поэтому картинку, которая не
+// влезла в квоту, приходится снять с копии: общий с оригиналом ключ хуже.
+func (s *Service) adoptCopiedBoard(ctx context.Context, userID, boardID int64) {
+	b, err := s.repo.GetBoard(ctx, boardID)
+	if err != nil || b == nil {
+		return
+	}
+	if len(domain.SceneImageKeys(b.Scene)) > 0 {
+		scene, _, err := s.copySceneImages(ctx, userID, b.Scene, false)
+		if err != nil {
+			scene = domain.SceneWithImageKeys(b.Scene, nil)
+		}
+		if err := s.repo.UpdateBoardScene(ctx, b.ID, scene, domain.SceneText(scene)); err != nil {
+			s.log.Warn("boards.copy_scene_failed", "board", b.ID, "error", err)
+		}
+	}
+}
+
+// copySceneImages — копия получает СВОИ файлы картинок: с общими ключами
+// удаление оригинала (или вырезание картинки в «Хранилище») стирало бы их и у
+// копии. Возвращает сцену с новыми ключами и сами новые ключи (откат при
+// неудаче). strict — не влезший файл отменяет всё (копия доски не создаётся),
+// иначе картинка просто не попадает в копию.
+func (s *Service) copySceneImages(ctx context.Context, userID int64, scene json.RawMessage, strict bool) (json.RawMessage, []string, error) {
+	keys := domain.SceneImageKeys(scene)
+	if len(keys) == 0 {
+		return scene, nil, nil
+	}
+	replace := make(map[string]string, len(keys))
+	copied := []string{}
+	for _, key := range keys {
+		if _, done := replace[key]; done {
+			continue
+		}
+		data, err := s.files.Open(key)
+		if err != nil {
+			// Объекта уже нет — на копии рисовать нечего, рамку не тащим.
+			s.log.Warn("boards.copy_image_missing", "key", key, "error", err)
+			continue
+		}
+		newKey, err := s.files.SaveFor(ctx, userID, 0, path.Base(key), data)
+		if err != nil {
+			if !strict {
+				s.log.Warn("boards.copy_image_skipped", "key", key, "error", err)
+				continue
+			}
+			s.files.RemoveFor(ctx, userID, 0, copied)
+			return nil, nil, err
+		}
+		replace[key] = newKey
+		copied = append(copied, newKey)
+	}
+	return domain.SceneWithImageKeys(scene, replace), copied, nil
+}
+
+// copyPreview — миниатюра плитки копии (best-effort: без неё плитка просто
+// дождётся первого сохранения холста).
+func (s *Service) copyPreview(ctx context.Context, userID int64, src, cp *domain.Board) {
+	if src.PreviewPath == "" {
+		return
+	}
+	data, err := s.files.Open(src.PreviewPath)
+	if err != nil {
+		return
+	}
+	key, err := s.files.SaveFor(ctx, userID, 0, "preview.png", data)
+	if err != nil {
+		return
+	}
+	if err := s.repo.SetBoardPreview(ctx, cp.ID, key); err != nil {
+		s.files.RemoveFor(ctx, userID, 0, []string{key})
+		return
+	}
+	cp.PreviewPath, cp.PreviewURL = key, "/uploads/"+key
 }
 
 /*

@@ -1,6 +1,6 @@
 <template>
   <AuthShell
-    title="вход по QR-коду"
+    title="Вход по QR-коду"
     subtitle="Отсканируйте код телефоном, где вы уже вошли, или введите код вручную."
     size="sm"
     back="/login"
@@ -12,19 +12,19 @@
     <DeviceLinkInitiator v-if="!companies.length" kind="login" @session="onSession" />
 
     <!-- Выбор компании, если пользователь состоит в нескольких. -->
-    <div v-if="companies.length" class="ql-companies">
-      <button
+    <AppCard v-if="companies.length" variant="group" :gap="6">
+      <AppRow
         v-for="c in companies"
         :key="c.company_id"
-        type="button"
-        class="ql-company"
+        :title="c.company_name"
+        :hint="c.is_active ? c.role_name : `${c.role_name} · отключена`"
+        icon="apartment"
+        clickable
         :disabled="loading || !c.is_active"
         @click="pick(c.company_id)"
-      >
-        {{ c.company_name }}
-      </button>
-    </div>
-    <p v-if="error" class="auth-error ql-error">{{ error }}</p>
+      />
+    </AppCard>
+    <AppInfoBar v-if="error" tone="error" inline :message="error" class="ql-error" />
   </AuthShell>
 </template>
 
@@ -34,6 +34,9 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
 import { connectSocket } from '@/socket/index.js'
 import AuthShell from '@/components/auth/AuthShell.vue'
+import AppCard from '@/components/ui/AppCard.vue'
+import AppRow from '@/components/ui/AppRow.vue'
+import AppInfoBar from '@/components/ui/AppInfoBar.vue'
 import DeviceLinkInitiator from '@/components/auth/DeviceLinkInitiator.vue'
 
 const route = useRoute()
@@ -78,28 +81,4 @@ function finish() {
 
 <style scoped>
 .ql-error { margin-top: 12px; }
-
-.ql-companies {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-top: 18px;
-}
-
-.ql-company {
-  padding: 12px 16px;
-  border: 1px solid var(--acrylic-border);
-  border-radius: var(--radius-md);
-  background: color-mix(in oklch, var(--color-surface) 60%, transparent);
-  color: var(--color-text);
-  font: inherit;
-  font-size: 15px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: border-color 0.15s;
-}
-
-.ql-company:hover:not(:disabled) { border-color: var(--color-primary); }
-.ql-company:disabled { opacity: 0.5; cursor: not-allowed; }
-
 </style>

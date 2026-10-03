@@ -10,19 +10,17 @@ import (
 /* Сторона календарей в контракте владельца файлов (раздел «Хранилище»).
 
    Файлы лежат значениями внутри calendar_records.data, отдельной таблицы нет.
-   Календарь принадлежит КОМПАНИИ, а место за него платит её создатель —
-   отсюда отбор по companyIDs (кто создатель, знает биллинг). */
+   За личный календарь платит его хозяин, за календарь команды — создатель
+   команды (какие команды создал спрашивающий, знает биллинг). */
 
-func (r *Repo) EntriesOfCompanies(ctx context.Context, companyIDs []int64) ([]*domain.EntryScope, error) {
-	if len(companyIDs) == 0 {
-		return nil, nil
-	}
+func (r *Repo) EntriesForQuota(ctx context.Context, userID int64, companyIDs []int64) ([]*domain.EntryScope, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT rec.id, rec.calendar_id, rec.event_at, rec.data, rec.created_at, rec.updated_at,
-		       cal.name, cal.company_id
+		       cal.name, COALESCE(cal.company_id, 0)
 		  FROM calendar_records rec
 		  JOIN calendars cal ON cal.id = rec.calendar_id
-		 WHERE cal.company_id = ANY($1)`, companyIDs)
+		 WHERE cal.company_id = ANY($1)
+		    OR (cal.company_id IS NULL AND cal.owner_id = $2)`, companyIDs, userID)
 	if err != nil {
 		return nil, err
 	}

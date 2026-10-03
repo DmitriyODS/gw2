@@ -1,19 +1,23 @@
 <template>
-  <AuthShell title="доступ для Яндекс Алисы" size="sm">
+  <AuthShell title="Доступ для Яндекс Алисы" size="sm">
     <p class="oa-text">
       Навык «Groove Work» получит доступ к вашим задачам, ежедневнику и заметкам
       от имени аккаунта <b>{{ authStore.user?.fio || 'вашего аккаунта' }}</b>
       <template v-if="authStore.companyName"> (компания «{{ authStore.companyName }}»)</template>.
     </p>
 
-    <p v-if="!valid" class="oa-error">
-      Некорректная ссылка авторизации: не хватает параметров запроса.
-    </p>
-    <p v-else-if="error" class="oa-error">{{ error }}</p>
+    <AppInfoBar
+      v-if="!valid"
+      tone="error"
+      inline
+      class="oa-error"
+      message="Некорректная ссылка авторизации: не хватает параметров запроса."
+    />
+    <AppInfoBar v-else-if="error" tone="error" inline class="oa-error" :message="error" />
 
     <template #actions>
-      <AppButton label="отклонить" :disabled="loading" @click="deny" />
-      <AppButton variant="filled" :disabled="loading || !valid" @click="allow">{{ loading ? 'секунду…' : 'разрешить' }}</AppButton>
+      <AppButton label="Отклонить" :disabled="loading" @click="deny" />
+      <AppButton variant="filled" :loading="loading" :disabled="!valid" @click="allow">Разрешить</AppButton>
     </template>
   </AuthShell>
 </template>
@@ -21,6 +25,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import AppButton from '@/components/ui/AppButton.vue'
+import AppInfoBar from '@/components/ui/AppInfoBar.vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
 import { oauthAuthorize } from '@/api/auth.js'
@@ -76,9 +81,5 @@ function deny() {
 
 .oa-text b { color: var(--color-text); }
 
-.oa-error {
-  margin: 14px 0 0;
-  font-size: 13px;
-  color: var(--color-error);
-}
+.oa-error { margin-top: 14px; }
 </style>

@@ -13,12 +13,12 @@ function freshStore() {
 describe('оформление экранов входа и примерка на регистрации', () => {
   beforeEach(() => { localStorage.clear() })
 
-  it('экран входа встречает классикой, личная тема его не подписывает', () => {
+  it('экран входа встречает флагманской темой, личная тема его не подписывает', () => {
     localStorage.setItem('gw_theme', 'violet')
     const theme = freshStore()
     expect(theme.activePreset).toBe('violet')
     theme.setAuthPreview(true)
-    expect(theme.activePreset).toBe('classic')
+    expect(theme.activePreset).toBe('groove')
   })
 
   it('выбор на регистрации не пишется в localStorage и откатывается при уходе', () => {
@@ -36,7 +36,7 @@ describe('оформление экранов входа и примерка н�
     expect(localStorage.getItem('gw_theme_mode')).toBe('light')
 
     theme.cancelThemeTrial()
-    expect(theme.activePreset).toBe('classic')  // на экране входа снова классика
+    expect(theme.activePreset).toBe('groove')  // на экране входа снова флагманская
     expect(theme.currentPreset).toBe('violet')  // личная тема хозяина устройства
     expect(theme.mode).toBe('light')
     expect(theme.dark).toBe(false)              // светлый/тёмный опять от системы

@@ -308,8 +308,8 @@ func (r *Repo) PublishGrades(ctx context.Context, formID, responseID int64) erro
 }
 
 // ResponsesOfOwner — ответы вместе с их формой: раздел «Настройки → Хранилище»
-// показывает, к какой форме приложен файл. Скоуп — формы человека и формы
-// компаний, чью квоту он оплачивает (их присылает биллинг).
+// показывает, к какой форме приложен файл. Скоуп — личные формы человека и
+// формы команд, чью квоту он оплачивает (их присылает биллинг).
 func (r *Repo) ResponsesOfOwner(ctx context.Context, userID int64, companyIDs []int64) ([]*domain.ResponseScope, error) {
 	if companyIDs == nil {
 		companyIDs = []int64{}
@@ -319,7 +319,7 @@ func (r *Repo) ResponsesOfOwner(ctx context.Context, userID int64, companyIDs []
 		       f.id, f.title, COALESCE(f.company_id, 0), f.owner_id
 		  FROM form_responses fr
 		  JOIN forms f ON f.id = fr.form_id
-		 WHERE f.owner_id = $1 OR f.company_id = ANY($2)`, userID, companyIDs)
+		 WHERE (f.company_id IS NULL AND f.owner_id = $1) OR f.company_id = ANY($2)`, userID, companyIDs)
 	if err != nil {
 		return nil, err
 	}

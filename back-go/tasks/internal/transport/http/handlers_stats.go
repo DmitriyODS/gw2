@@ -12,7 +12,7 @@ import (
 
 // bizZone — деловая таймзона платформы, та же, по которой SQL статистики режет
 // сутки (`AT TIME ZONE 'Europe/Moscow'`). Фиксированное смещение, а не
-// LoadLocation: tzdata в alpine-образе нет (как в assistant_stats.go и petsvc).
+// LoadLocation: tzdata в alpine-образе нет (как в assistant_stats.go).
 var bizZone = time.FixedZone("MSK", 3*60*60)
 
 // parsePeriod — период отчёта; дефолт — текущий год целиком. Дата без времени —

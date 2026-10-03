@@ -175,8 +175,6 @@ func NewServer(eps endpoint.Endpoints, verifier *pasetoauth.Verifier,
 	companiesAPI.Post("/import", h.importCompany)
 	companiesAPI.Get("/:id<int>/weekend-settings", h.getWeekendSettings)
 	companiesAPI.Put("/:id<int>/weekend-settings", h.updateWeekendSettings)
-	companiesAPI.Get("/:id<int>/groove-settings", h.getGrooveSettings)
-	companiesAPI.Put("/:id<int>/groove-settings", h.updateGrooveSettings)
 	companiesAPI.Get("/:id<int>/members", h.listMembers)
 	companiesAPI.Get("/:id<int>/members/candidates", h.companyCandidates)
 	companiesAPI.Post("/:id<int>/members", h.addMember)

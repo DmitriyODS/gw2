@@ -15,8 +15,8 @@ func (s *Service) WithBilling(billing *billingclient.Client) *Service {
 	return s
 }
 
-// ensureLimit — влезает ли ещё один board в тариф.
-func (s *Service) ensureLimit(ctx context.Context, scopeID int64) error {
+// ensureLimit — влезают ли ещё extra досок в тариф.
+func (s *Service) ensureLimit(ctx context.Context, scopeID int64, extra int) error {
 	if s.billing == nil {
 		return nil
 	}
@@ -29,5 +29,5 @@ func (s *Service) ensureLimit(ctx context.Context, scopeID int64) error {
 	if err != nil {
 		return err
 	}
-	return billingclient.EnsureCount("boards", limit, current, ent.PlanName)
+	return billingclient.EnsureCount("boards", limit, current+extra-1, ent.PlanName)
 }

@@ -21,9 +21,11 @@ var (
 	ErrShareNotFound    = NewError("NOT_FOUND", "Ссылка не найдена или отозвана", 404)
 
 	// Шаринг у расписания только на чтение: вести занятия может владелец.
-	ErrReadOnly   = NewError("FORBIDDEN", "Расписание доступно только для чтения", 403)
-	ErrShareSelf  = NewError("VALIDATION", "Расписание и так ваше", 400)
-	ErrNoAudience = NewError("VALIDATION", "Не выбрано, с кем поделиться", 400)
+	ErrReadOnly      = NewError("FORBIDDEN", "Расписание доступно только для чтения", 403)
+	ErrOwnerOnly     = NewError("FORBIDDEN", "Это может сделать только владелец расписания", 403)
+	ErrNotTeamMember = NewError("NOT_TEAM_MEMBER", "Вы не состоите в этой команде", 403)
+	ErrShareSelf     = NewError("VALIDATION", "Расписание и так ваше", 400)
+	ErrNoAudience    = NewError("VALIDATION", "Не выбрано, с кем поделиться", 400)
 
 	ErrNameRequired  = NewError("VALIDATION", "Укажите название расписания", 400)
 	ErrTitleRequired = NewError("VALIDATION", "Укажите название занятия", 400)

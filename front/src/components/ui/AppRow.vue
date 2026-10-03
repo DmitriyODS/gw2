@@ -89,14 +89,14 @@ function onClick(e) {
   gap: 14px;
   width: 100%;
   padding: 14px 16px;
-  border: 1px solid var(--acrylic-border);
+  border: 1px solid var(--sk-edge);
   border-radius: var(--radius-lg);
-  background: var(--glass-bg), var(--acrylic-card-bg);
-  box-shadow: var(--glass-edge);
+  background: var(--acrylic-card-bg);
+  box-shadow: var(--sk-panel-shadow);
   color: var(--color-text);
   font: inherit;
   text-align: left;
-  transition: border-color 0.18s ease, background 0.18s ease, color 0.18s ease;
+  transition: background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
 }
 
 .row.dense { padding: 10px 12px; gap: 10px; }
@@ -110,10 +110,8 @@ function onClick(e) {
 
 .row.clickable { cursor: pointer; }
 
-.row.clickable:hover:not(.disabled):not(.selected) {
-  border-color: color-mix(in oklch, var(--color-primary) 30%, var(--acrylic-border));
-  background: var(--glass-hover-bg, var(--glass-bg)), var(--acrylic-card-bg);
-}
+.row.clickable:hover:not(.disabled):not(.selected) { background: var(--sk-raised-hover-bg); }
+.row.clickable:active:not(.disabled) { box-shadow: var(--sk-pressed-shadow); }
 
 /* Список без рамок (навигация): наведение подсвечивает фоном, но рамку не
    возвращает — иначе строки «прыгали» бы под курсором. */
@@ -122,9 +120,11 @@ function onClick(e) {
   background: color-mix(in oklch, var(--color-primary) 8%, transparent);
 }
 
+/* Выбранный пункт — вдавлен и залит тоном, как нажатая клавиша. */
 .row.selected {
-  border-color: color-mix(in oklch, var(--color-primary) 30%, var(--acrylic-border));
-  background: var(--glass-bg), var(--color-primary-container);
+  border-color: color-mix(in oklch, var(--color-primary) 30%, var(--sk-edge));
+  background: var(--grain), var(--color-primary-container);
+  box-shadow: var(--sk-pressed-shadow);
   color: var(--color-on-primary-container);
 }
 

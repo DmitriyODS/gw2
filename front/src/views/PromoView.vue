@@ -1,239 +1,246 @@
 <template>
   <div class="pr">
-    <!-- Маячок верха страницы: пока он в кадре, шапка прозрачная и «лежит»
-         на герое; ушёл за экран — она собирается в стеклянный островок.
-         IntersectionObserver, а не scroll-слушатель: страница прокручивается
-         внутри .main-content, и window-скролл там не срабатывает. -->
-    <span ref="sentinelEl" class="pr-sentinel" aria-hidden="true" />
+    <AuthBackdrop />
 
-    <!-- ── Шапка ────────────────────────────────────────────────── -->
-    <div class="pr-top-wrap" :class="{ stuck }">
+    <!-- ── Шапка: плавающая панель того же материала, что панель задач ── -->
     <header class="pr-top">
       <RouterLink to="/" class="pr-brand" aria-label="Groove Work">
-        <BrandLogo :size="26" />
-        <span class="pr-wordmark">
-          <span class="wm-groove">Groove</span>
-          <span class="wm-work">Work</span>
-        </span>
+        <BrandLogo :size="28" />
+        <BrandWordmark :size="17" />
       </RouterLink>
       <nav class="pr-nav">
-        <a href="#features">Возможности</a>
-        <a href="#devices">Устройства</a>
-        <a href="#faq">Вопросы</a>
+        <AppButton tag="a" href="#how" variant="text" size="sm" label="Как это работает" />
+        <AppButton tag="a" href="#tools" variant="text" size="sm" label="Инструменты" />
+        <AppButton tag="a" href="#devices" variant="text" size="sm" label="Устройства" />
+        <AppButton tag="a" href="#faq" variant="text" size="sm" label="Вопросы" />
       </nav>
-      <RouterLink to="/welcome" class="pr-top-cta">Начать</RouterLink>
-    </header>
-    </div>
-
-    <!-- ── Герой ────────────────────────────────────────────────── -->
-    <section class="pr-hero">
-      <p class="pr-eyebrow reveal">ваш личный менеджер дел</p>
-      <h1 class="pr-display reveal">Все ваши дела — в одном месте</h1>
-      <p class="pr-lead reveal">
-        Задачи и время, заметки и файлы, напоминания, переписка и звонки.
-        Groove Work ведёт ваш день от первого дела до последнего — и остаётся
-        тем же помощником, когда рядом появляется команда.
-      </p>
-      <div class="pr-actions reveal">
-        <RouterLink to="/welcome" class="pr-btn">Попробовать уже сейчас</RouterLink>
-        <RouterLink to="/login" class="pr-btn pr-btn--ghost">Войти</RouterLink>
+      <div class="pr-top-actions">
+        <AppButton tag="router-link" to="/login" variant="text" label="Войти" class="pr-top-login" />
+        <AppButton tag="router-link" to="/welcome" variant="filled" label="Начать" />
       </div>
-      <p class="pr-hint reveal">бесплатно · регистрация за минуту · без карты</p>
+    </header>
 
-      <!-- Витрина продукта: схематичный рабочий стол с окнами разделов -->
-      <div class="pr-shot reveal" aria-hidden="true">
-        <div class="pr-win pr-win--back">
-          <span class="pr-win-bar"><i /><i /><i /></span>
-          <span class="pr-line w-60" />
-          <span class="pr-line w-40" />
-          <span class="pr-line w-75" />
-        </div>
-        <div class="pr-win pr-win--main">
-          <span class="pr-win-bar"><i /><i /><i /></span>
-          <div class="pr-win-body">
-            <div class="pr-col">
-              <span class="pr-chip">в работе</span>
-              <span class="pr-card"><span class="pr-line w-70" /><span class="pr-line w-45" /></span>
-              <span class="pr-card"><span class="pr-line w-55" /><span class="pr-line w-35" /></span>
-            </div>
-            <div class="pr-col">
-              <span class="pr-chip pr-chip--alt">на проверке</span>
-              <span class="pr-card"><span class="pr-line w-60" /><span class="pr-line w-40" /></span>
-            </div>
+    <main class="pr-main">
+      <!-- ── Герой ──────────────────────────────────────────────── -->
+      <section class="pr-hero">
+        <div class="pr-hero-text">
+          <h1 class="pr-display reveal">
+            Ваш timeline,<br>
+            <span class="pr-accent">обёрнутый в удобный интерфейс</span>
+          </h1>
+          <p class="pr-lead reveal">
+            Положите дело во время — и оно вернётся к вам вовремя. Заметки, файлы,
+            календари, переписка и звонки собираются вокруг одной оси дня:
+            что сейчас, что дальше и что потом.
+          </p>
+          <div class="pr-actions reveal">
+            <AppButton tag="router-link" to="/welcome" variant="filled" size="lg" trailing-icon="arrow_forward" label="Начать бесплатно" />
+            <AppButton tag="router-link" to="/login" size="lg" label="У меня есть аккаунт" />
           </div>
         </div>
-        <div class="pr-win pr-win--front">
-          <span class="pr-dot" />
-          <span class="pr-line w-70" />
-          <span class="pr-line w-50" />
+
+        <!-- Витрина: экран «Сегодня», собранный из тех же компонентов, что и
+             само приложение, — поэтому он всегда выглядит как настоящий. -->
+        <div class="pr-today reveal" aria-hidden="true" inert>
+          <AppCard class="pr-today-card" :gap="14">
+            <div class="pr-today-head">
+              <span class="pr-today-title">Сегодня</span>
+              <span class="pr-today-date">{{ todayLabel }}</span>
+            </div>
+
+            <div class="pr-now">
+              <span class="pr-label">Сейчас · 11:00–12:30</span>
+              <strong class="pr-now-title">Подготовить презентацию для клиента</strong>
+              <AppStack row :gap="6">
+                <AppChip size="sm" icon="description">Тезисы</AppChip>
+                <AppChip size="sm" icon="draw">Доска макета</AppChip>
+                <AppChip size="sm" icon="attach_file">brief.pdf</AppChip>
+              </AppStack>
+              <div class="pr-progress"><span /></div>
+            </div>
+
+            <div class="pr-next">
+              <span class="pr-label">Дальше</span>
+              <AppRow v-for="n in NEXT" :key="n.title" plain dense :title="n.title" :hint="n.hint">
+                <template #lead><span class="pr-time">{{ n.time }}</span></template>
+              </AppRow>
+            </div>
+
+            <div class="pr-later">
+              <span class="pr-label">Потом</span>
+              <span class="pr-later-text">Купить подарок · Позвонить в сервис · Прочитать статью</span>
+            </div>
+
+            <div class="pr-today-foot">
+              <AppChip size="sm" tone="success" icon="check_circle">Сделано: 4</AppChip>
+              <div class="pr-hola">
+                <span class="material-symbols-outlined">blur_on</span>
+                Созвон с Аней завтра в 15:00
+              </div>
+            </div>
+          </AppCard>
         </div>
-      </div>
+      </section>
 
-      <!-- Фирменная волна — тот же мотив, что на экранах входа: слои шире
-           холста и бегут, сдвигаясь ровно на свой период. -->
-      <div class="pr-wave" aria-hidden="true">
-        <svg viewBox="0 0 1440 120" preserveAspectRatio="none">
-          <g class="wv wv-far"><path :d="WAVE_FAR" /></g>
-          <g class="wv wv-mid"><path :d="WAVE_MID" /></g>
-          <g class="wv wv-near"><path :d="WAVE_NEAR" /></g>
-        </svg>
-      </div>
-    </section>
-
-    <!-- ── Три опоры ────────────────────────────────────────────── -->
-    <section class="pr-pillars">
-      <article v-for="p in PILLARS" :key="p.title" class="pr-pillar reveal">
-        <span class="material-symbols-outlined">{{ p.icon }}</span>
-        <h3>{{ p.title }}</h3>
-        <p>{{ p.text }}</p>
-      </article>
-    </section>
-
-    <!-- ── Сетка возможностей ───────────────────────────────────── -->
-    <section id="features" class="pr-section">
-      <h2 class="pr-h2 reveal">Всё, из чего состоит ваш день</h2>
-      <p class="pr-section-lead reveal">
-        Разделы знают друг о друге: задача уезжает в чат, заметка становится
-        публикацией, файл с диска — вложением, а звонок оставляет след в переписке.
-      </p>
-      <div class="pr-grid">
-        <article v-for="f in FEATURES" :key="f.title" class="pr-card-feature reveal">
-          <span class="material-symbols-outlined">{{ f.icon }}</span>
-          <h3>{{ f.title }}</h3>
-          <p>{{ f.text }}</p>
-        </article>
-      </div>
-    </section>
-
-    <!-- ── Чередующиеся разделы ─────────────────────────────────── -->
-    <section class="pr-split reveal">
-      <div class="pr-split-text">
-        <p class="pr-kicker">рабочий стол</p>
-        <h2 class="pr-h2">Окна вместо вкладок</h2>
-        <p>
-          Разделы открываются окнами: дела рядом с перепиской, календарь поверх
-          заметок. Панель задач, меню «Пуск» с живыми плитками и обои — рабочее
-          место настраивается один раз и переезжает за вами на любое устройство.
-        </p>
-      </div>
-      <div class="pr-split-visual" aria-hidden="true">
-        <div class="pr-desk">
-          <span class="pr-desk-win a" />
-          <span class="pr-desk-win b" />
-          <span class="pr-desk-win c" />
-          <span class="pr-desk-bar"><i /><i /><i /><i /></span>
-        </div>
-      </div>
-    </section>
-
-    <section class="pr-split pr-split--rev reveal">
-      <div class="pr-split-text">
-        <p class="pr-kicker">статистика</p>
-        <h2 class="pr-h2">Часы считаются сами</h2>
-        <p>
-          Счётчик запускается одной кнопкой и останавливается вместе с делом — время
-          попадает в отчёт без табелей и напоминаний. Появится команда — та же
-          статистика покажет загрузку отделов, а на офисном экране пойдёт табло.
-        </p>
-      </div>
-      <div class="pr-split-visual" aria-hidden="true">
-        <div class="pr-chart">
-          <span v-for="(h, i) in BARS" :key="i" class="pr-bar" :style="{ height: h + '%' }" />
-        </div>
-      </div>
-    </section>
-
-    <!-- ── Геймификация: коротко и честно ───────────────────────── -->
-    <section class="pr-fun reveal">
-      <div class="pr-fun-emoji" aria-hidden="true">
-        <EmojiGlyph v-for="(e, i) in PETS" :key="i" :char="e" />
-      </div>
-      <h2 class="pr-h2">И немного игры — по желанию</h2>
-      <p>
-        У каждого сотрудника есть грувик: питомец растёт от закрытых задач и отработанных
-        часов, а команда обменивается кудосами за помощь. Механику выключает администратор
-        одной настройкой — на работу платформы это не влияет.
-      </p>
-    </section>
-
-    <!-- ── Устройства и скачивание ──────────────────────────────── -->
-    <section id="devices" class="pr-section">
-      <h2 class="pr-h2 reveal">Одинаково на всех устройствах</h2>
-      <p class="pr-section-lead reveal">
-        Данные общие, вход один: начните на компьютере, продолжите в дороге с телефона.
-      </p>
-      <div class="pr-devices">
-        <article class="pr-device reveal">
-          <span class="material-symbols-outlined">language</span>
-          <h3>Браузер</h3>
-          <p>Ничего не нужно ставить — откройте адрес и работайте.</p>
-          <p class="pr-dl-alt">любой современный браузер</p>
-          <RouterLink to="/welcome" class="pr-dl pr-dl--ghost">Открыть</RouterLink>
-        </article>
-
-        <article class="pr-device reveal">
-          <span class="material-symbols-outlined">desktop_windows</span>
-          <h3>Компьютер</h3>
-          <p>Отдельное окно, значок в трее и уведомления — даже когда браузер закрыт.</p>
-          <p class="pr-dl-alt">
-            <template v-if="showDesktop">
-              <a :href="desktopFileHref('mac')" download>macOS</a> ·
-              <a :href="desktopFileHref('win')" download>Windows</a> ·
-              <a :href="desktopFileHref('linux')" download>Linux</a>
-            </template>
-            <template v-else>macOS · Windows · Linux</template>
+      <!-- ── Как это работает ───────────────────────────────────── -->
+      <section id="how" class="pr-section">
+        <header class="pr-section-head reveal">
+          <h2 class="pr-h2">Положите во время — и оно вернётся вовремя</h2>
+          <p class="pr-section-lead">
+            Не учёт времени и не табель. Timeline — просто место, где у каждого дела
+            есть своё «когда», а у вас — спокойная голова.
           </p>
-          <a v-if="showDesktop" class="pr-dl" :href="desktopFileHref(desktopOs)" download>
-            <span class="material-symbols-outlined">download</span>
-            Скачать для {{ DESKTOP_OS_LABELS[desktopOs] }}
-          </a>
-        </article>
+        </header>
+        <AppGrid :min="260" :gap="16">
+          <AppCard v-for="(s, i) in STEPS" :key="s.title" class="reveal">
+            <span class="pr-step-num">{{ i + 1 }}</span>
+            <h3 class="pr-h3">{{ s.title }}</h3>
+            <p class="pr-text">{{ s.text }}</p>
+          </AppCard>
+        </AppGrid>
+      </section>
 
-        <article class="pr-device reveal">
-          <span class="material-symbols-outlined">smartphone</span>
-          <h3>Телефон</h3>
-          <p>Задачи, чаты и звонки под рукой — с пуш-уведомлениями.</p>
-          <p class="pr-dl-alt">Android · на iPhone — в браузере</p>
-          <a v-if="showApk" class="pr-dl" :href="APK_HREF" :download="apkDownloadName">
-            <span class="material-symbols-outlined">download</span>
-            Скачать APK
-          </a>
-        </article>
-      </div>
-    </section>
+      <!-- ── Инструменты ────────────────────────────────────────── -->
+      <section id="tools" class="pr-section">
+        <header class="pr-section-head reveal">
+          <h2 class="pr-h2">Разделы — инструменты вашего timeline</h2>
+          <p class="pr-section-lead">
+            Любую вещь любого раздела можно положить «во время…»: заметку, доску,
+            файл, запись календаря. На оси дня окажется ссылка, а не копия.
+          </p>
+        </header>
+        <AppGrid :min="240" :gap="16">
+          <AppCard v-for="f in TOOLS" :key="f.title" class="reveal">
+            <span class="material-symbols-outlined pr-tool-icon">{{ f.icon }}</span>
+            <h3 class="pr-h3">{{ f.title }}</h3>
+            <p class="pr-text">{{ f.text }}</p>
+          </AppCard>
+        </AppGrid>
+      </section>
 
-    <!-- ── Вопросы ──────────────────────────────────────────────── -->
-    <section id="faq" class="pr-section pr-faq">
-      <h2 class="pr-h2 reveal">Частые вопросы</h2>
-      <details v-for="q in FAQ" :key="q.q" class="pr-q reveal">
-        <summary>
-          {{ q.q }}
-          <span class="material-symbols-outlined">expand_more</span>
-        </summary>
-        <p>{{ q.a }}</p>
-      </details>
-    </section>
+      <!-- ── Моё и команды ─────────────────────────────────────── -->
+      <section class="pr-split">
+        <div class="pr-split-text reveal">
+          <AppChip icon="group">Пространства</AppChip>
+          <h2 class="pr-h2">Своё — отдельно, общее — с командой</h2>
+          <p class="pr-text">
+            У каждой вещи одно место: «Моё» или команда. Личное не прячется, когда
+            вы переключаетесь на работу, а общее остаётся у команды, даже если кто-то
+            ушёл. Перенести вещь к себе или в команду — одно действие.
+          </p>
+        </div>
+        <AppCard class="pr-split-visual reveal" :gap="8" aria-hidden="true" inert>
+          <AppRow title="Моё" hint="Заметки, файлы, дела дня" icon="person" selected dense />
+          <AppRow title="Дизайн" hint="Команда · 6 человек" icon="group" dense />
+          <AppRow title="Продажи" hint="Команда · 12 человек" icon="group" dense />
+        </AppCard>
+      </section>
 
-    <!-- ── Финальный призыв ─────────────────────────────────────── -->
-    <section class="pr-final reveal">
-      <h2 class="pr-h2">Соберите рабочий день в одном окне</h2>
-      <p>Создайте компанию за минуту и позовите команду ссылкой-приглашением.</p>
-      <RouterLink to="/welcome" class="pr-btn">Попробовать уже сейчас</RouterLink>
-    </section>
+      <section class="pr-split pr-split--rev">
+        <div class="pr-split-text reveal">
+          <AppChip icon="desktop_windows">Рабочий стол</AppChip>
+          <h2 class="pr-h2">Окна на компьютере, один экран в телефоне</h2>
+          <p class="pr-text">
+            На большом экране разделы открываются окнами рядом друг с другом, а
+            «Пуск» показывает живые плитки. В телефоне тот же timeline помещается
+            в один экран — без потери возможностей.
+          </p>
+        </div>
+        <div class="pr-desk reveal" aria-hidden="true">
+          <span class="pr-desk-win a"><i /><i /><i /></span>
+          <span class="pr-desk-win b"><i /><i /><i /></span>
+          <span class="pr-desk-win c"><i /><i /><i /></span>
+          <span class="pr-desk-bar"><b /><b /><b /><b /><b /></span>
+        </div>
+      </section>
+
+      <!-- ── Устройства и скачивание ────────────────────────────── -->
+      <section id="devices" class="pr-section">
+        <header class="pr-section-head reveal">
+          <h2 class="pr-h2">Одинаково на всех устройствах</h2>
+          <p class="pr-section-lead">Вход один, данные общие: начните за компьютером, продолжите с телефона.</p>
+        </header>
+        <AppGrid :min="240" :gap="16">
+          <AppCard class="pr-device reveal" title="Браузер" hint="Ничего не нужно ставить — откройте адрес и работайте.">
+            <template #footer>
+              <AppButton tag="router-link" to="/welcome" icon="open_in_new" label="Открыть" />
+            </template>
+          </AppCard>
+
+          <AppCard class="pr-device reveal" title="Компьютер" hint="Отдельное окно, значок в трее и уведомления, даже когда браузер закрыт.">
+            <p class="pr-dl-alt">
+              <template v-if="showDesktop">
+                <a :href="desktopFileHref('mac')" download>macOS</a> ·
+                <a :href="desktopFileHref('win')" download>Windows</a> ·
+                <a :href="desktopFileHref('linux')" download>Linux</a>
+              </template>
+              <template v-else>macOS · Windows · Linux</template>
+            </p>
+            <template v-if="showDesktop" #footer>
+              <AppButton
+                tag="a"
+                :href="desktopFileHref(desktopOs)"
+                download
+                variant="filled"
+                icon="download"
+                :label="`Скачать для ${DESKTOP_OS_LABELS[desktopOs]}`"
+              />
+            </template>
+          </AppCard>
+
+          <AppCard class="pr-device reveal" title="Телефон" hint="Дела, чаты и звонки под рукой — с пуш-уведомлениями.">
+            <p class="pr-dl-alt">Android · на iPhone — в браузере</p>
+            <template v-if="showApk" #footer>
+              <AppButton tag="a" :href="APK_HREF" :download="apkDownloadName" variant="filled" icon="download" label="Скачать APK" />
+            </template>
+          </AppCard>
+        </AppGrid>
+      </section>
+
+      <!-- ── Вопросы ────────────────────────────────────────────── -->
+      <section id="faq" class="pr-section pr-faq">
+        <header class="pr-section-head reveal">
+          <h2 class="pr-h2">Частые вопросы</h2>
+        </header>
+        <AppStack :gap="10">
+          <AppCard v-for="q in FAQ" :key="q.q" tag="details" class="pr-q reveal" :gap="0">
+            <summary>
+              {{ q.q }}
+              <span class="material-symbols-outlined">expand_more</span>
+            </summary>
+            <p class="pr-text">{{ q.a }}</p>
+          </AppCard>
+        </AppStack>
+      </section>
+
+      <!-- ── Финальный призыв ───────────────────────────────────── -->
+      <AppCard tag="section" tone="primary" class="pr-final reveal" :gap="16">
+        <h2 class="pr-h2">Соберите свой день на одной оси</h2>
+        <p class="pr-text">Регистрация займёт минуту. Команду можно позвать позже — ссылкой-приглашением.</p>
+        <AppButton tag="router-link" to="/welcome" variant="filled" size="lg" trailing-icon="arrow_forward" label="Начать бесплатно" />
+      </AppCard>
+    </main>
 
     <footer class="pr-foot">
-      <span>Groove Work</span>
-      <RouterLink to="/welcome">Вход для команд</RouterLink>
+      <span>© Groove Work</span>
+      <RouterLink to="/welcome">Вход и регистрация</RouterLink>
       <RouterLink v-if="LEGAL_CONSENT_VISIBLE" to="/legal">Правовые документы</RouterLink>
     </footer>
   </div>
 </template>
 
 <script setup>
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { onBeforeUnmount, onMounted } from 'vue'
 import { LEGAL_CONSENT_VISIBLE } from '@/utils/release.js'
 import BrandLogo from '@/components/common/BrandLogo.vue'
-import EmojiGlyph from '@/components/common/EmojiGlyph.vue'
+import BrandWordmark from '@/components/common/BrandWordmark.vue'
+import AuthBackdrop from '@/components/auth/AuthBackdrop.vue'
+import AppButton from '@/components/ui/AppButton.vue'
+import AppCard from '@/components/ui/AppCard.vue'
+import AppChip from '@/components/ui/AppChip.vue'
+import AppGrid from '@/components/ui/AppGrid.vue'
+import AppRow from '@/components/ui/AppRow.vue'
+import AppStack from '@/components/ui/AppStack.vue'
 import { useAppDownloads } from '@/composables/useAppDownloads.js'
 
 // Скачивание клиентов — общая обвязка с разделом «О приложении»: имена
@@ -243,104 +250,64 @@ const {
   showApk, showDesktop,
 } = useAppDownloads()
 
-const PETS = ['🦊', '🐼', '🐧', '🦄']
+const todayLabel = new Date().toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' })
 
-/* Синусоида в count полуволн: путь начинается левее холста и заканчивается
-   правее, поэтому сдвиг ровно на период (2 × half) края не обнажает —
-   цикл получается бесшовным. */
-function wavePath(baseY, half, amp, count) {
-  let d = `M-720 ${baseY} q${half / 2} ${-amp} ${half} 0`
-  for (let i = 1; i < count; i++) d += ` t${half} 0`
-  return `${d} V120 H-720 Z`
-}
+const NEXT = [
+  { time: '13:00', title: 'Обед с командой', hint: 'Кафе на углу' },
+  { time: '15:00', title: 'Созвон по запуску', hint: 'Звонок · 4 участника' },
+  { time: '18:30', title: 'Тренировка', hint: 'Из расписания' },
+]
 
-const WAVE_FAR = wavePath(54, 180, 40, 16)   // период 360
-const WAVE_MID = wavePath(76, 240, 34, 12)   // период 480
-const WAVE_NEAR = wavePath(96, 150, 26, 20)  // период 300
-
-// Высоты столбиков декоративного графика (в процентах) — фиксированные,
-// чтобы картинка не «дёргалась» между рендерами.
-const BARS = [38, 62, 45, 78, 54, 88, 66]
-
-const PILLARS = [
+const STEPS = [
   {
-    icon: 'checklist', title: 'День под рукой',
-    text: 'Задачи, ежедневник и напоминания в одном списке — ничего не теряется между приложениями.',
+    title: 'Положите во время',
+    text: 'Дело, заметку или файл — на конкретный час, на «потом» или просто в сегодня. Hola поймёт фразу «созвон завтра в три».',
   },
   {
-    icon: 'timer', title: 'Время считается само',
-    text: 'Пока дело в работе, идёт счётчик: к вечеру видно, на что ушёл день, — без табелей и секундомеров.',
+    title: 'Приложите нужное',
+    text: 'К делу цепляются тезисы, доска, документ с диска и переписка — всё, что понадобится в момент «сейчас».',
   },
   {
-    icon: 'inventory_2', title: 'Всё своё с собой',
-    text: 'Заметки, доски, файлы на диске и переписка — на компьютере, в браузере и в телефоне.',
+    title: 'Получите вовремя',
+    text: 'Когда придёт время, дело само окажется наверху оси, а напоминание придёт на компьютер и телефон.',
   },
 ]
 
-const FEATURES = [
-  {
-    icon: 'task_alt', title: 'Задачи и юниты',
-    text: 'Ответственные, этапы, теги и комментарии. Время идёт, пока задача в работе.',
-  },
-  {
-    icon: 'chat', title: 'Мессенджер и звонки',
-    text: 'Личные и групповые чаты, файлы, реакции, видеозвонки с демонстрацией экрана.',
-  },
-  {
-    icon: 'campaign', title: 'Корпоративный портал',
-    text: 'Новости компании, разделы, обсуждения и реакции — вместо рассылок «всем».',
-  },
-  {
-    icon: 'edit_note', title: 'Заметки и доски',
-    text: 'Совместное редактирование текста и рисование на бесконечном холсте.',
-  },
-  {
-    icon: 'calendar_month', title: 'Календари и реестры',
-    text: 'Настраиваемые справочники и события компании, личные ежедневники и напоминания.',
-  },
-  {
-    icon: 'blur_on', title: 'Hola и ИИ-ассистент',
-    text: 'Поиск по всем разделам, быстрые команды и деловой помощник по данным компании.',
-  },
+const TOOLS = [
+  { icon: 'edit_note', title: 'Заметки и доски', text: 'Текст с совместным редактированием и бесконечный холст с анимацией.' },
+  { icon: 'calendar_month', title: 'Календари и расписания', text: 'События, регулярные занятия и ежедневники — всё со своим временем.' },
+  { icon: 'folder_open', title: 'Диск', text: 'Файлы и папки с доступом по ссылке, корзиной и избранным.' },
+  { icon: 'chat', title: 'Переписка и звонки', text: 'Личные и групповые чаты, видеозвонки с демонстрацией экрана.' },
+  { icon: 'dynamic_form', title: 'Формы и реестры', text: 'Опросы, записи на время и настраиваемые таблицы-справочники.' },
+  { icon: 'blur_on', title: 'Hola и ИИ', text: 'Поиск по всем разделам, быстрые команды и деловой помощник.' },
 ]
 
 const FAQ = [
   {
     q: 'Сколько стоит?',
-    a: 'Сейчас бесплатно и целиком: дела, заметки, диск, переписка и звонки доступны сразу после регистрации. Ограничено только место в хранилище — 5 Гб на человека.',
+    a: 'Сейчас бесплатно и целиком: все разделы доступны сразу после регистрации. Ограничено только место в хранилище — 5 Гб на человека.',
   },
   {
-    q: 'Это только для работы или для личных дел тоже?',
-    a: 'Прежде всего для ваших личных дел: список задач, ежедневник, напоминания, заметки и файлы принадлежат вам и не зависят ни от какой компании. Появится команда — те же разделы начнут работать и на неё.',
+    q: 'Это учёт рабочего времени?',
+    a: 'Нет. Timeline не считает часы и не строит табели — он помогает решить, что делать сейчас, и не забыть о том, что будет потом.',
   },
   {
-    q: 'А если я работаю в нескольких местах?',
-    a: 'Аккаунт принадлежит человеку, а не компании: в каждой у вас своя роль, переключение — одним нажатием. Личные дела, заметки, файлы и переписка при этом одни на всех.',
+    q: 'Это для работы или для личных дел?',
+    a: 'Прежде всего для вас: ваши дела, заметки и файлы принадлежат вам и никуда не пропадают. Появится команда — общие вещи будут жить у неё, а ваши останутся в «Моём».',
   },
   {
-    q: 'Кто видит мои дела и часы?',
-    a: 'Личные разделы видны только вам. В компании свои часы видит каждый, сводку по отделам и людям — менеджеры и администраторы. Администратор платформы к рабочим данным компаний доступа не имеет.',
+    q: 'А если я работаю в нескольких командах?',
+    a: 'Аккаунт принадлежит человеку, а не команде: в каждой у вас своя роль, а личный timeline один на всех.',
   },
   {
-    q: 'А если геймификация не нужна?',
-    a: 'Питомцев-грувиков выключает администратор компании одной настройкой — остальные разделы работают как работали.',
+    q: 'Кто видит мои дела?',
+    a: 'То, что лежит в «Моём», видите только вы и те, с кем вы поделились сами. Общее видят участники команды по своей роли.',
   },
 ]
 
-// Шапка «прилипла»: маячок верха ушёл из кадра.
-const sentinelEl = ref(null)
-const stuck = ref(false)
-let stickyObserver = null
-
-// Плавное появление секций при скролле (с уважением к reduced-motion).
+// Плавное появление секций при прокрутке (с уважением к reduced-motion).
 let observer = null
 onMounted(() => {
-  if ('IntersectionObserver' in window && sentinelEl.value) {
-    stickyObserver = new IntersectionObserver(([entry]) => {
-      stuck.value = !entry.isIntersecting
-    })
-    stickyObserver.observe(sentinelEl.value)
-  }
   const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches
   const els = document.querySelectorAll('.pr .reveal')
   if (reduced || !('IntersectionObserver' in window)) {
@@ -357,498 +324,328 @@ onMounted(() => {
   }, { threshold: 0.12 })
   els.forEach((el) => observer.observe(el))
 })
-onBeforeUnmount(() => {
-  observer?.disconnect()
-  stickyObserver?.disconnect()
-})
+onBeforeUnmount(() => observer?.disconnect())
 </script>
 
 <style scoped>
-/* Витрина живёт на ТЕХ ЖЕ токенах, что и приложение: до входа тема всегда
-   классическая, а светлая/тёмная берётся у системы (роутер помечает маршрут
-   meta.authScreen). Поэтому своей палитры здесь нет — только --color-*. */
+/* Витрина живёт на ТЕХ ЖЕ токенах и компонентах ядра, что и приложение: до
+   входа тема всегда флагманская, а светлая/тёмная берётся у системы (роутер
+   помечает маршрут meta.authScreen). Своих кнопок, карточек и палитры здесь
+   нет — только раскладка. */
 .pr {
+  position: relative;
   min-height: 100dvh;
-  background:
-    radial-gradient(120% 70% at 12% -8%,
-      color-mix(in oklch, var(--color-primary-container) 70%, transparent), transparent 60%),
-    radial-gradient(90% 60% at 100% 2%,
-      color-mix(in oklch, var(--color-tertiary-container) 45%, transparent), transparent 62%),
-    var(--color-bg);
   color: var(--color-text);
-  /* Именно clip, а НЕ hidden: hidden делает корень scroll-контейнером, и
-     position: sticky у шапки перестаёт работать. */
+  /* clip, а не hidden: hidden делает .pr контейнером прокрутки, и шапка
+     прилипала бы к нему, а не к реально прокручиваемому .main-content. */
   overflow-x: clip;
 }
 
-.reveal {
-  opacity: 0;
-  transform: translateY(16px);
-  transition: opacity 0.6s ease, transform 0.6s cubic-bezier(0.2, 0.8, 0.3, 1);
+.pr-main,
+.pr-top,
+.pr-foot {
+  position: relative;
+  z-index: 1;
 }
 
-.reveal.is-visible { opacity: 1; transform: none; }
-
-@media (prefers-reduced-motion: reduce) {
-  .reveal { transition: none; }
-}
-
-/* ── Шапка ─────────────────────────────────────────────────────────
-   Плавающий островок: сверху страницы он прозрачный и не спорит с героем,
-   а после прокрутки собирается в стеклянную пилюлю с тенью. Липнет
-   обёртка (она во всю ширину), сама пилюля ограничена по ширине контента. */
-.pr-sentinel {
-  display: block;
-  height: 1px;
-  margin-bottom: -1px;
-}
-
-.pr-top-wrap {
-  position: sticky;
-  top: 0;
-  z-index: 5;
-  padding: 10px clamp(12px, 4vw, 40px);
-  /* Клики ловит только сама пилюля — прозрачные поля обёртки не перехватывают
-     указатель у контента под ней. */
-  pointer-events: none;
-  transition: padding 0.24s ease;
-}
-
+/* ── Шапка ───────────────────────────────────────────────────── */
 .pr-top {
-  pointer-events: auto;
-  max-width: 1120px;
-  margin: 0 auto;
+  position: sticky;
+  top: 12px;
+  z-index: 10;
   display: flex;
   align-items: center;
-  gap: 20px;
-  padding: 10px 12px 10px 18px;
-  border-radius: var(--radius-full);
-  border: 1px solid transparent;
-  background: transparent;
-  box-shadow: none;
-  transition: background 0.24s ease, border-color 0.24s ease,
-    box-shadow 0.24s ease, padding 0.24s ease;
-}
-
-.pr-top-wrap.stuck { padding-top: 12px; }
-
-.pr-top-wrap.stuck .pr-top {
-  border-color: var(--acrylic-border);
-  background: var(--glass-bg), var(--acrylic-bg);
-  -webkit-backdrop-filter: var(--acrylic-blur);
-  backdrop-filter: var(--acrylic-blur);
-  box-shadow: var(--shadow-lg), var(--glass-edge);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .pr-top-wrap,
-  .pr-top { transition: none; }
+  gap: 16px;
+  width: calc(100% - 32px);
+  max-width: 1160px;
+  margin: 12px auto 0;
+  padding: 8px 8px 8px 16px;
+  border: 1px solid var(--sk-edge);
+  border-radius: var(--radius-xl);
+  background: var(--acrylic-bg-strong);
+  box-shadow: var(--sk-panel-shadow);
 }
 
 .pr-brand {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 9px;
+  gap: 10px;
   text-decoration: none;
 }
 
-.pr-wordmark {
+.pr-nav {
+  flex: 1;
   display: flex;
-  align-items: baseline;
-  gap: 5px;
-  font-family: 'Roboto Flex', 'Roboto', sans-serif;
-  font-size: 17px;
-  font-weight: 1000;
-  font-variation-settings: 'wght' 1000;
-  letter-spacing: 0.2px;
+  justify-content: center;
+  gap: 2px;
+  min-width: 0;
 }
 
-.wm-groove { color: var(--color-primary); }
-.wm-work { color: var(--color-text); }
-
-.pr-nav {
+.pr-top-actions {
   display: flex;
-  gap: 22px;
+  align-items: center;
+  gap: 6px;
   margin-left: auto;
 }
 
-.pr-nav a {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--color-text-dim);
-  text-decoration: none;
-  transition: color 0.15s;
-}
-
-.pr-nav a:hover { color: var(--color-primary); }
-
-.pr-top-cta {
-  padding: 9px 18px;
-  border-radius: var(--radius-full);
-  background: var(--grad-primary);
-  color: var(--color-on-primary);
-  font-size: 14px;
-  font-weight: 600;
-  text-decoration: none;
-  transition: filter 0.15s;
-}
-
-.pr-top-cta:hover { filter: brightness(1.07); }
-
-/* ── Герой ─────────────────────────────────────────────────────── */
-.pr-hero {
-  position: relative;
+/* ── Общая сетка секций ──────────────────────────────────────── */
+.pr-main {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  text-align: center;
-  --pr-pad: clamp(16px, 5vw, 56px);
-  padding: clamp(28px, 6vw, 84px) var(--pr-pad) 0;
-}
-
-.pr-eyebrow {
-  margin: 0 0 14px;
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--color-primary);
-}
-
-.pr-display {
-  margin: 0;
-  max-width: 16ch;
-  font-size: clamp(38px, 7vw, 84px);
-  font-weight: 300;
-  line-height: 1.03;
-  letter-spacing: -0.035em;
-}
-
-.pr-lead {
-  margin: 22px 0 0;
-  max-width: 62ch;
-  font-size: clamp(15px, 1.5vw, 18px);
-  line-height: 1.6;
-  color: var(--color-text-dim);
-}
-
-.pr-actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 12px;
-  margin-top: 32px;
-}
-
-.pr-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: 50px;
-  padding: 0 30px;
-  border-radius: var(--radius-full);
-  background: var(--grad-primary);
-  color: var(--color-on-primary);
-  font-size: 15px;
-  font-weight: 600;
-  text-decoration: none;
-  box-shadow: var(--shadow-md);
-  transition: filter 0.15s, box-shadow 0.15s;
-}
-
-.pr-btn:hover { filter: brightness(1.07); box-shadow: var(--shadow-lg); }
-
-.pr-btn--ghost {
-  background: var(--glass-bg), color-mix(in oklch, var(--color-surface) 50%, transparent);
-  border: 1px solid var(--acrylic-border);
-  color: var(--color-text);
-  box-shadow: var(--glass-edge);
-}
-
-.pr-btn--ghost:hover {
-  background: var(--glass-bg), color-mix(in oklch, var(--color-primary) 12%, transparent);
-  box-shadow: var(--glass-edge);
-}
-
-.pr-hint {
-  margin: 14px 0 0;
-  font-size: 13px;
-  color: var(--color-text-dim);
-}
-
-/* ── Витрина продукта: схематичные окна ────────────────────────── */
-.pr-shot {
-  position: relative;
-  width: min(100%, 980px);
-  margin: clamp(40px, 6vw, 72px) auto 0;
-  aspect-ratio: 16 / 9;
-}
-
-.pr-win {
-  position: absolute;
-  border: 1px solid var(--acrylic-border);
-  border-radius: 18px;
-  background: var(--glass-bg), var(--acrylic-bg-strong);
-  box-shadow: var(--shadow-xl), var(--glass-edge);
-  padding: 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 9px;
-}
-
-.pr-win--back { left: 0; top: 6%; width: 42%; height: 56%; opacity: 0.75; }
-.pr-win--main { left: 16%; top: 16%; width: 74%; height: 78%; }
-.pr-win--front {
-  right: 2%;
-  bottom: 2%;
-  width: 30%;
-  padding: 14px 16px;
-  background: var(--glass-bg), color-mix(in oklch, var(--color-primary) 14%, var(--acrylic-bg-strong));
-}
-
-.pr-win-bar { display: flex; gap: 5px; }
-.pr-win-bar i {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: color-mix(in oklch, var(--color-outline) 55%, transparent);
-}
-
-.pr-win-body { display: flex; gap: 12px; flex: 1; min-height: 0; }
-.pr-col { flex: 1; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
-
-.pr-chip {
-  align-self: flex-start;
-  padding: 3px 10px;
-  border-radius: var(--radius-full);
-  background: color-mix(in oklch, var(--color-primary) 16%, transparent);
-  color: var(--color-primary);
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.pr-chip--alt {
-  background: color-mix(in oklch, var(--color-tertiary) 18%, transparent);
-  color: var(--color-tertiary);
-}
-
-.pr-card {
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-  padding: 12px;
-  border-radius: 12px;
-  border: 1px solid color-mix(in oklch, var(--acrylic-border) 70%, transparent);
-  background: color-mix(in oklch, var(--color-surface) 55%, transparent);
-}
-
-.pr-line {
-  height: 7px;
-  border-radius: var(--radius-full);
-  background: color-mix(in oklch, var(--color-text) 12%, transparent);
-}
-
-.pr-dot {
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  background: color-mix(in oklch, var(--color-primary) 45%, transparent);
-}
-
-.w-35 { width: 35%; }
-.w-40 { width: 40%; }
-.w-45 { width: 45%; }
-.w-50 { width: 50%; }
-.w-55 { width: 55%; }
-.w-60 { width: 60%; }
-.w-70 { width: 70%; }
-.w-75 { width: 75%; }
-
-/* ── Волна под героем ──────────────────────────────────────────────
-   Во всю ширину экрана (выходит за поля героя отрицательными отступами) и
-   растворяется к углам: радиальная маска гасит слои по краям, поэтому вода
-   не обрывается ровным срезом, а «утекает» в фон. */
-.pr-wave {
-  width: calc(100% + var(--pr-pad) * 2);
-  margin-left: calc(var(--pr-pad) * -1);
-  margin-top: clamp(36px, 6vw, 72px);
-  line-height: 0;
-  -webkit-mask-image: radial-gradient(118% 135% at 50% 100%,
-    black 48%, color-mix(in oklch, black 45%, transparent) 76%, transparent 96%);
-  mask-image: radial-gradient(118% 135% at 50% 100%,
-    black 48%, color-mix(in oklch, black 45%, transparent) 76%, transparent 96%);
-}
-
-.pr-wave svg { width: 100%; height: clamp(80px, 12vw, 150px); display: block; }
-
-.wv path { fill: var(--color-primary); }
-.wv-far path { fill: color-mix(in oklch, var(--color-primary) 62%, black); }
-.wv-near path { fill: color-mix(in oklch, var(--color-secondary) 45%, white); }
-
-.wv-far { opacity: 0.5; }
-.wv-mid { opacity: 0.55; }
-.wv-near { opacity: 0.75; }
-
-[data-dark='true'] .wv-far path { fill: color-mix(in oklch, var(--color-primary) 38%, black); }
-[data-dark='true'] .wv-near path { fill: color-mix(in oklch, var(--color-secondary) 42%, black); }
-
-/* Ход волны: сдвиг равен периоду слоя, поэтому конец цикла совпадает с
-   началом. Разные скорости и направления дают ощущение живой воды. */
-.wv { will-change: transform; }
-.wv-far { animation: pr-roll-far 22s linear infinite; }
-.wv-mid { animation: pr-roll-mid 15s linear infinite reverse; }
-.wv-near { animation: pr-roll-near 30s linear infinite; }
-
-@keyframes pr-roll-far {
-  from { transform: translate3d(0, 0, 0); }
-  to { transform: translate3d(-360px, 0, 0); }
-}
-
-@keyframes pr-roll-mid {
-  from { transform: translate3d(0, 0, 0); }
-  to { transform: translate3d(-480px, 0, 0); }
-}
-
-@keyframes pr-roll-near {
-  from { transform: translate3d(0, 0, 0); }
-  to { transform: translate3d(-300px, 0, 0); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .wv { animation: none; }
-}
-
-/* ── Секции ────────────────────────────────────────────────────── */
-.pr-section {
-  max-width: 1120px;
+  gap: 104px;
+  max-width: 1160px;
   margin: 0 auto;
-  padding: clamp(56px, 8vw, 110px) clamp(16px, 5vw, 40px) 0;
+  padding: 72px 24px 96px;
+}
+
+.pr-section { display: flex; flex-direction: column; gap: 32px; scroll-margin-top: 96px; }
+
+.pr-section-head {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 720px;
 }
 
 .pr-h2 {
   margin: 0;
-  font-size: clamp(26px, 3.6vw, 44px);
-  font-weight: 300;
-  line-height: 1.12;
-  letter-spacing: -0.025em;
-  text-align: center;
+  font-size: clamp(26px, 3.4vw, 40px);
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
 }
 
-.pr-section-lead {
-  margin: 16px auto 0;
-  max-width: 64ch;
-  text-align: center;
+.pr-h3 {
+  margin: 0;
+  font-size: 1.08rem;
+  font-weight: 600;
+}
+
+.pr-section-lead,
+.pr-text {
+  margin: 0;
   font-size: 15px;
   line-height: 1.6;
   color: var(--color-text-dim);
 }
 
-.pr-kicker {
-  margin: 0 0 10px;
-  font-size: 12.5px;
-  font-weight: 600;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--color-primary);
-}
+.pr-section-lead { font-size: 16.5px; }
 
-/* Три опоры */
-.pr-pillars {
-  max-width: 1120px;
-  margin: 0 auto;
-  padding: clamp(40px, 6vw, 76px) clamp(16px, 5vw, 40px) 0;
+/* ── Герой ───────────────────────────────────────────────────── */
+.pr-hero {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
-  gap: clamp(16px, 2.4vw, 28px);
-}
-
-.pr-pillar .material-symbols-outlined {
-  font-size: 30px;
-  color: var(--color-primary);
-  font-variation-settings: 'wght' 300;
-}
-.pr-pillar h3 { margin: 12px 0 8px; font-size: 19px; font-weight: 600; }
-.pr-pillar p { margin: 0; font-size: 14.5px; line-height: 1.6; color: var(--color-text-dim); }
-
-/* Сетка возможностей */
-.pr-grid {
-  margin-top: clamp(28px, 4vw, 48px);
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
-  gap: clamp(14px, 1.8vw, 20px);
-}
-
-.pr-card-feature {
-  padding: clamp(20px, 2.4vw, 28px);
-  border: 1px solid var(--acrylic-border);
-  border-radius: 22px;
-  background: var(--glass-bg), color-mix(in oklch, var(--color-surface) 46%, transparent);
-  box-shadow: var(--glass-edge);
-  transition: background 0.18s, border-color 0.18s, box-shadow 0.18s;
-}
-
-.pr-card-feature:hover {
-  border-color: color-mix(in oklch, var(--color-primary) 32%, var(--acrylic-border));
-  background: var(--glass-hover-bg), color-mix(in oklch, var(--color-primary) 10%, transparent);
-  box-shadow: var(--shadow-md), var(--glass-edge);
-}
-
-.pr-card-feature .material-symbols-outlined {
-  font-size: 28px;
-  color: var(--color-primary);
-  font-variation-settings: 'wght' 300;
-}
-
-.pr-card-feature h3 { margin: 12px 0 8px; font-size: 18px; font-weight: 600; }
-.pr-card-feature p { margin: 0; font-size: 14px; line-height: 1.6; color: var(--color-text-dim); }
-
-/* ── Чередующиеся секции ───────────────────────────────────────── */
-.pr-split {
-  max-width: 1120px;
-  margin: 0 auto;
-  padding: clamp(56px, 8vw, 110px) clamp(16px, 5vw, 40px) 0;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
   align-items: center;
-  gap: clamp(28px, 5vw, 64px);
+  gap: 56px;
 }
 
-.pr-split--rev .pr-split-visual { order: -1; }
+.pr-hero-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 22px;
+}
 
-.pr-split-text .pr-h2 { text-align: left; }
-.pr-split-text p {
-  margin: 16px 0 0;
-  font-size: 15px;
-  line-height: 1.65;
+.pr-display {
+  margin: 0;
+  font-size: clamp(36px, 5.4vw, 64px);
+  font-weight: 700;
+  line-height: 1.04;
+  letter-spacing: -0.035em;
+}
+
+.pr-accent { color: var(--color-primary); }
+
+.pr-lead {
+  margin: 0;
+  max-width: 560px;
+  font-size: clamp(16px, 1.5vw, 18.5px);
+  line-height: 1.6;
   color: var(--color-text-dim);
 }
 
-.pr-split-visual { min-width: 0; }
+.pr-actions { display: flex; flex-wrap: wrap; gap: 10px; }
 
-/* Схема рабочего стола */
+.pr-hint {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-text-dim);
+}
+
+/* ── Витрина «Сегодня» ───────────────────────────────────────── */
+.pr-today { min-width: 0; }
+
+.pr .pr-today-card {
+  padding: 22px;
+  border-radius: var(--radius-xl);
+  box-shadow: var(--sk-panel-shadow), var(--shadow-xl);
+}
+
+.pr-today-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.pr-today-title { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; }
+.pr-today-date { font-size: 13px; color: var(--color-text-dim); }
+
+.pr-label {
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-dim);
+}
+
+/* «Сейчас» — углубление в листе: главное дело лежит в своей нише. */
+.pr-now {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid color-mix(in oklch, var(--color-primary) 35%, var(--sk-edge));
+  border-radius: var(--radius-lg);
+  background: var(--sk-well-bg);
+  box-shadow: var(--sk-well-shadow);
+}
+
+.pr-now .pr-label { color: var(--color-primary); }
+.pr-now-title { font-size: 18px; font-weight: 600; line-height: 1.3; }
+
+.pr-progress {
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--color-surface-highest);
+  overflow: hidden;
+}
+
+.pr-progress span {
+  display: block;
+  width: 58%;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--grad-primary);
+}
+
+.pr-next { display: flex; flex-direction: column; gap: 2px; }
+
+.pr-time {
+  min-width: 46px;
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-primary);
+}
+
+.pr-later { display: flex; flex-direction: column; gap: 4px; }
+
+.pr-later-text {
+  font-size: 13.5px;
+  color: var(--color-text-dim);
+  overflow-wrap: anywhere;
+}
+
+.pr-today-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-outline-dim);
+}
+
+/* Строка Hola — та же «скважина» поля ввода, что и в приложении. */
+.pr-hola {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 7px 14px 7px 10px;
+  border: 1px solid var(--sk-edge);
+  border-radius: var(--radius-full);
+  background: var(--sk-well-bg);
+  box-shadow: var(--sk-well-shadow);
+  font-size: 13px;
+  color: var(--color-text-dim);
+}
+
+.pr-hola .material-symbols-outlined { font-size: 18px; color: var(--color-primary); }
+
+/* ── Шаги и инструменты ──────────────────────────────────────── */
+.pr-step-num {
+  display: grid;
+  place-items: center;
+  width: 36px; min-width: 36px; max-width: 36px;
+  height: 36px; min-height: 36px; max-height: 36px;
+  border: 1px solid var(--sk-edge);
+  border-radius: 50%;
+  background: var(--sk-raised-bg);
+  box-shadow: var(--sk-raised-shadow);
+  font-weight: 700;
+  color: var(--color-primary);
+}
+
+.pr-tool-icon {
+  font-size: 30px;
+  color: var(--color-primary);
+}
+
+/* ── Чередующиеся разделы ────────────────────────────────────── */
+.pr-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 56px;
+}
+
+.pr-split--rev .pr-split-text { order: 2; }
+
+.pr-split-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.pr .pr-split-visual { padding: 14px; border-radius: var(--radius-xl); }
+
+/* Схема рабочего стола: окна и панель задач — листы того же материала. */
 .pr-desk {
   position: relative;
-  aspect-ratio: 4 / 3;
-  border: 1px solid var(--acrylic-border);
-  border-radius: 22px;
-  background:
-    radial-gradient(80% 60% at 20% 10%, color-mix(in oklch, var(--color-primary) 18%, transparent), transparent 70%),
-    color-mix(in oklch, var(--color-surface) 55%, transparent);
-  box-shadow: var(--shadow-lg), var(--glass-edge);
+  aspect-ratio: 16 / 10;
+  border: 1px solid var(--sk-edge);
+  border-radius: var(--radius-xl);
+  background: var(--sk-well-bg);
+  box-shadow: var(--sk-well-shadow);
   overflow: hidden;
 }
 
 .pr-desk-win {
   position: absolute;
-  border-radius: 12px;
-  border: 1px solid var(--acrylic-border);
-  background: var(--glass-bg), var(--acrylic-bg-strong);
-  box-shadow: var(--shadow-md);
+  display: flex;
+  gap: 5px;
+  padding: 10px 12px;
+  border: 1px solid var(--sk-edge);
+  border-radius: var(--radius-md);
+  background: var(--acrylic-card-bg);
+  box-shadow: var(--sk-panel-shadow);
 }
 
-.pr-desk-win.a { left: 8%; top: 12%; width: 46%; height: 42%; }
-.pr-desk-win.b { right: 7%; top: 22%; width: 42%; height: 46%; }
-.pr-desk-win.c { left: 20%; bottom: 22%; width: 40%; height: 32%; }
+.pr-desk-win i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-surface-highest);
+}
+
+.pr-desk-win i:first-child { background: var(--color-primary); }
+
+.pr-desk-win.a { left: 6%; top: 8%; width: 46%; height: 56%; }
+.pr-desk-win.b { left: 40%; top: 18%; width: 52%; height: 50%; }
+.pr-desk-win.c { left: 14%; top: 52%; width: 34%; height: 26%; }
 
 .pr-desk-bar {
   position: absolute;
@@ -857,169 +654,50 @@ onBeforeUnmount(() => {
   transform: translateX(-50%);
   display: flex;
   gap: 8px;
-  padding: 7px 12px;
-  border-radius: var(--radius-full);
-  border: 1px solid var(--acrylic-border);
-  background: var(--acrylic-bg-strong);
-  box-shadow: var(--shadow-md);
+  padding: 8px 10px;
+  border: 1px solid var(--sk-edge);
+  border-radius: var(--radius-md);
+  background: var(--acrylic-card-bg);
+  box-shadow: var(--sk-panel-shadow);
 }
 
-.pr-desk-bar i {
-  width: 12px;
-  height: 12px;
-  border-radius: 4px;
-  background: color-mix(in oklch, var(--color-primary) 45%, transparent);
+.pr-desk-bar b {
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-xs);
+  background: var(--sk-raised-bg);
+  box-shadow: var(--sk-raised-shadow);
 }
 
-/* Схема статистики */
-.pr-chart {
-  display: flex;
-  align-items: flex-end;
-  gap: clamp(8px, 1.4vw, 16px);
-  aspect-ratio: 4 / 3;
-  padding: clamp(18px, 2.4vw, 30px);
-  border: 1px solid var(--acrylic-border);
-  border-radius: 22px;
-  background: var(--glass-bg), color-mix(in oklch, var(--color-surface) 48%, transparent);
-  box-shadow: var(--shadow-lg), var(--glass-edge);
-}
+.pr-desk-bar b:first-child { background: var(--grad-primary); }
 
-.pr-bar {
-  flex: 1;
-  border-radius: 8px 8px 4px 4px;
-  background: linear-gradient(180deg,
-    var(--color-primary),
-    color-mix(in oklch, var(--color-primary) 45%, transparent));
-}
-
-/* ── Геймификация ──────────────────────────────────────────────── */
-.pr-fun {
-  max-width: 720px;
-  margin: 0 auto;
-  padding: clamp(56px, 8vw, 110px) clamp(16px, 5vw, 40px) 0;
-  text-align: center;
-}
-
-.pr-fun-emoji {
-  display: flex;
-  justify-content: center;
-  gap: 10px;
-  margin-bottom: 18px;
-  font-size: 30px;
-}
-
-.pr-fun p {
-  margin: 16px 0 0;
-  font-size: 15px;
-  line-height: 1.65;
-  color: var(--color-text-dim);
-}
-
-/* ── Устройства ────────────────────────────────────────────────── */
-.pr-devices {
-  margin-top: clamp(28px, 4vw, 44px);
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
-  gap: clamp(16px, 2.4vw, 28px);
-  text-align: center;
-}
-
-.pr-device > .material-symbols-outlined {
-  font-size: 32px;
-  color: var(--color-primary);
-  font-variation-settings: 'wght' 300;
-}
-
-.pr-device {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: clamp(22px, 2.6vw, 30px) clamp(18px, 2.2vw, 26px);
-  border: 1px solid var(--acrylic-border);
-  border-radius: 22px;
-  background: var(--glass-bg), color-mix(in oklch, var(--color-surface) 46%, transparent);
-  box-shadow: var(--glass-edge);
-}
-
-.pr-device h3 { margin: 12px 0 8px; font-size: 18px; font-weight: 600; }
-
-/* Описание забирает свободную высоту, поэтому подпись и кнопка у всех
-   карточек ряда стоят на одной линии, а не «плавают» каждая по-своему. */
-.pr-device p {
-  flex: 1;
+/* ── Устройства ──────────────────────────────────────────────── */
+.pr-dl-alt {
   margin: 0;
-  max-width: 30ch;
-  font-size: 14px;
-  line-height: 1.6;
+  font-size: 13px;
   color: var(--color-text-dim);
 }
 
-.pr-device .pr-dl-alt {
-  flex: 0 0 auto;
-  margin: 14px 0 12px;
-  font-size: 12.5px;
-  color: var(--color-text-dim);
-}
-
-.pr-device .pr-dl-alt a { color: var(--color-primary); font-weight: 600; text-decoration: none; }
-.pr-device .pr-dl-alt a:hover { text-decoration: underline; }
-
-.pr-dl {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  width: 100%;
-  max-width: 260px;
-  height: 44px;
-  border-radius: var(--radius-full);
-  background: var(--grad-primary);
-  color: var(--color-on-primary);
-  font-size: 14px;
-  font-weight: 600;
+.pr-dl-alt a {
+  color: var(--color-primary);
   text-decoration: none;
-  box-shadow: var(--shadow-sm);
-  transition: filter 0.15s, box-shadow 0.15s;
+  font-weight: 600;
 }
 
-.pr-dl:hover { filter: brightness(1.07); box-shadow: var(--shadow-md); }
-/* Значок кнопки — цветом самой кнопки: иначе синий значок карточки
-   сливается с градиентной заливкой. */
-.pr-dl .material-symbols-outlined { font-size: 19px; color: inherit; }
+.pr-dl-alt a:hover { text-decoration: underline; }
 
-.pr-dl--ghost {
-  background: var(--glass-bg), color-mix(in oklch, var(--color-surface) 50%, transparent);
-  border: 1px solid var(--acrylic-border);
-  color: var(--color-text);
-  box-shadow: var(--glass-edge);
-}
+/* Подвал карточки прижат к низу: кнопки скачивания стоят в одну линию. */
+.pr-device :deep(.card-foot) { margin-top: auto; }
 
-.pr-dl--ghost:hover {
-  background: var(--glass-bg), color-mix(in oklch, var(--color-primary) 12%, transparent);
-  box-shadow: var(--glass-edge);
-}
-
-/* ── Вопросы ───────────────────────────────────────────────────── */
-.pr-faq { max-width: 820px; }
-
-.pr-q {
-  margin-top: 12px;
-  border: 1px solid var(--acrylic-border);
-  border-radius: 18px;
-  background: var(--glass-bg), color-mix(in oklch, var(--color-surface) 44%, transparent);
-  box-shadow: var(--glass-edge);
-  overflow: hidden;
-}
-
-.pr-q:first-of-type { margin-top: clamp(24px, 3vw, 40px); }
+/* ── Вопросы ─────────────────────────────────────────────────── */
+.pr-faq { max-width: 820px; width: 100%; margin: 0 auto; }
 
 .pr-q summary {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 14px;
-  padding: 16px 20px;
-  font-size: 15.5px;
+  gap: 12px;
+  font-size: 16px;
   font-weight: 600;
   cursor: pointer;
   list-style: none;
@@ -1029,66 +707,64 @@ onBeforeUnmount(() => {
 
 .pr-q summary .material-symbols-outlined {
   color: var(--color-text-dim);
-  transition: transform 0.2s;
+  transition: transform 0.2s ease;
 }
 
 .pr-q[open] summary .material-symbols-outlined { transform: rotate(180deg); }
+.pr-q[open] .pr-text { margin-top: 12px; }
 
-.pr-q p {
-  margin: 0;
-  padding: 0 20px 18px;
-  font-size: 14.5px;
-  line-height: 1.65;
-  color: var(--color-text-dim);
-}
-
-/* ── Финал и подвал ────────────────────────────────────────────── */
-.pr-final {
-  max-width: 720px;
-  margin: 0 auto;
-  padding: clamp(64px, 9vw, 120px) clamp(16px, 5vw, 40px) 0;
+/* ── Финал ───────────────────────────────────────────────────── */
+.pr .pr-final {
+  align-items: center;
+  padding: 48px 24px;
+  border-radius: var(--radius-xl);
   text-align: center;
 }
 
-.pr-final p {
-  margin: 14px 0 26px;
-  font-size: 15px;
-  line-height: 1.6;
-  color: var(--color-text-dim);
-}
+.pr-final .pr-text { max-width: 520px; }
 
+/* ── Подвал ──────────────────────────────────────────────────── */
 .pr-foot {
   display: flex;
+  justify-content: center;
   flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  max-width: 1120px;
-  margin: clamp(56px, 8vw, 110px) auto 0;
-  padding: 22px clamp(16px, 5vw, 40px) 32px;
-  border-top: 1px solid color-mix(in oklch, var(--acrylic-border) 60%, transparent);
-  font-size: 13.5px;
+  gap: 8px 22px;
+  padding: 0 24px 32px;
+  font-size: 13px;
   color: var(--color-text-dim);
 }
 
-.pr-foot a { color: var(--color-primary); font-weight: 600; text-decoration: none; }
-.pr-foot a:hover { text-decoration: underline; }
+.pr-foot a { color: inherit; text-decoration: none; }
+.pr-foot a:hover { color: var(--color-primary); }
 
-/* ── Адаптив ───────────────────────────────────────────────────── */
-@media (max-width: 860px) {
-  .pr-split { grid-template-columns: 1fr; text-align: center; }
-  .pr-split--rev .pr-split-visual { order: 0; }
-  .pr-split-text .pr-h2 { text-align: center; }
+/* ── Появление при прокрутке: только transform и opacity ─────── */
+.reveal {
+  opacity: 0;
+  transform: translateY(18px);
+  transition: opacity 0.6s ease, transform 0.6s cubic-bezier(0.2, 0.8, 0.3, 1);
 }
 
-@media (max-width: 720px) {
+.reveal.is-visible { opacity: 1; transform: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal { opacity: 1; transform: none; transition: none; }
+}
+
+/* ── Узкие экраны ────────────────────────────────────────────── */
+@media (max-width: 960px) {
+  .pr-hero,
+  .pr-split { grid-template-columns: minmax(0, 1fr); gap: 36px; }
+  .pr-split--rev .pr-split-text { order: 0; }
   .pr-nav { display: none; }
-  .pr-top-cta { margin-left: auto; }
-  /* Схема продукта на узком экране — одно окно без наложений. */
-  .pr-shot { aspect-ratio: 4 / 3; }
-  .pr-win--back, .pr-win--front { display: none; }
-  .pr-win--main { left: 0; top: 0; width: 100%; height: 100%; }
-  .pr-actions { flex-direction: column; align-items: stretch; width: min(100%, 320px); }
-  .pr-btn { width: 100%; }
+}
+
+@media (max-width: 560px) {
+  .pr-top { width: calc(100% - 16px); top: 8px; margin-top: 8px; padding-left: 12px; }
+  .pr-top-login { display: none; }
+  .pr-main { gap: 72px; padding: 40px 16px 64px; }
+  .pr-actions { width: 100%; }
+  .pr-actions > * { flex: 1 1 100%; }
+  .pr .pr-today-card { padding: 16px; }
+  .pr .pr-final { padding: 32px 18px; }
 }
 </style>

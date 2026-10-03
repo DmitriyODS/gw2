@@ -14,6 +14,7 @@ service BillingService {
   rpc GetEntitlements(GetEntitlementsRequest) returns (GetEntitlementsResponse);
   rpc CheckStorage(CheckStorageRequest) returns (CheckStorageResponse);
   rpc TrackStorage(TrackStorageRequest) returns (TrackStorageResponse);
+  rpc MoveStorage(MoveStorageRequest) returns (MoveStorageResponse);
   rpc CheckAI(CheckAIRequest) returns (CheckAIResponse);
   rpc ConsumeAI(ConsumeAIRequest) returns (ConsumeAIResponse);
   rpc LogAction(LogActionRequest) returns (LogActionResponse);
@@ -103,6 +104,21 @@ message StoredFile {
 
 message TrackStorageResponse {
   int64 total_bytes = 1;
+}
+
+// MoveStorageRequest — файлы сменили плательщика: вещь переехала из личного
+// пространства в команду или обратно. Новый владелец квоты задаётся так же,
+// как в TrackStorage (company_id > 0 — создатель команды); прежнего биллинг
+// знает из журнала. Перенос не проверяет остаток: файлы уже лежат в
+// хранилище, и отказ оставил бы вещь без учёта.
+message MoveStorageRequest {
+  int64 user_id = 1;
+  int64 company_id = 2;
+  repeated string keys = 3;
+}
+
+message MoveStorageResponse {
+  int64 moved = 1;
 }
 
 message CheckAIRequest {

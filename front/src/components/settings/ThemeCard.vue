@@ -1,22 +1,28 @@
 <template>
-  <!-- Компактная карточка темы: маленькая капсула-превью из трёх сегментов
-       палитры и название рядом. Цвета приходят данными темы (hex), поэтому
-       здесь они инлайном — как цвет тега; токенами задан только «корпус». -->
+  <!-- Тема — «выкраска», как образец краски в салоне: крупная плашка основного
+       цвета, под ней полосы второго и третьего, внизу название на фоновом
+       цвете самой темы. Карточка физическая: выбранная вдавлена в поверхность.
+       Цвета приходят данными темы (hex), поэтому они инлайном — как цвет
+       тега; токенами задан только «корпус». -->
   <div class="tc" :class="{ active }">
-    <button class="tc-apply" type="button" :title="`Применить тему «${name}»`" @click="$emit('apply')">
-      <!-- Порядок наложения: третичный снизу, основной сверху; сегменты
-           полупрозрачны — на пересечениях цвета смешиваются. -->
-      <span class="tc-swatch">
-        <span class="tc-seg c" :style="{ background: vars.tertiary }" />
-        <span class="tc-seg b" :style="{ background: vars.secondary }" />
-        <span class="tc-seg a" :style="{ background: vars.primary }" />
-        <span class="tc-frost" />
+    <button
+      class="tc-apply"
+      type="button"
+      :title="`Применить тему «${name}»`"
+      :aria-pressed="active"
+      @click="$emit('apply')"
+    >
+      <span class="tc-sample" :style="{ backgroundColor: base }">
+        <span class="tc-main" :style="{ backgroundColor: vars.primary }" />
+        <span class="tc-strips">
+          <span :style="{ backgroundColor: vars.secondary }" />
+          <span :style="{ backgroundColor: vars.tertiary }" />
+        </span>
+        <span class="tc-name" :style="{ color: ink }">{{ name }}</span>
       </span>
-
-      <span class="tc-name">{{ name }}</span>
-
-      <span v-if="active" class="material-symbols-outlined tc-check">check_circle</span>
     </button>
+
+    <span v-if="active" class="tc-check material-symbols-outlined" aria-hidden="true">check</span>
 
     <div v-if="editable" class="tc-tools">
       <button class="tc-tool" type="button" title="Изменить цвета" @click.stop="$emit('edit')">
@@ -30,119 +36,128 @@
 </template>
 
 <script setup>
-defineProps({
+import { computed } from 'vue'
+
+const props = defineProps({
   name: { type: String, required: true },
   vars: { type: Object, required: true },
   active: { type: Boolean, default: false },
   editable: { type: Boolean, default: false },
 })
 defineEmits(['apply', 'edit', 'remove'])
+
+// Подложка выкраски — фоновый цвет темы; у тем без него — белый лист.
+const base = computed(() => props.vars.neutral || '#ffffff')
+
+/* Подпись на подложке: тёмная на светлом фоне темы и светлая на тёмном —
+   по относительной яркости. */
+const ink = computed(() => {
+  const hex = /^#([0-9a-f]{6})$/i.exec(base.value)?.[1]
+  if (!hex) return '#1d1b19'
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.55 ? '#1d1b19' : '#f6f4f1'
+})
 </script>
 
 <style scoped>
 .tc {
   position: relative;
-  display: flex;
-  align-items: center;
-  border: 1px solid var(--acrylic-border);
+  padding: 6px;
+  border: 1px solid var(--sk-edge);
   border-radius: var(--radius-lg);
-  background: var(--glass-bg), var(--acrylic-card-bg);
-  box-shadow: var(--glass-edge);
-  transition: border-color 0.18s ease;
+  background: var(--sk-raised-bg);
+  box-shadow: var(--sk-raised-shadow);
+  transition: transform 0.15s ease;
 }
 
-.tc:hover { border-color: color-mix(in oklch, var(--color-primary) 45%, var(--acrylic-border)); }
-.tc.active { border-color: var(--color-primary); }
+.tc:hover { transform: translateY(-1px); }
+
+/* Выбранная — нажатая и зафиксированная: вдавлена, обведена акцентом. */
+.tc.active {
+  background: var(--sk-pressed-bg);
+  box-shadow: var(--sk-pressed-shadow), 0 0 0 2px var(--color-primary);
+  transform: none;
+}
 
 .tc-apply {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-  padding: 10px 12px;
+  display: block;
+  width: 100%;
+  padding: 0;
   border: none;
   background: none;
-  color: var(--color-text);
-  text-align: left;
   cursor: pointer;
 }
 
-/* Капсула-превью: три сегмента внахлёст образуют одну пилюлю. */
-.tc-swatch {
-  position: relative;
-  display: block;
-  flex-shrink: 0;
-  width: 54px;
-  height: 22px;
+.tc-sample {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  box-shadow: inset 0 0 0 1px var(--sk-edge);
 }
 
-.tc-seg {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  border-radius: 999px;
+/* Краска матовая: лёгкий свет сверху и зерно поверх цвета. */
+.tc-main,
+.tc-strips > span {
+  background-image: var(--grain), linear-gradient(180deg,
+    color-mix(in oklch, white 16%, transparent),
+    transparent 60%,
+    color-mix(in oklch, black 8%, transparent));
 }
 
-.tc-seg.a { left: 0; width: 46%; opacity: 0.92; }
-.tc-seg.b { left: 22%; width: 46%; opacity: 0.86; }
-.tc-seg.c { left: 45%; right: 0; opacity: 0.76; }
+.tc-main { height: 58px; }
 
-/* Матовый слой поверх палитры. -webkit- ПЕРЕД стандартным: иначе минификатор
-   LightningCSS выбрасывает стандартное свойство. */
-.tc-frost {
-  position: absolute;
-  inset: 0;
-  border-radius: 999px;
-  background: var(--glass-bg);
-  box-shadow: var(--glass-edge);
-  -webkit-backdrop-filter: blur(6px) saturate(1.15);
-  backdrop-filter: blur(6px) saturate(1.15);
-  pointer-events: none;
+.tc-strips {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  height: 18px;
 }
 
 .tc-name {
-  flex: 1;
-  min-width: 0;
-  font-size: 0.9rem;
-  font-weight: 600;
+  padding: 8px 10px 9px;
+  font-size: 0.85rem;
+  font-weight: 650;
+  text-align: left;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+/* Отметка выбранной — круглая выпуклая «кнопка» в углу образца. */
 .tc-check {
-  flex-shrink: 0;
-  font-size: 20px;
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--sk-raised-bg);
+  box-shadow: var(--sk-raised-shadow);
   color: var(--color-primary);
+  font-size: 16px;
+  font-weight: 700;
+  pointer-events: none;
 }
 
-/* Инструменты своей темы места в покое НЕ занимают: иначе от названия в
-   190-пиксельной колонке оставалось около трети, и свои темы читались хуже
-   встроенных. Появляются по наведению и с клавиатуры, раздвигая строку, — но
-   поверх названия не ложатся: перекрытый текст здесь уже пробовали. */
+/* Инструменты своей темы — по наведению поверх плашки основного цвета; на
+   тач-устройствах видны всегда. */
 .tc-tools {
-  flex-shrink: 0;
+  position: absolute;
+  top: 12px;
+  left: 12px;
   display: flex;
   gap: 4px;
-  width: 0;
-  padding-right: 0;
-  overflow: hidden;
   opacity: 0;
-  transition: width 0.18s ease, padding-right 0.18s ease, opacity 0.18s ease;
+  transition: opacity 0.15s ease;
 }
 
 .tc:hover .tc-tools,
-.tc:focus-within .tc-tools {
-  width: 56px; /* две кнопки 26px + промежуток */
-  padding-right: 10px;
-  opacity: 1;
-}
+.tc:focus-within .tc-tools { opacity: 1; }
 
-/* Без указателя наводить нечем — на тач-устройствах кнопки видны всегда.
-   Там колонка одна на всю ширину, и названию места хватает. */
 @media (hover: none) {
-  .tc-tools { width: 56px; padding-right: 10px; opacity: 1; }
+  .tc-tools { opacity: 1; }
 }
 
 .tc-tool {
@@ -155,17 +170,17 @@ defineEmits(['apply', 'edit', 'remove'])
   min-height: 26px;
   max-height: 26px;
   padding: 0;
-  border: none;
+  border: 1px solid var(--sk-edge);
   border-radius: 50%;
-  background: var(--color-surface);
+  background: var(--sk-raised-bg);
+  box-shadow: var(--sk-raised-shadow);
   color: var(--color-text);
   cursor: pointer;
-  box-shadow: var(--shadow-sm);
 }
 
-.tc-tool .material-symbols-outlined { font-size: 16px; }
-
-.tc-tool:hover { background: var(--color-surface-high); }
+.tc-tool .material-symbols-outlined { font-size: 15px; }
+.tc-tool:hover { background: var(--sk-raised-hover-bg); }
+.tc-tool:active { box-shadow: var(--sk-pressed-shadow); }
 
 .tc-tool.danger:hover {
   background: var(--color-error-container);

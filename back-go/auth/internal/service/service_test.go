@@ -760,14 +760,21 @@ func TestLoginLocked(t *testing.T) {
 	}
 }
 
+// Отключённая команда не закрывает вход: у человека остаётся личное
+// пространство, он просто входит без активной команды.
 func TestLoginCompanyDisabled(t *testing.T) {
 	svc, repo, _ := newTestService(t)
 	cid := int64(1)
 	employee(repo, "ivanov", &cid)
 	repo.disableCompany(cid)
 
-	_, err := svc.Login(context.Background(), dto.LoginRequest{Login: "ivanov", Password: "secret123"})
-	wantCode(t, err, "COMPANY_DISABLED")
+	sess, err := svc.Login(context.Background(), dto.LoginRequest{Login: "ivanov", Password: "secret123"})
+	if err != nil {
+		t.Fatalf("вход при отключённой команде: %v", err)
+	}
+	if sess.AccessToken == "" || sess.CompanyID != nil {
+		t.Fatalf("ожидался вход без активной команды: %+v", sess)
+	}
 }
 
 func TestRefreshRoundTrip(t *testing.T) {
@@ -1100,30 +1107,24 @@ func errOf(_ any, err error) error { return err }
 
 // ── Multi-company ────────────────────────────────────────────────
 
-func TestLoginGateMultiCompany(t *testing.T) {
+// Шага выбора компании при входе нет: активной становится первая включённая
+// команда, а остальные доступны переключением.
+func TestLoginMultiCompanyPicksFirstActive(t *testing.T) {
 	svc, repo, _ := newTestService(t)
 	c1, c2 := int64(1), int64(2)
 	u := employee(repo, "ivanov", &c1)
 	_ = repo.AddMembership(context.Background(), u.ID, c2, 2) // менеджер в c2
+	repo.disableCompany(c1)
 
 	sess, err := svc.Login(context.Background(), dto.LoginRequest{Login: "ivanov", Password: "secret123"})
 	if err != nil {
 		t.Fatalf("Login: %v", err)
 	}
-	if !sess.NeedsCompanySelection || sess.SelectToken == "" || sess.AccessToken != "" {
-		t.Fatalf("ожидался gate выбора компании: %+v", sess)
+	if sess.NeedsCompanySelection || sess.AccessToken == "" {
+		t.Fatalf("шага выбора компании быть не должно: %+v", sess)
 	}
-	if len(sess.Companies) != 2 {
-		t.Fatalf("ожидалось 2 компании: %+v", sess.Companies)
-	}
-
-	// Завершаем логин выбором c2 → роль менеджера в этой компании.
-	full, err := svc.SelectCompany(context.Background(), sess.SelectToken, c2)
-	if err != nil {
-		t.Fatalf("SelectCompany: %v", err)
-	}
-	if full.AccessToken == "" || full.CompanyID == nil || *full.CompanyID != c2 || full.RoleLevel != domain.LevelManager {
-		t.Fatalf("select c2: %+v", full)
+	if sess.CompanyID == nil || *sess.CompanyID != c2 || sess.RoleLevel != domain.LevelManager {
+		t.Fatalf("активной должна стать первая включённая команда c2: %+v", sess)
 	}
 }
 

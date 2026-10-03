@@ -23,117 +23,181 @@
       />
     </template>
 
-    <!-- Прокрутка своя, а не тела страницы: по ней виртуальная лента считает,
-         какие посты у экрана. -->
-    <div ref="scrollEl" class="portal-scroll" @scroll="postsList.onScroll">
-      <!-- Единая строка фильтров: разделы + популярные хештеги (тренды, как в
-           соцсетях) в одном горизонтальном скролле — на мобильных не отъедает
-           вторую строку. Разделитель отделяет теги от разделов. -->
-      <div class="portal-topics">
-        <button
-          class="portal-topic-chip"
-          :class="{ active: store.filters.topicId == null && !store.filters.tag }"
+    <!-- Раскладка корпоративной ленты (по образцу Viva Engage / LinkedIn):
+         слева разделы, по центру лента читаемой ширины, справа закреплённое и
+         популярные теги. Ширину меряем у САМОЙ раскладки — портал живёт окном;
+         в узком окне боковые колонки сворачиваются в ряд чипов над лентой. -->
+    <div ref="layoutEl" class="portal-layout" :class="{ wide }">
+      <nav v-if="wide" class="portal-rail" aria-label="Разделы портала">
+        <h3 class="portal-rail-title">Разделы</h3>
+        <AppRow
+          plain
+          dense
+          clickable
+          title="Все публикации"
+          :selected="store.filters.topicId == null && !store.filters.tag"
           @click="store.setTopic(null)"
-        >Все</button>
-        <button
+        >
+          <template #lead><span class="material-symbols-outlined portal-rail-icon">dynamic_feed</span></template>
+        </AppRow>
+        <AppRow
           v-for="t in store.topics"
           :key="t.id"
-          class="portal-topic-chip"
-          :class="{ active: store.filters.topicId === t.id }"
-          :style="chipStyle(t, store.filters.topicId === t.id)"
+          plain
+          dense
+          clickable
+          :title="t.name"
+          :selected="store.filters.topicId === t.id"
           @click="store.setTopic(t.id)"
         >
-          <span v-if="store.filters.topicId === t.id" class="material-symbols-outlined portal-chip-check">check</span>
-          {{ t.name }}
-        </button>
+          <template #lead><TopicIcon :icon="t.icon" :color="t.color" /></template>
+        </AppRow>
+        <AppButton
+          v-if="isAdmin()"
+          class="portal-rail-manage"
+          variant="text"
+          size="sm"
+          icon="tune"
+          label="Управление разделами"
+          @click="topicsDialogOpen = true"
+        />
+      </nav>
 
-        <template v-if="store.popularTags.length && !store.filters.search">
-          <span class="portal-filter-sep" aria-hidden="true" />
-          <button
-            v-for="t in store.popularTags"
-            :key="t.tag"
-            class="portal-tag-chip"
-            :class="{ active: store.filters.tag === t.tag }"
-            @click="store.setTag(store.filters.tag === t.tag ? null : t.tag)"
-          >
-            #{{ t.tag }}
-            <span class="portal-tag-count">{{ t.count }}</span>
-          </button>
-        </template>
-      </div>
-
-      <div class="portal-feed">
-      <AppInfoBar
-        v-if="store.filters.tag"
-        class="portal-tag-banner"
-        tone="info"
-        icon="tag"
-      >
-        Посты с тегом <strong>#{{ store.filters.tag }}</strong>
-        <template #actions>
-          <AppButton size="sm" icon="close" label="Сбросить" @click="store.setTag(null)" />
-        </template>
-      </AppInfoBar>
-      <div v-if="store.loadingPosts" class="portal-status">
-        <BrandLoader :size="64" />
-      </div>
-
-      <template v-else>
-        <section v-if="highlightPost" class="portal-section">
-          <div class="portal-section-title">
-            <span class="material-symbols-outlined">open_in_new</span>
-            Пост по ссылке
-          </div>
-          <PostCard :post="highlightPost" @edit="openComposer" @delete="confirmDelete" @forward="openForward" />
-        </section>
-
-        <section v-if="store.pinnedPosts.length" class="portal-section">
-          <div class="portal-section-title">
-            <span class="material-symbols-outlined">keep</span>
-            Закреплено
-          </div>
-          <div class="portal-posts">
-            <PostCard
-              v-for="p in store.pinnedPosts"
-              :key="p.id"
-              :post="p"
-              @edit="openComposer"
-              @delete="confirmDelete"
-              @forward="openForward"
+      <!-- Прокрутка своя, а не тела страницы: по ней виртуальная лента считает,
+           какие посты у экрана. -->
+      <div ref="scrollEl" class="portal-scroll" @scroll="postsList.onScroll">
+        <div class="portal-feed">
+          <!-- Узкое окно: разделы и популярные теги — одним рядом чипов. -->
+          <div v-if="!wide" class="portal-chips">
+            <AppChip
+              interactive
+              :selected="store.filters.topicId == null && !store.filters.tag"
+              label="Все"
+              @click="store.setTopic(null)"
+            />
+            <AppChip
+              v-for="t in store.topics"
+              :key="t.id"
+              interactive
+              :selected="store.filters.topicId === t.id"
+              :label="t.name"
+              @click="store.setTopic(t.id)"
+            />
+            <AppChip
+              v-for="t in popularTags"
+              :key="`#${t.tag}`"
+              interactive
+              tone="primary"
+              :selected="store.filters.tag === t.tag"
+              :label="`#${t.tag}`"
+              :count="t.count"
+              @click="toggleTag(t.tag)"
             />
           </div>
-        </section>
 
-        <section class="portal-section">
-          <EmptyState
-            v-if="!store.posts.length && !store.pinnedPosts.length"
-            icon="campaign"
-            tone="soft"
-            title="Пока пусто"
-            subtitle="Станьте первым, кто поделится новостью в компании"
-          />
-          <!-- Лента виртуальная (useVirtualList): «Показать ещё» копит посты
-               без предела, а в DOM остаются только те, что у экрана. -->
-          <div
-            v-else-if="store.posts.length"
-            ref="postsEl"
-            class="portal-posts-virtual"
-            :style="{ paddingTop: `${postsTop}px`, paddingBottom: `${postsBottom}px` }"
-          >
-            <div v-for="p in visiblePosts" :key="p.id" :ref="postsList.measureRef(p.id)" class="portal-vrow">
-              <PostCard :post="p" @edit="openComposer" @delete="confirmDelete" @forward="openForward" />
+          <AppInfoBar v-if="store.filters.tag" tone="info" icon="tag">
+            Посты с тегом <strong>#{{ store.filters.tag }}</strong>
+            <template #actions>
+              <AppButton size="sm" icon="close" label="Сбросить" @click="store.setTag(null)" />
+            </template>
+          </AppInfoBar>
+
+          <!-- Приглашение написать — первым в ленте, как в соцсетях. -->
+          <AppCard clickable class="portal-prompt" :gap="0" @click="openComposer(null)">
+            <img v-if="myAvatar" class="portal-prompt-avatar" :src="myAvatar" alt="" />
+            <span class="portal-prompt-field">Что нового{{ myName ? `, ${myName}` : '' }}?</span>
+            <span class="material-symbols-outlined portal-prompt-icon">image</span>
+            <span class="material-symbols-outlined portal-prompt-icon">tag</span>
+          </AppCard>
+
+          <BrandLoader v-if="store.loadingPosts" block :size="64" :min-height="200" />
+
+          <template v-else>
+            <section v-if="highlightPost" class="portal-section">
+              <h4 class="portal-section-title">
+                <span class="material-symbols-outlined">open_in_new</span>
+                Пост по ссылке
+              </h4>
+              <PostCard :post="highlightPost" @edit="openComposer" @delete="confirmDelete" @forward="openForward" />
+            </section>
+
+            <!-- В узком окне закреплённое — прямо в ленте; в широком — справа. -->
+            <section v-if="!wide && store.pinnedPosts.length" class="portal-section">
+              <h4 class="portal-section-title">
+                <span class="material-symbols-outlined">keep</span>
+                Закреплено
+              </h4>
+              <PostCard
+                v-for="p in store.pinnedPosts"
+                :key="p.id"
+                :post="p"
+                @edit="openComposer"
+                @delete="confirmDelete"
+                @forward="openForward"
+              />
+            </section>
+
+            <EmptyState
+              v-if="!store.posts.length && !store.pinnedPosts.length"
+              icon="campaign"
+              tone="soft"
+              title="Пока пусто"
+              subtitle="Станьте первым, кто поделится новостью"
+            />
+            <!-- Лента виртуальная (useVirtualList): «Показать ещё» копит посты
+                 без предела, а в DOM остаются только те, что у экрана. -->
+            <div
+              v-else-if="store.posts.length"
+              ref="postsEl"
+              class="portal-posts-virtual"
+              :style="{ paddingTop: `${postsTop}px`, paddingBottom: `${postsBottom}px` }"
+            >
+              <div v-for="p in visiblePosts" :key="p.id" :ref="postsList.measureRef(p.id)" class="portal-vrow">
+                <PostCard :post="p" @edit="openComposer" @delete="confirmDelete" @forward="openForward" />
+              </div>
             </div>
-          </div>
-          <AppButton
-            v-if="store.nextCursor"
-            class="portal-load-more"
-            label="Показать ещё"
-            :loading="store.loadingMore"
-            @click="store.fetchMore()"
-          />
-        </section>
-      </template>
+            <AppButton
+              v-if="store.nextCursor"
+              class="portal-load-more"
+              label="Показать ещё"
+              :loading="store.loadingMore"
+              @click="store.fetchMore()"
+            />
+          </template>
+        </div>
       </div>
+
+      <aside v-if="wide" class="portal-side">
+        <AppCard v-if="store.pinnedPosts.length" title="Закреплено" :gap="4">
+          <AppRow
+            v-for="p in store.pinnedPosts"
+            :key="p.id"
+            plain
+            dense
+            clickable
+            :title="postTitle(p)"
+            :hint="authorName(p)"
+            @click="openPinned(p)"
+          >
+            <template #lead><span class="material-symbols-outlined portal-rail-icon">keep</span></template>
+          </AppRow>
+        </AppCard>
+
+        <AppCard v-if="popularTags.length" title="Популярное" :gap="10">
+          <div class="portal-side-tags">
+            <AppChip
+              v-for="t in popularTags"
+              :key="t.tag"
+              interactive
+              size="sm"
+              :selected="store.filters.tag === t.tag"
+              :label="`#${t.tag}`"
+              :count="t.count"
+              @click="toggleTag(t.tag)"
+            />
+          </div>
+        </AppCard>
+      </aside>
     </div>
 
     <PostComposer v-model="composerOpen" :post="editingPost" @saved="onSaved" />
@@ -155,7 +219,7 @@
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import BrandLoader from '@/components/common/BrandLoader.vue'
 import { useAuthStore } from '@/stores/auth.js'
 import { usePortalStore } from '@/stores/portal.js'
@@ -163,6 +227,11 @@ import { usePermission } from '@/composables/usePermission.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import EmptyState from '@/components/common/EmptyState.vue'
 import AppButton from '@/components/ui/AppButton.vue'
+import AppCard from '@/components/ui/AppCard.vue'
+import AppChip from '@/components/ui/AppChip.vue'
+import AppRow from '@/components/ui/AppRow.vue'
+import TopicIcon from '@/components/portal/TopicIcon.vue'
+import { avatarUrl } from '@/utils/avatar.js'
 import AppInfoBar from '@/components/ui/AppInfoBar.vue'
 import AppPage from '@/components/ui/AppPage.vue'
 import SearchField from '@/components/common/SearchField.vue'
@@ -179,6 +248,42 @@ import { useVirtualList } from '@/composables/useVirtualList.js'
 const store = usePortalStore()
 const { isAdmin } = usePermission()
 const route = useRoute()
+const router = useRouter()
+const auth = useAuthStore()
+
+/* ── Раскладка: три колонки, пока хватает ширины САМОЙ ленты-окна ── */
+const WIDE_MIN = 1060
+const layoutEl = ref(null)
+const wide = ref(false)
+let layoutRo = null
+onMounted(() => {
+  if (typeof ResizeObserver !== 'function') return
+  layoutRo = new ResizeObserver(([e]) => { wide.value = e.contentRect.width >= WIDE_MIN })
+  layoutRo.observe(layoutEl.value)
+})
+onBeforeUnmount(() => layoutRo?.disconnect())
+
+// Приглашение «Что нового, Имя?»: имя — второе слово ФИО («Фамилия Имя …»).
+const myAvatar = computed(() => (auth.user ? avatarUrl(auth.user) : ''))
+const myName = computed(() => (auth.user?.fio || '').trim().split(/\s+/)[1] || '')
+
+// Тренды прячутся, пока идёт поиск: они про всю ленту, а не про выдачу.
+const popularTags = computed(() => (store.filters.search ? [] : store.popularTags))
+const toggleTag = (tag) => store.setTag(store.filters.tag === tag ? null : tag)
+
+/* Строка закреплённого справа: заголовок поста или первая строка текста. */
+function postTitle(p) {
+  const raw = (p.title || p.body || '').replace(/[#*_>`~[\]]/g, '').trim()
+  const line = raw.split('\n')[0] || 'Публикация'
+  return line.length > 70 ? `${line.slice(0, 69)}…` : line
+}
+const authorName = (p) => store.resolveAuthor(p.author_id).fio
+
+// Закреплённое справа открывается в ленте тем же путём, что пост по ссылке.
+function openPinned(p) {
+  router.push(`/portal/${p.id}`)
+  scrollEl.value?.scrollTo({ top: 0, behavior: 'smooth' })
+}
 // Обои ленты активны при заданном НЕпустом фоне: слой рисуется внутри панели
 // раздела и клипается её скруглением.
 const feedBgOn = computed(() =>
@@ -195,23 +300,6 @@ function clearSearch() {
   clearTimeout(searchTimer)
   searchInput.value = ''
   store.setSearch('')
-}
-
-// Инлайн-стиль перекрывает CSS-класс .active, поэтому активное состояние
-// цветного чипа задаём здесь же: акцентная рамка (двойная через box-shadow,
-// без сдвига макета) + акцентный текст + галочка в шаблоне.
-function chipStyle(t, active = false) {
-  if (!t.color) return {}
-  if (!active) {
-    return { background: `var(--tag-${t.color}-surface)`, borderColor: `var(--tag-${t.color}-border)`, color: 'var(--color-text)' }
-  }
-  return {
-    background: `var(--tag-${t.color}-surface)`,
-    borderColor: `var(--tag-${t.color}-accent)`,
-    boxShadow: `inset 0 0 0 1px var(--tag-${t.color}-accent)`,
-    color: `var(--tag-${t.color}-accent)`,
-    fontWeight: 700,
-  }
 }
 
 // Лента с серверной keyset-пагинацией: «Показать ещё» — store.fetchMore()
@@ -279,7 +367,8 @@ const bgDialogOpen = ref(false)
 const commands = computed(() => [
   { key: 'post', label: 'Написать пост', icon: 'edit', variant: 'filled', primary: true, fab: true },
   { key: 'background', label: 'Оформление ленты', icon: 'palette' },
-  ...(isAdmin() ? [{ key: 'topics', label: 'Управление разделами', icon: 'tune' }] : []),
+  // В широком окне управление разделами стоит под их списком.
+  ...(isAdmin() && !wide.value ? [{ key: 'topics', label: 'Управление разделами', icon: 'tune' }] : []),
 ])
 
 function onCommand(key) {
@@ -294,7 +383,10 @@ function onCommand(key) {
 const highlightPost = computed(() => {
   const h = store.highlight
   if (!h) return null
-  if (store.posts.some((p) => p.id === h.id) || store.pinnedPosts.some((p) => p.id === h.id)) return null
+  if (store.posts.some((p) => p.id === h.id)) return null
+  // В узком окне закреплённое и так стоит в ленте; в широком оно справа
+  // строкой — и открывается сюда.
+  if (!wide.value && store.pinnedPosts.some((p) => p.id === h.id)) return null
   return h
 })
 watch(() => route.params.id, (id) => store.loadHighlight(id))
@@ -314,17 +406,74 @@ onBeforeUnmount(() => { store.viewingFeed = false })
 
 // Смена активной компании при открытом портале — полная перезагрузка данных
 // (стор к этому моменту сброшен глобальным watch в App.vue).
-watch(() => useAuthStore().companyId, (id, prev) => {
+watch(() => auth.companyId, (id, prev) => {
   if (id != null && prev != null && id !== prev) loadAll()
 })
 </script>
 
 <style scoped>
-/* Тулбар без подложки — прозрачная «плавающая» шапка как в «Задачах»
-   (контент скроллится в .admin-body ниже, не под шапкой). */
-.admin-sticky { background: transparent; -webkit-backdrop-filter: none; backdrop-filter: none; }
-.admin-sticky::after { display: none; }
+.portal-layout {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
 
+.portal-layout.wide {
+  grid-template-columns: 220px minmax(0, 1fr) 280px;
+  gap: 8px;
+}
+
+/* ── Левая колонка: разделы ── */
+.portal-rail,
+.portal-side {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 4px 18px 14px;
+}
+
+.portal-side { gap: 14px; padding: 4px 14px 18px 4px; }
+
+.portal-rail-title {
+  margin: 4px 10px 8px;
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-dim);
+}
+
+.portal-rail-icon { font-size: 20px; color: var(--color-text-dim); }
+.portal-rail-manage { align-self: flex-start; margin-top: 8px; }
+.portal-rail :deep(.ti) { width: 28px; height: 28px; }
+
+.portal-side-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* ── Центр: лента читаемой ширины ── */
+/* Своя прокрутка ленты (AppPage :scroll="false" — содержимое скроллится само).
+   Замер строк держит позицию сам, браузерная поправка сложилась бы дважды. */
+.portal-scroll {
+  min-height: 0;
+  overflow-y: auto;
+  overflow-anchor: none;
+}
+
+.portal-feed {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 680px;
+  margin: 0 auto;
+  padding: 4px 16px 18px;
+  animation: portal-fade 0.2s ease;
+}
 
 @keyframes portal-fade {
   from { opacity: 0; transform: translateY(4px); }
@@ -332,108 +481,48 @@ watch(() => useAuthStore().companyId, (id, prev) => {
 }
 @media (prefers-reduced-motion: reduce) { .portal-feed { animation: none; } }
 
-.portal-topics {
+.portal-chips {
   display: flex;
   gap: 8px;
   overflow-x: auto;
-  padding: 2px 18px 6px;
+  padding: 2px 0 4px;
   scrollbar-width: none;
 }
-.portal-topics::-webkit-scrollbar { display: none; }
+.portal-chips::-webkit-scrollbar { display: none; }
+.portal-chips > * { flex-shrink: 0; }
 
-.portal-topic-chip {
-  flex-shrink: 0;
-  padding: 7px 16px;
-  border-radius: var(--radius-full);
-  border: 1px solid var(--acrylic-border);
-  background: var(--acrylic-card-bg);
-  color: var(--color-text-dim);
-  font: inherit;
-  font-size: 13.5px;
-  font-weight: 600;
-  cursor: pointer;
-}
-.portal-topic-chip.active {
-  background: var(--color-primary-container);
-  border-color: var(--color-primary);
-  color: var(--color-on-primary-container);
-  font-weight: 700;
-}
-.portal-topic-chip { display: inline-flex; align-items: center; gap: 4px; }
-.portal-chip-check { font-size: 15px; }
-
-/* Разделитель разделов и хештегов в общей строке фильтров. */
-.portal-filter-sep {
-  flex-shrink: 0;
-  align-self: center;
-  width: 1px;
-  height: 20px;
-  margin: 0 2px;
-  background: var(--color-outline-dim);
-}
-
-/* Популярные хештеги (тренды) — чипы в той же строке, что и разделы. */
-.portal-tag-chip {
-  flex-shrink: 0;
-  display: inline-flex;
+/* Приглашение написать пост — карточка с «полем», как в соцсетях. */
+.portal-prompt {
+  flex-direction: row;
   align-items: center;
-  gap: 5px;
-  padding: 7px 14px;
+  gap: 12px;
+  padding: 12px 14px;
+}
+
+.portal-prompt-avatar {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.portal-prompt-field {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 16px;
+  border: 1px solid var(--sk-edge);
   border-radius: var(--radius-full);
-  border: 1px solid var(--acrylic-border);
-  background: var(--acrylic-card-bg);
-  color: var(--color-primary);
-  font: inherit;
-  font-size: 13.5px;
-  font-weight: 600;
-  cursor: pointer;
-}
-.portal-tag-chip:hover { border-color: color-mix(in oklch, var(--color-primary) 30%, var(--acrylic-border)); }
-.portal-tag-chip.active {
-  background: var(--color-primary-container);
-  border-color: var(--color-primary);
-  color: var(--color-on-primary-container);
-}
-.portal-tag-count {
-  font-size: 11px;
-  font-weight: 700;
+  background: var(--sk-well-bg);
+  box-shadow: var(--sk-well-shadow);
   color: var(--color-text-dim);
-}
-.portal-tag-chip.active .portal-tag-count { color: var(--color-on-primary-container); }
-
-/* Баннер активного фильтра по тегу над лентой. */
-.portal-tag-banner {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 14px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--acrylic-border);
-  background: var(--acrylic-card-bg);
-  font-size: 13.5px;
-  color: var(--color-text);
-}
-.portal-tag-banner > .material-symbols-outlined { color: var(--color-primary); font-size: 20px; }
-.portal-tag-banner strong { color: var(--color-primary); }
-
-/* Контент ленты — узкая читабельная колонка внутри общего каркаса. */
-.portal-feed {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  max-width: 760px;
-  margin: 0 auto;
-  padding: 0 18px 18px;
-  width: 100%;
-  box-sizing: border-box;
-  animation: portal-fade 0.2s ease;
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.portal-status {
-  display: flex;
-  justify-content: center;
-  padding: 40px 0;
-}
+.portal-prompt-icon { font-size: 22px; color: var(--color-primary); }
 
 .portal-section { display: flex; flex-direction: column; gap: 10px; }
 
@@ -441,28 +530,14 @@ watch(() => useAuthStore().companyId, (id, prev) => {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 13px;
+  margin: 0;
+  font-size: 12.5px;
   font-weight: 700;
-  color: var(--color-tertiary);
+  letter-spacing: 0.04em;
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  color: var(--color-text-dim);
 }
 .portal-section-title .material-symbols-outlined { font-size: 18px; font-variation-settings: 'FILL' 1; }
-
-.portal-posts {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-/* Своя прокрутка ленты (AppPage :scroll="false" — содержимое скроллится само).
-   Замер строк держит позицию сам, браузерная поправка сложилась бы дважды. */
-.portal-scroll {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  overflow-anchor: none;
-}
 
 /* Промежуток между постами — отступом строки, а не gap: он должен попасть в
    замер высоты, иначе распорки ленты расходятся с реальной раскладкой. */
@@ -471,22 +546,11 @@ watch(() => useAuthStore().companyId, (id, prev) => {
   padding-bottom: 14px;
 }
 
-@media (max-width: 640px) {
-  .portal-btn-label { display: none; }
-  /* Без подписи кнопки тулбара сжимаются в квадратные иконки — язык .btn-icon
-     из «Задач», а не растянутая пилюля. */
-  .portal-toolbar :deep(.btn) { padding: 0; width: 42px; height: 42px; justify-content: center; }
-  /* Поиск переносится на всю ширину под вкладками/кнопками. */
-  .portal-toolbar :deep(.search-field) { min-width: 0; flex: 1 1 100%; order: 1; }
-}
+.portal-load-more { align-self: center; }
 
 @media (max-width: 768px) {
-  /* Создание поста на мобильном — плавающий FAB. */
-  .portal-toolbar :deep(.btn.v-filled) { display: none; }
-}
-
-@media (max-width: 768px) {
-  .portal-topics { padding: 2px 12px 6px; }
-  .portal-feed { padding: 0 12px 18px; }
+  .portal-feed { padding: 4px 12px 18px; }
+  /* На телефоне главное действие — плавающая кнопка, приглашение не нужно. */
+  .portal-prompt { display: none; }
 }
 </style>

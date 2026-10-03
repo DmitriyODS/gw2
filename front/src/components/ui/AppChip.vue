@@ -57,9 +57,10 @@ defineEmits(['click', 'remove'])
   gap: 6px;
   min-height: 32px;
   padding: 6px 14px;
-  border: 1px solid transparent;
+  border: 1px solid var(--sk-edge);
   border-radius: var(--radius-full);
-  background: var(--color-surface-high);
+  background: var(--sk-raised-bg);
+  box-shadow: var(--sk-raised-shadow);
   color: var(--color-text-dim);
   font: inherit;
   font-size: 13px;
@@ -72,10 +73,20 @@ defineEmits(['click', 'remove'])
 .chip-sm .material-symbols-outlined { font-size: 16px; }
 .chip-count { font-weight: 700; }
 
-.tone-primary { background: var(--color-primary-container); color: var(--color-on-primary-container); }
-.tone-success { background: var(--color-success-container); color: var(--color-on-success-container); }
-.tone-warning { background: var(--color-warning-container); color: var(--color-on-warning-container); }
-.tone-error { background: var(--color-error-container); color: var(--color-on-error-container); }
+/* Тоновые чипы — та же выпуклая пилюля, залитая контейнером своего тона. */
+.tone-primary, .tone-success, .tone-warning, .tone-error { background: var(--chip-bg); color: var(--chip-fg); }
+@supports (color: color-mix(in oklch, red, blue)) {
+  .tone-primary, .tone-success, .tone-warning, .tone-error {
+    background:
+      var(--grain),
+      linear-gradient(180deg, color-mix(in oklch, var(--chip-bg) 75%, white), var(--chip-bg));
+    color: var(--chip-fg);
+  }
+}
+.tone-primary { --chip-bg: var(--color-primary-container); --chip-fg: var(--color-on-primary-container); }
+.tone-success { --chip-bg: var(--color-success-container); --chip-fg: var(--color-on-success-container); }
+.tone-warning { --chip-bg: var(--color-warning-container); --chip-fg: var(--color-on-warning-container); }
+.tone-error { --chip-bg: var(--color-error-container); --chip-fg: var(--color-on-error-container); }
 
 /* Пилюля-фильтр: невыбранная — приглушённое стекло, выбранная — тинт своего
    тона с лёгкой тенью, как у активной вкладки. */
@@ -84,18 +95,19 @@ defineEmits(['click', 'remove'])
   transition: background 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s;
 }
 
-.chip.interactive.selected { box-shadow: var(--shadow-sm, none); }
-
-.chip.interactive:not(.selected) {
-  border-color: var(--acrylic-border);
-  background: var(--glass-bg);
-  box-shadow: var(--glass-edge);
+/* Выбранный фильтр — нажатая и зафиксированная кнопка: вдавлен в поверхность. */
+.chip.interactive.selected {
+  background: var(--grain), var(--chip-bg, var(--color-surface-highest));
+  color: var(--chip-fg, var(--color-text));
+  box-shadow: var(--sk-pressed-shadow);
 }
 
 .chip.interactive:not(.selected):hover {
-  border-color: color-mix(in oklch, var(--color-primary) 30%, var(--acrylic-border));
+  background: var(--sk-raised-hover-bg);
   color: var(--color-text);
 }
+
+.chip.interactive:not(.selected):active { box-shadow: var(--sk-pressed-shadow); }
 
 /* Крестик снятия — круглый, размер задаём всеми тремя свойствами (мобильный
    `button { min-height: 36px }` иначе растянет его в овал). */

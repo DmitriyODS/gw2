@@ -789,7 +789,7 @@ const logoutAsk = ref(false)
   padding: 0 12px;
   border: 1px solid color-mix(in oklch, var(--color-success) 34%, transparent);
   border-radius: var(--radius-lg);
-  background: color-mix(in oklch, var(--color-success) 12%, var(--glass-bg));
+  background: linear-gradient(color-mix(in oklch, var(--color-success) 12%, transparent), color-mix(in oklch, var(--color-success) 12%, transparent)), var(--glass-bg);
   color: var(--color-text);
   font-size: 13px;
   font-weight: 600;
@@ -979,7 +979,7 @@ const logoutAsk = ref(false)
 }
 
 .wp-rail-btn:hover { background: var(--glass-bg); border-color: var(--acrylic-border); }
-.wp-rail-btn.active { background: color-mix(in oklch, var(--color-primary) 14%, var(--glass-bg)); color: var(--color-primary); }
+.wp-rail-btn.active { background: linear-gradient(color-mix(in oklch, var(--color-primary) 14%, transparent), color-mix(in oklch, var(--color-primary) 14%, transparent)), var(--glass-bg); color: var(--color-primary); }
 .wp-rail-btn .material-symbols-outlined { font-size: 22px; }
 
 /* ── Подвал ── */

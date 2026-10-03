@@ -4,6 +4,8 @@ import (
 	"context"
 	"io"
 	"time"
+
+	"github.com/DmitriyODS/gw2/back-go/pkg/spaces"
 )
 
 // Ctx — алиас, чтобы сигнатуры портов не разбухали.
@@ -13,29 +15,31 @@ type Ctx = context.Context
 // учётных выдач.
 type RegistryRepository interface {
 	// ── Реестры ──
-	// ListRegistries — реестры области, видимые в АКТИВНОЙ компании: свои,
-	// заведённые в ней (плюс личные — вне компаний), расшаренные лично и
-	// расшаренные самой активной компании. Уровень доступа считается тем же
-	// запросом. companyID == 0 — активной компании нет.
-	ListRegistries(ctx Ctx, userID, companyID int64, scope string) ([]*Registry, error)
+	// ListRegistries — реестры области: личные, всех команд человека и
+	// расшаренные ему. Уровень доступа считается тем же запросом.
+	ListRegistries(ctx Ctx, userID int64, scope string) ([]*Registry, error)
 	// RegistriesSummary — сколько реестров доступно и имена первых в порядке
 	// списка — для живой плитки.
-	RegistriesSummary(ctx Ctx, userID, companyID int64, names int) (*RegistriesSummary, error)
+	RegistriesSummary(ctx Ctx, userID int64, names int) (*RegistriesSummary, error)
 	// GetRegistry — реестр без полей и без проверки доступа (её делает сервис).
 	GetRegistry(ctx Ctx, id int64) (*Registry, error)
 	// CountOwned — сколько реестров завёл человек (лимит тарифа).
 	CountOwned(ctx Ctx, ownerID int64) (int, error)
 	CreateRegistry(ctx Ctx, r *Registry) error
 	UpdateRegistry(ctx Ctx, id int64, name string, position int, sectionFieldID *int64, accounting bool) error
+	// MoveRegistry — сменить пространство (и автора, если реестр забирают к себе)
+	// и уровень участников команды.
+	MoveRegistry(ctx Ctx, id, ownerID int64, companyID *int64, teamAccess string) error
 	DeleteRegistry(ctx Ctx, id int64) error
 	NextRegistryPosition(ctx Ctx, ownerID int64) (int, error)
 
 	// ── Доступ ──
-	// AccessOf — эффективный уровень человека к реестру (лучший из личной шары
-	// и шары его АКТИВНОЙ компании; владельцу — AccessOwner).
-	AccessOf(ctx Ctx, registryID, userID, companyID int64) (string, error)
-	// Audience — кому адресовать сокет-события реестра: владелец, адресаты
-	// личных шар и участники компаний, которым реестр раздан.
+	// AccessOf — эффективный уровень человека к реестру: сильнейший из
+	// положения в команде-пространстве, личной шары и шар его команд.
+	AccessOf(ctx Ctx, registryID, userID int64) (string, error)
+	// Audience — кому адресовать сокет-события реестра: автор, участники
+	// команды-пространства, адресаты личных шар и участники команд, которым
+	// реестр раздан.
 	Audience(ctx Ctx, registryID int64) ([]int64, error)
 	ListUserShares(ctx Ctx, registryID int64) ([]*UserShare, error)
 	// PutUserShare — выдать или обновить адресный доступ (повторная выдача
@@ -57,7 +61,7 @@ type RegistryRepository interface {
 	// SearchRecords — глобальный поиск по записям всех реестров, доступных
 	// человеку в его активной компании (строка поиска Hola): один запрос, без
 	// обхода реестров.
-	SearchRecords(ctx Ctx, userID, companyID int64, query string, limit int) ([]*SearchHit, error)
+	SearchRecords(ctx Ctx, userID int64, query string, limit int) ([]*SearchHit, error)
 	GetRecord(ctx Ctx, id int64) (*Record, error)
 	CreateRecord(ctx Ctx, r *Record, searchText string) error
 	UpdateRecord(ctx Ctx, id int64, data map[string]any, searchText string) error
@@ -72,10 +76,11 @@ type RegistryRepository interface {
 	// RecordsForExport — записи для выгрузки/печати по тому же набору, что
 	// показан на экране. Без пагинации, порядок по created_at DESC.
 	RecordsForExport(ctx Ctx, f ExportFilter) ([]*Record, error)
-	// RecordsOfCompanies — записи вместе с их реестром: раздел «Настройки →
-	// Хранилище» показывает, в каком реестре лежит файл. Скоуп — компании,
-	// чью квоту оплачивает спрашивающий (их присылает биллинг).
-	RecordsOfCompanies(ctx Ctx, companyIDs []int64) ([]*RecordScope, error)
+	// RecordsForQuota — записи вместе с их реестром: раздел «Настройки →
+	// Хранилище» показывает, в каком реестре лежит файл. Квоту человека тратят
+	// его личные реестры и реестры команд, которые он создал (их присылает
+	// биллинг).
+	RecordsForQuota(ctx Ctx, userID int64, companyIDs []int64) ([]*RecordScope, error)
 
 	// ── Учётный реестр ──
 	// OpenIssues — открытые выдачи пачкой записей (плашки в таблице без N+1).
@@ -106,6 +111,8 @@ type UserReader interface {
 	// CompaniesOf — компании, где человек состоит: через них приходит доступ к
 	// реестрам, раздаными компании целиком.
 	CompaniesOf(ctx Ctx, userID int64) ([]int64, error)
+	// TeamRole — положение человека в команде (можно ли положить в неё реестр).
+	TeamRole(ctx Ctx, userID, companyID int64) (spaces.Role, error)
 	// CompanyMembers — участники компании (аудитория событий компанийной шары).
 	CompanyMembers(ctx Ctx, companyID int64) ([]int64, error)
 	// SearchDirectory — кандидаты в адресаты шаринга из компаний спрашивающего.
@@ -124,6 +131,8 @@ type FileStore interface {
 	// RemoveFor — best-effort удаление файлов по ключам с возвратом места в
 	// квоту (чистка при удалении записей/полей); ошибки не возвращаются.
 	RemoveFor(ctx context.Context, userID, companyID int64, paths []string)
+	// MoveFor — файлы сменили плательщика (реестр переехал между пространствами).
+	MoveFor(ctx context.Context, userID, companyID int64, paths []string) error
 	// Remove — удаление БЕЗ учёта: так чистит раздел «Хранилище», где место
 	// пересчитывает сам биллинг (он же инициатор и знает размеры).
 	Remove(paths []string)

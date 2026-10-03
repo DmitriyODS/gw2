@@ -377,8 +377,8 @@ function actionTone(a) {
   background: var(--acrylic-bg) !important;
   -webkit-backdrop-filter: var(--acrylic-blur);
   backdrop-filter: var(--acrylic-blur);
-  border: 1px solid var(--acrylic-border) !important;
-  box-shadow: var(--shadow-xl, 0 24px 60px rgba(0, 0, 0, 0.25)) !important;
+  border: 1px solid var(--sk-edge) !important;
+  box-shadow: var(--sk-panel-shadow), var(--shadow-xl, 0 24px 60px rgba(0, 0, 0, 0.25)) !important;
   overflow: hidden !important;
   display: flex !important;
   flex-direction: column !important;

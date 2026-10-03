@@ -1,3 +1,5 @@
+// Package clients — gRPC-клиенты tasksvc к другим микросервисам
+// (aisvc — семантический поиск/реиндекс). Межсервисное общение — только gRPC.
 package clients
 
 import (

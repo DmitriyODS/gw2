@@ -22,11 +22,16 @@ import LayersPanel from '@/components/boards/LayersPanel.vue'
 import PropertiesPanel from '@/components/boards/PropertiesPanel.vue'
 import ShareDialog from '@/components/boards/ShareDialog.vue'
 import * as api from '@/api/boards.js'
+import { getSocket } from '@/socket/index.js'
 import { FPS_RANGE, emptyScene, newId, normalizeScene } from '@/utils/boardScene.js'
 import { sceneToPreview } from '@/utils/boardExport.js'
 import { BOARD_EXPORT_ITEMS, boardExportFormat, useBoardDownload } from '@/composables/useBoardDownload.js'
 import { useBoardCollab } from '@/composables/useBoardCollab.js'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
+import { useNarrowWidth } from '@/composables/useNarrowWidth.js'
+import { isTypingTarget, useScopedHotkeys } from '@/composables/useScopedHotkeys.js'
+import { useFileDrop } from '@/composables/useFileDrop.js'
+import { useSceneHistory } from '@/composables/useSceneHistory.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useBoardsStore } from '@/stores/boards.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
@@ -78,22 +83,44 @@ const exportProgress = ref(0)
 const exportOpen = ref(false)
 
 // Открытое обсуждение: сам комментарий и точка на экране, где стоит булавка.
-const activeComment = ref(null)
+/* Открытая ветка — id, а не снимок: ответы соавторов приезжают в сцену, и
+   попап обязан показывать их сразу, а свой ответ — дописывать к ним, а не к
+   устаревшей копии. Булавку удалили — попап закрывается сам. */
+const activeCommentId = ref('')
+const activeComment = computed(() => (activeCommentId.value
+  ? normalizeScene(scene.value).objects.find((o) => o.id === activeCommentId.value) || null
+  : null))
 const commentAnchor = ref({ x: 0, y: 0 })
 const exportMenu = ref({ visible: false, x: 0, y: 0 })
 const boardMenu = ref({ visible: false, x: 0, y: 0 })
 const { isMobile } = useBreakpoint()
+/* Ряд кнопок шапки уходит в меню по ширине САМОЙ шапки: окно стола бывает
+   узким и на большом экране, и тогда ряд сжимал название в пару букв. */
+const headEl = ref(null)
+const narrowHead = useNarrowWidth(headEl, 760)
+const compactHead = computed(() => isMobile.value || narrowHead.value)
 
-// История: снимки сцены до правки. Хранится здесь, а не в сторе — она нужна
-// только открытому редактору и не переживает выход из доски.
-const undoStack = ref([])
-const redoStack = ref([])
-const HISTORY_LIMIT = 60
+const BACKGROUNDS = [
+  { key: 'grid', icon: 'grid_4x4', label: 'Сетка' },
+  { key: 'dots', icon: 'blur_on', label: 'Точки' },
+  { key: 'plain', icon: 'crop_portrait', label: 'Чистый' },
+]
+
+// История живёт в редакторе, а не в сторе: она не переживает выход из доски.
+const history = useSceneHistory()
 
 let saveTimer = null
 let previewTimer = null
 let drawingUntil = 0
 let dirty = false
+/* Номер правки: сохранение отправляет снимок, а пока запрос летит, человек
+   рисует дальше. Чистым редактор становится, только если после снимка правок
+   не было, — иначе последний штрих перед ответом сервера не сохранился бы. */
+let revision = 0
+let saveInFlight = null
+/* Название пришло с сервера или от соавтора: это не своя правка, сохранять её
+   незачем (иначе одно открытие доски поднимало её наверх списка). */
+let externalTitle = false
 
 const canEdit = computed(() => !board.value || board.value.my_access !== 'view')
 const me = computed(() => ({ id: auth.userId, fio: auth.user?.fio || '' }))
@@ -135,16 +162,31 @@ const { others: peers, start: startCollab, sendCursor, sendScene, sendOps } = us
   getTitle: () => title.value,
   onRemoteOps: applyRemoteOps,
   onRemoteScene: (remote) => { scene.value = normalizeScene(remote) },
-  onRemoteTitle: (remote) => { if (document.activeElement?.dataset?.boardTitle == null) title.value = remote },
+  onRemoteTitle: (remote) => {
+    if (document.activeElement?.dataset?.boardTitle != null || remote === title.value) return
+    externalTitle = true
+    title.value = remote
+  },
 })
 
 async function load() {
+  // Переход на другую доску в том же окне: сначала дописать правки прежней.
+  clearTimeout(saveTimer)
+  clearTimeout(previewTimer)
+  if (board.value && board.value.id !== boardId.value) await save()
   loading.value = true
   try {
     const data = await api.getBoard(boardId.value)
     board.value = data
-    title.value = data.title || ''
+    if (title.value !== (data.title || '')) {
+      externalTitle = true
+      title.value = data.title || ''
+    }
     scene.value = normalizeScene(data.scene)
+    dirty = false
+    history.reset()
+    selection.value = []
+    activeCommentId.value = ''
     activeLayer.value = scene.value.layers[scene.value.layers.length - 1].id
     // Доска с кадрами открывается в режиме анимации на первом кадре: иначе
     // холст показал бы только «общие» объекты, а кадры казались бы потерянными.
@@ -164,13 +206,19 @@ async function load() {
 
 // ── Правки и сохранение ──────────────────────────────────────────
 
-function onSceneUpdate(next) {
+let lastGesture = 0
+
+/* Жест холста (перенос, масштаб, поворот) приходит десятками промежуточных
+   кадров — в историю попадает только состояние ДО него, иначе одно
+   перетаскивание съедало бы всю глубину отмены. */
+function onSceneUpdate(next, meta) {
   if (!canEdit.value) return
-  pushHistory(scene.value)
+  const gesture = meta?.gesture || 0
+  if (!gesture || gesture !== lastGesture) history.push(scene.value)
+  lastGesture = gesture
   scene.value = normalizeScene(next)
   drawingUntil = Date.now() + 400
-  dirty = true
-  scheduleSave()
+  markDirty()
   schedulePreview()
 }
 
@@ -178,7 +226,9 @@ function onSceneUpdate(next) {
    остальную сцену, поэтому одновременная работа не затирает чужие штрихи. */
 function onCanvasOps(ops) {
   if (!canEdit.value) return
-  sendOps(ops)
+  const objectOps = ops.filter((op) => op.kind !== 'scene')
+  if (objectOps.length) sendOps(objectOps)
+  if (objectOps.length !== ops.length) sendScene()
 }
 
 /** Применить операции соавтора к своей сцене. */
@@ -193,8 +243,7 @@ function applyRemoteOps(ops) {
     }
   }
   scene.value = normalizeScene({ ...current, objects: [...byId.values()] })
-  dirty = true
-  scheduleSave()
+  markDirty()
 }
 
 /** Слои правит панель — они часть сцены, поэтому едут тем же путём. */
@@ -215,30 +264,25 @@ function onFramesUpdate(next) {
   sendScene()
 }
 
-function pushHistory(snapshot) {
-  undoStack.value.push(JSON.stringify(snapshot))
-  if (undoStack.value.length > HISTORY_LIMIT) undoStack.value.shift()
-  redoStack.value = []
-}
-
 function undo() {
-  const prev = undoStack.value.pop()
-  if (!prev) return
-  redoStack.value.push(JSON.stringify(scene.value))
-  scene.value = normalizeScene(JSON.parse(prev))
-  dirty = true
-  scheduleSave()
-  sendScene()
+  restore(history.undo(scene.value))
 }
 
 function redo() {
-  const next = redoStack.value.pop()
-  if (!next) return
-  undoStack.value.push(JSON.stringify(scene.value))
-  scene.value = normalizeScene(JSON.parse(next))
-  dirty = true
-  scheduleSave()
+  restore(history.redo(scene.value))
+}
+
+function restore(snapshot) {
+  if (!snapshot || !canEdit.value) return
+  scene.value = normalizeScene(snapshot)
+  markDirty()
   sendScene()
+}
+
+function markDirty() {
+  dirty = true
+  revision += 1
+  scheduleSave()
 }
 
 function scheduleSave() {
@@ -246,28 +290,44 @@ function scheduleSave() {
   saveTimer = setTimeout(save, 900)
 }
 
+/* Сохранения идут строго по одному: второй PATCH, обогнавший первый, записал
+   бы на сервер более старый снимок последним. */
 async function save() {
-  if (!dirty || !canEdit.value) return
-  saving.value = true
-  try {
-    const updated = await api.updateBoard(boardId.value, { title: title.value, scene: scene.value })
-    dirty = false
-    boards.applyBoardSocket('updated', updated)
-  } catch {
-    notify.error('Не удалось сохранить доску')
-  } finally {
-    saving.value = false
+  if (saveInFlight) {
+    await saveInFlight
+    return save()
   }
+  // id — открытой доски, а не адреса: при переходе на другую доску сцена
+  // ещё старая, и запись по новому адресу отдала бы её чужой доске.
+  if (!dirty || !canEdit.value || !board.value) return
+  const id = board.value.id
+  const snapshot = revision
+  saving.value = true
+  saveInFlight = api.updateBoard(id, { title: title.value, scene: scene.value })
+    .then((updated) => {
+      if (revision === snapshot) dirty = false
+      boards.applyBoardSocket('updated', updated)
+    })
+    .catch((err) => {
+      if (err?.status === 404) leaveDeleted()
+      else notify.error(err?.message || 'Не удалось сохранить доску')
+    })
+    .finally(() => {
+      saving.value = false
+      saveInFlight = null
+    })
+  await saveInFlight
 }
 
 // Превью — тяжеловато для каждого штриха, поэтому снимаем после паузы.
 function schedulePreview() {
   clearTimeout(previewTimer)
+  const id = board.value?.id
   previewTimer = setTimeout(async () => {
-    if (!canEdit.value) return
+    if (!canEdit.value || !id || board.value?.id !== id) return
     try {
       const blob = await sceneToPreview(scene.value)
-      if (blob) await api.uploadPreview(boardId.value, blob)
+      if (blob) await api.uploadPreview(id, blob)
     } catch { /* превью не критично */ }
   }, 4000)
 }
@@ -275,7 +335,10 @@ function schedulePreview() {
 // ── Комментарии ──────────────────────────────────────────────────
 
 function onCommentOpen(comment) {
-  activeComment.value = comment
+  // Брошенный пустой черновик предыдущей булавки убираем.
+  const prev = activeComment.value
+  if (prev && prev.id !== comment.id && !prev.text && canEdit.value) onCommentDelete(prev)
+  activeCommentId.value = comment.id
   const cam = canvasRef.value?.camera
   const rect = canvasRef.value?.$el?.getBoundingClientRect?.()
   if (cam && rect) {
@@ -294,18 +357,19 @@ function onCommentUpdate(next) {
     objects: current.objects.map((o) => (o.id === next.id ? next : o)),
   })
   sendOps([{ kind: 'upsert', objects: [next] }])
-  activeComment.value = next
 }
 
 function onCommentDelete(comment) {
   const current = normalizeScene(scene.value)
   onSceneUpdate({ ...current, objects: current.objects.filter((o) => o.id !== comment.id) })
   sendOps([{ kind: 'remove', ids: [comment.id] }])
-  activeComment.value = null
+  activeCommentId.value = ''
 }
 
 function setBackground(key) {
+  if (key === background.value) return
   onSceneUpdate({ ...normalizeScene(scene.value), background: key })
+  sendScene() // фон — свойство всей сцены, соавторы должны увидеть его сразу
 }
 
 // ── Кадры ────────────────────────────────────────────────────────
@@ -360,19 +424,59 @@ function pickImage() {
   fileInput.value?.click()
 }
 
-async function onImagePicked(e) {
-  const file = e.target.files?.[0]
+function onImagePicked(e) {
+  const files = Array.from(e.target.files || [])
   e.target.value = ''
-  if (!file) return
-  try {
-    const { path } = await api.uploadImage(boardId.value, file)
-    const img = new Image()
-    img.onload = () => canvasRef.value?.placeImage(path, img.naturalWidth, img.naturalHeight)
-    img.onerror = () => canvasRef.value?.placeImage(path)
-    img.src = path
-  } catch {
-    notify.error('Не удалось загрузить картинку')
+  uploadImages(files)
+}
+
+// Сколько картинок ещё едет на сервер — подпись в шапке вместо тишины.
+const uploading = ref(0)
+
+/* Картинки ставятся по очереди со сдвигом: брошенная пачка иначе легла бы
+   стопкой одна на другую. at — точка экрана, куда их бросили. */
+async function uploadImages(files, at = null) {
+  const images = files.filter((f) => f.type?.startsWith('image/'))
+  if (!canEdit.value || !images.length) return
+  const id = board.value?.id
+  uploading.value += images.length
+  for (const [i, file] of images.entries()) {
+    try {
+      const { path } = await api.uploadImage(id, file)
+      if (board.value?.id !== id) continue // ушли на другую доску
+      const point = at ? { x: at.x + i * 24, y: at.y + i * 24 } : null
+      await new Promise((resolve) => {
+        const img = new Image()
+        img.onload = () => { canvasRef.value?.placeImage(path, img.naturalWidth, img.naturalHeight, point); resolve() }
+        img.onerror = () => { canvasRef.value?.placeImage(path, undefined, undefined, point); resolve() }
+        img.src = path
+      })
+    } catch (err) {
+      notify.error(err?.message || `Не удалось загрузить «${file.name}»`)
+    } finally {
+      uploading.value -= 1
+    }
   }
+}
+
+const imageDrop = useFileDrop({
+  canDrop: () => canEdit.value && !loading.value,
+  onFiles: (files) => uploadImages(files, lastDropPoint),
+})
+let lastDropPoint = null
+
+function onBodyDrop(e) {
+  lastDropPoint = { x: e.clientX, y: e.clientY }
+  imageDrop.onDrop(e)
+}
+
+// Картинка из буфера обмена (скриншот) — Ctrl+V прямо на доску.
+function onPaste(e) {
+  if (!hotkeysActive() || !canEdit.value || isTypingTarget(e.target)) return
+  const files = Array.from(e.clipboardData?.files || [])
+  if (!files.some((f) => f.type?.startsWith('image/'))) return
+  e.preventDefault()
+  uploadImages(files)
 }
 
 // ── Выгрузка ─────────────────────────────────────────────────────
@@ -380,17 +484,14 @@ async function onImagePicked(e) {
 /* Те же действия, что в ряду кнопок на широком экране. Фон — подменю: три
    варианта отдельными пунктами заняли бы половину списка. */
 const boardMenuItems = computed(() => [
-  { label: 'Отменить', icon: 'undo', action: 'undo', disabled: !undoStack.value.length },
-  { label: 'Повторить', icon: 'redo', action: 'redo', disabled: !redoStack.value.length },
+  { label: 'Отменить', icon: 'undo', action: 'undo', disabled: !history.canUndo.value },
+  { label: 'Повторить', icon: 'redo', action: 'redo', disabled: !history.canRedo.value },
   { divider: true },
   {
     label: 'Фон',
     icon: 'grid_4x4',
-    children: [
-      { label: 'Сетка', icon: 'grid_4x4', action: 'bg:grid' },
-      { label: 'Точки', icon: 'blur_on', action: 'bg:dots' },
-      { label: 'Чистый', icon: 'crop_portrait', action: 'bg:plain' },
-    ],
+    disabled: !canEdit.value,
+    children: BACKGROUNDS.map((bg) => ({ label: bg.label, icon: bg.icon, action: `bg:${bg.key}` })),
   },
   { label: layersOpen.value ? 'Скрыть слои' : 'Слои', icon: 'layers', action: 'layers' },
   { label: propsOpen.value ? 'Скрыть свойства' : 'Свойства', icon: 'tune', action: 'props' },
@@ -438,22 +539,44 @@ function exportBoard(action) {
 // ── Клавиатура ───────────────────────────────────────────────────
 
 function onKeyDown(e) {
-  if (!(e.ctrlKey || e.metaKey)) return
+  if (!(e.ctrlKey || e.metaKey) || !canEdit.value) return
   const key = e.key.toLowerCase()
   if (key === 'z' && !e.shiftKey) { e.preventDefault(); undo() }
   else if ((key === 'z' && e.shiftKey) || key === 'y') { e.preventDefault(); redo() }
-  else if (key === 's') { e.preventDefault(); save() }
+  else if (key === 's') { e.preventDefault(); clearTimeout(saveTimer); save() }
 }
+
+const pageRef = ref(null)
+const { arm: armHotkeys, isActive: hotkeysActive } = useScopedHotkeys(() => pageRef.value?.$el, onKeyDown)
 
 // ── Жизненный цикл ───────────────────────────────────────────────
 
+/* Доску удалили (владелец — с другого устройства или из списка в соседнем
+   окне) либо отозвали доступ: держать редактор открытым незачем — каждое
+   автосохранение кончалось бы ошибкой. */
+function leaveDeleted() {
+  if (!board.value) return
+  board.value = null
+  dirty = false
+  clearTimeout(saveTimer)
+  notify.warn('Доска удалена или доступ к ней закрыт')
+  router.replace('/boards')
+}
+
+function onBoardDeleted(p) {
+  if (p?.id && p.id === board.value?.id) leaveDeleted()
+}
+
 onMounted(() => {
   load()
-  window.addEventListener('keydown', onKeyDown)
+  armHotkeys()
+  document.addEventListener('paste', onPaste)
+  getSocket()?.on('board:deleted', onBoardDeleted)
 })
 
 onBeforeUnmount(() => {
-  window.removeEventListener('keydown', onKeyDown)
+  document.removeEventListener('paste', onPaste)
+  getSocket()?.off('board:deleted', onBoardDeleted)
   clearTimeout(saveTimer)
   clearTimeout(previewTimer)
   save()
@@ -479,9 +602,12 @@ watch(frames, (list) => {
 
 watch(boardId, () => { if (boardId.value) load() })
 watch(title, () => {
+  if (externalTitle) {
+    externalTitle = false
+    return
+  }
   if (!canEdit.value || loading.value) return
-  dirty = true
-  scheduleSave()
+  markDirty()
 })
 </script>
 
@@ -489,8 +615,8 @@ watch(title, () => {
   <!-- bare: доска сама себе фон — панель раздела под холстом не нужна.
        headless: шапку с названием, соавторами и инструментами рисует редактор.
        scroll=false: холст занимает всё тело и прокрутки не имеет. -->
-  <AppPage class="be" bare headless flush :scroll="false">
-    <header class="be-head">
+  <AppPage ref="pageRef" class="be" bare headless flush :scroll="false" data-board-scope>
+    <header ref="headEl" class="be-head">
       <button type="button" class="be-back" title="К доскам" aria-label="К доскам" @click="router.push('/boards')">
         <span class="material-symbols-outlined">arrow_back</span>
       </button>
@@ -514,14 +640,15 @@ watch(title, () => {
         >{{ (p.fio || '?').charAt(0) }}</span>
       </div>
 
-      <span v-if="saving" class="be-state">Сохраняем…</span>
+      <span v-if="uploading" class="be-state">Загружаем картинку…</span>
+      <span v-else-if="saving" class="be-state">Сохраняем…</span>
       <span v-else-if="!canEdit" class="be-state">Только просмотр</span>
 
       <!-- На телефоне ряд из семи кнопок не помещается: он переносился второй
            строкой, а поле названия схлопывалось в кружок. Поэтому всё, кроме
            отмены/повтора, уходит в меню. -->
       <button
-        v-if="isMobile"
+        v-if="compactHead"
         type="button"
         class="be-btn"
         title="Действия с доской"
@@ -532,19 +659,20 @@ watch(title, () => {
       </button>
 
       <div v-else class="be-actions">
-        <button type="button" class="be-btn" title="Отменить" aria-label="Отменить" :disabled="!undoStack.length" @click="undo">
+        <button type="button" class="be-btn" title="Отменить" aria-label="Отменить" :disabled="!history.canUndo.value" @click="undo">
           <span class="material-symbols-outlined">undo</span>
         </button>
-        <button type="button" class="be-btn" title="Повторить" aria-label="Повторить" :disabled="!redoStack.length" @click="redo">
+        <button type="button" class="be-btn" title="Повторить" aria-label="Повторить" :disabled="!history.canRedo.value" @click="redo">
           <span class="material-symbols-outlined">redo</span>
         </button>
         <button
-          v-for="bg in [{ key: 'grid', icon: 'grid_4x4' }, { key: 'dots', icon: 'blur_on' }, { key: 'plain', icon: 'crop_portrait' }]"
+          v-for="bg in BACKGROUNDS"
           :key="bg.key"
           type="button"
           class="be-btn"
           :class="{ 'is-active': background === bg.key }"
-          :title="`Фон: ${bg.key}`"
+          :title="`Фон: ${bg.label.toLowerCase()}`"
+          :aria-label="`Фон: ${bg.label.toLowerCase()}`"
           :disabled="!canEdit"
           @click="setBackground(bg.key)"
         >
@@ -597,7 +725,17 @@ watch(title, () => {
       </div>
     </header>
 
-    <div class="be-body">
+    <div
+      class="be-body"
+      @dragenter.prevent="imageDrop.onDragEnter"
+      @dragover.prevent="imageDrop.onDragOver"
+      @dragleave="imageDrop.onDragLeave"
+      @drop.prevent="onBodyDrop"
+    >
+      <div v-if="imageDrop.dragOver.value" class="be-drop">
+        <span class="material-symbols-outlined">add_photo_alternate</span>
+        Отпустите, чтобы положить на доску
+      </div>
       <BrandLoader v-if="loading" :size="64" class="be-loader" />
       <template v-else>
         <BoardCanvas
@@ -635,7 +773,7 @@ watch(title, () => {
           :read-only="!canEdit"
           @update="onCommentUpdate"
           @delete="onCommentDelete"
-          @close="activeComment = null"
+          @close="activeCommentId = ''"
         />
 
         <!-- Панели правого края: слои постоянные, свойства приходят с
@@ -716,7 +854,7 @@ watch(title, () => {
       </template>
     </div>
 
-    <input ref="fileInput" type="file" accept="image/*" hidden @change="onImagePicked" />
+    <input ref="fileInput" type="file" accept="image/*" multiple hidden @change="onImagePicked" />
 
     <ContextMenu
       :visible="boardMenu.visible"
@@ -780,7 +918,7 @@ watch(title, () => {
 
 .be-state {
   font-size: 12px;
-  color: var(--color-text-muted);
+  color: var(--color-text-dim);
   white-space: nowrap;
 }
 
@@ -891,6 +1029,25 @@ watch(title, () => {
 .be-toolbar.has-side { padding-right: 300px; }
 
 .be-loader { margin: auto; }
+
+.be-drop {
+  position: absolute;
+  inset: 8px;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 2px dashed var(--color-primary);
+  border-radius: var(--radius-lg);
+  background: color-mix(in oklab, var(--color-primary) 10%, transparent);
+  color: var(--color-primary);
+  font-weight: 600;
+  pointer-events: none;
+}
+
+.be-drop .material-symbols-outlined { font-size: 40px; }
 
 @media (max-width: 768px) {
   .be :deep(.page-body) { padding: 4px; gap: 4px; }

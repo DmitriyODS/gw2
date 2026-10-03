@@ -6,9 +6,9 @@ import (
 	"github.com/DmitriyODS/gw2/back-go/diary/internal/domain"
 )
 
-// ListMembers — пользователи, которым ежедневник открыт адресно (владелец).
+// ListMembers — пользователи, которым ежедневник открыт адресно.
 func (s *Service) ListMembers(ctx context.Context, userID, diaryID int64) ([]*domain.Member, error) {
-	if _, err := s.requireOwned(ctx, userID, diaryID); err != nil {
+	if _, err := s.requireManaged(ctx, userID, diaryID); err != nil {
 		return nil, err
 	}
 	return s.repo.ListMembers(ctx, diaryID)
@@ -19,7 +19,7 @@ func (s *Service) ListMembers(ctx context.Context, userID, diaryID int64) ([]*do
 // вызов обновляет право. Шлёт адресату событие diary:shared — у него
 // ежедневник появляется во вкладке «Поделились» без перезагрузки.
 func (s *Service) AddMember(ctx context.Context, userID, diaryID, memberID int64, canCheck bool) (*domain.Member, error) {
-	d, err := s.requireOwned(ctx, userID, diaryID)
+	d, err := s.requireManaged(ctx, userID, diaryID)
 	if err != nil {
 		return nil, err
 	}
@@ -36,18 +36,22 @@ func (s *Service) AddMember(ctx context.Context, userID, diaryID, memberID int64
 	if err := s.repo.AddMember(ctx, diaryID, memberID, canCheck); err != nil {
 		return nil, err
 	}
-	if owner, err := s.users.GetUser(ctx, userID); err == nil && owner != nil {
+	if owner, err := s.users.GetUser(ctx, d.OwnerID); err == nil && owner != nil {
 		d.OwnerName, d.OwnerAvatar = owner.FIO, owner.AvatarPath
 	}
 	d.Shared = true
 	d.CanCheck = canCheck
+	d.MyAccess = domain.AccessView
+	if canCheck {
+		d.MyAccess = domain.AccessCheck
+	}
 	s.bus.Publish(ctx, "diary:shared", []string{userRoom(memberID)}, diaryPayload(d))
 	return &domain.Member{UserID: member.ID, FIO: member.FIO, AvatarPath: member.AvatarPath, CanCheck: canCheck}, nil
 }
 
 // RemoveMember — закрыть адресный доступ. Шлёт адресату diary:unshared.
 func (s *Service) RemoveMember(ctx context.Context, userID, diaryID, memberID int64) error {
-	if _, err := s.requireOwned(ctx, userID, diaryID); err != nil {
+	if _, err := s.requireManaged(ctx, userID, diaryID); err != nil {
 		return err
 	}
 	if err := s.repo.RemoveMember(ctx, diaryID, memberID); err != nil {

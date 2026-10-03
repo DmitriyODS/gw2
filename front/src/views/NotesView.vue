@@ -1021,8 +1021,8 @@ function onFileDrop(e) {
 
 /* Особые группировки (Все/Поделились/Архив) — тонированные, без действий. */
 .na-specials { margin-bottom: 10px; }
-.na-special { background: color-mix(in oklch, var(--color-primary) 8%, var(--acrylic-card-bg)); border-color: color-mix(in oklch, var(--color-primary) 22%, transparent); }
-.na-special:hover { background: color-mix(in oklch, var(--color-primary) 14%, var(--acrylic-card-bg)); }
+.na-special { background: var(--grain), color-mix(in oklch, var(--color-primary) 8%, var(--color-surface)); border-color: color-mix(in oklch, var(--color-primary) 22%, transparent); }
+.na-special:hover { background: var(--grain), color-mix(in oklch, var(--color-primary) 14%, var(--color-surface)); }
 .na-special .na-fcard-ic { color: var(--color-primary); }
 
 /* ── Плитки заметок ── */

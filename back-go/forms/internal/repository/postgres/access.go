@@ -26,24 +26,27 @@ func ignoreNoRows(err error) error {
    (accessExpr в forms.go) — правило одно на всех. */
 
 // AccessOf — эффективный уровень человека к форме ("" — доступа нет).
-// companyID — активная компания сессии (0 — её нет).
-func (r *Repo) AccessOf(ctx context.Context, formID, userID, companyID int64) (string, error) {
+func (r *Repo) AccessOf(ctx context.Context, formID, userID int64) (string, error) {
 	var access string
 	err := r.pool.QueryRow(ctx,
-		`SELECT `+accessExpr+` FROM forms f WHERE f.id = $3`,
-		userID, companyID, formID).Scan(&access)
+		`SELECT `+accessExpr+` FROM forms f WHERE f.id = $2`,
+		userID, formID).Scan(&access)
 	if err != nil {
 		return domain.AccessNone, ignoreNoRows(err)
 	}
 	return access, nil
 }
 
-// Audience — кому адресовать сокет-события формы: владелец, адресаты личных шар
-// и участники компаний, которым форма роздана. Событие уходит поимённо (комнаты
-// user_{id}), а не в общую комнату: форма не принадлежит компании.
+// Audience — кому адресовать сокет-события формы: автор, участники
+// команды-пространства, адресаты личных шар и участники команд, которым форма
+// роздана. Событие уходит поимённо (комнаты user_{id}).
 func (r *Repo) Audience(ctx context.Context, formID int64) ([]int64, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT owner_id FROM forms WHERE id = $1
+		UNION
+		SELECT uc.user_id FROM forms f
+		  JOIN user_companies uc ON uc.company_id = f.company_id
+		 WHERE f.id = $1
 		UNION
 		SELECT sh.user_id FROM form_user_shares sh
 		 WHERE sh.form_id = $1 AND sh.user_id IS NOT NULL

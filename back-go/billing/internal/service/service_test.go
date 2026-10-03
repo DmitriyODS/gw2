@@ -361,6 +361,30 @@ func (r *fakeRepo) RemoveFiles(_ context.Context, userID int64, keys []string) (
 	}
 	return freed, nil
 }
+func (r *fakeRepo) MoveFiles(_ context.Context, userID, companyID int64, keys []string) (int64, error) {
+	var moved int64
+	for from, files := range r.files {
+		if from == userID {
+			continue
+		}
+		for _, k := range keys {
+			f, ok := files[k]
+			if !ok {
+				continue
+			}
+			delete(files, k)
+			f.CompanyID = companyID
+			if r.files[userID] == nil {
+				r.files[userID] = map[string]*domain.StoredFile{}
+			}
+			r.files[userID][k] = f
+			r.storage[from] -= f.Size
+			r.storage[userID] += f.Size
+			moved++
+		}
+	}
+	return moved, nil
+}
 func (r *fakeRepo) TopFiles(_ context.Context, userID int64, service string, limit int) ([]*domain.StoredFile, error) {
 	out := []*domain.StoredFile{}
 	for _, f := range r.files[userID] {
@@ -719,5 +743,26 @@ func TestSchedulerCreatesRenewalOrder(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("автопродление должно выставлять счёт на новый период")
+	}
+}
+
+// Вещь уехала в команду: файлы и занятое место переходят к создателю команды.
+func TestMoveStorageToTeamCreator(t *testing.T) {
+	svc, repo, identity := newService(t)
+	ctx := context.Background()
+	identity.owners[10] = 2
+	if _, err := svc.TrackStorage(ctx, 1, 0, "registry",
+		[]*domain.StoredFile{{Key: "registry/a.png", Size: 300}}, nil); err != nil {
+		t.Fatal(err)
+	}
+	moved, err := svc.MoveStorage(ctx, 1, 10, []string{"registry/a.png"})
+	if err != nil || moved != 1 {
+		t.Fatalf("перенос: moved=%d err=%v", moved, err)
+	}
+	if repo.storage[1] != 0 || repo.storage[2] != 300 {
+		t.Fatalf("место не переехало: автор %d, создатель %d", repo.storage[1], repo.storage[2])
+	}
+	if f := repo.files[2]["registry/a.png"]; f == nil || f.CompanyID != 10 {
+		t.Fatalf("журнал не переписан: %+v", repo.files[2])
 	}
 }

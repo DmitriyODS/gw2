@@ -72,6 +72,7 @@ func main() {
 
 	svc := service.New(service.Deps{
 		Repo:  repo,
+		Users: users,
 		Files: fileStore,
 		Bus:   events.NewPublisher(rdb, log, "gw2:calendar:events"),
 		Log:   log,

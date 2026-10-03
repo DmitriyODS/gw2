@@ -55,13 +55,13 @@ var QuestionTypes = map[string]bool{
 
 // Границы, общие для всех форм.
 const (
-	MaxOptions   = 200      // вариантов у одного вопроса
-	MaxGridRows  = 50       // строк/столбцов сетки
-	MaxFiles     = 10       // файлов в одном файловом вопросе
-	MaxFileSize  = 1 << 30  // потолок файла ответа (едет частями)
-	MaxImageSize = 2 << 20  // потолок картинки-иллюстрации
-	ScaleMaxTop  = 10       // верх линейной шкалы
-	RatingMaxTop = 10       // максимум звёзд
+	MaxOptions   = 200     // вариантов у одного вопроса
+	MaxGridRows  = 50      // строк/столбцов сетки
+	MaxFiles     = 10      // файлов в одном файловом вопросе
+	MaxFileSize  = 1 << 30 // потолок файла ответа (едет частями)
+	MaxImageSize = 2 << 20 // потолок картинки-иллюстрации
+	ScaleMaxTop  = 10      // верх линейной шкалы
+	RatingMaxTop = 10      // максимум звёзд
 )
 
 // Answerable — требует ли тип ответа (у пояснительного блока ответа нет).
@@ -284,12 +284,12 @@ func (q *Question) Normalize() {
 // ── Значения ответов ─────────────────────────────────────────────
 
 var (
-	emailRe = regexp.MustCompile(`^[^@\s]+@[^@\s.]+(\.[^@\s.]+)+$`)
-	urlRe   = regexp.MustCompile(`^(https?://)?[^\s/$.?#][^\s]*$`)
-	dateRe  = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
+	emailRe  = regexp.MustCompile(`^[^@\s]+@[^@\s.]+(\.[^@\s.]+)+$`)
+	urlRe    = regexp.MustCompile(`^(https?://)?[^\s/$.?#][^\s]*$`)
+	dateRe   = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
 	dateTmRe = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}$`)
-	timeRe  = regexp.MustCompile(`^\d{2}:\d{2}$`)
-	numRe   = regexp.MustCompile(`^[+-]?([0-9]+([.][0-9]*)?|[.][0-9]+)$`)
+	timeRe   = regexp.MustCompile(`^\d{2}:\d{2}$`)
+	numRe    = regexp.MustCompile(`^[+-]?([0-9]+([.][0-9]*)?|[.][0-9]+)$`)
 )
 
 /*

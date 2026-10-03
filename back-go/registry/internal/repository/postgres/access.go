@@ -25,25 +25,27 @@ func ignoreNoRows(err error) error {
    (accessExpr в registries.go) — правило одно на всех. */
 
 // AccessOf — эффективный уровень человека к реестру ("" — доступа нет).
-// companyID — активная компания сессии (0 — её нет).
-func (r *Repo) AccessOf(ctx context.Context, registryID, userID, companyID int64) (string, error) {
+func (r *Repo) AccessOf(ctx context.Context, registryID, userID int64) (string, error) {
 	var access string
 	err := r.pool.QueryRow(ctx,
-		`SELECT `+accessExpr+` FROM registries reg WHERE reg.id = $3`,
-		userID, companyID, registryID).Scan(&access)
+		`SELECT `+accessExpr+` FROM registries reg WHERE reg.id = $2`,
+		userID, registryID).Scan(&access)
 	if err != nil {
 		return domain.AccessNone, ignoreNoRows(err)
 	}
 	return access, nil
 }
 
-// Audience — кому адресовать сокет-события реестра: владелец, адресаты личных
-// шар и участники компаний, которым реестр раздан. Событие уходит поимённо
-// (комнаты user_{id}), а не в общую комнату: реестр больше не принадлежит
-// компании, и «всем» его показывать нельзя.
+// Audience — кому адресовать сокет-события реестра: автор, участники
+// команды-пространства, адресаты личных шар и участники команд, которым реестр
+// раздан. Событие уходит поимённо (комнаты user_{id}), а не в общую комнату.
 func (r *Repo) Audience(ctx context.Context, registryID int64) ([]int64, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT owner_id FROM registries WHERE id = $1
+		UNION
+		SELECT uc.user_id FROM registries reg
+		  JOIN user_companies uc ON uc.company_id = reg.company_id
+		 WHERE reg.id = $1
 		UNION
 		SELECT sh.user_id FROM registry_user_shares sh
 		 WHERE sh.registry_id = $1 AND sh.user_id IS NOT NULL

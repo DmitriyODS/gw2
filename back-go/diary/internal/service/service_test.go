@@ -4,11 +4,13 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/DmitriyODS/gw2/back-go/diary/internal/domain"
+	"github.com/DmitriyODS/gw2/back-go/pkg/spaces"
 )
 
 func discardLogger() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard, nil)) }
@@ -20,7 +22,78 @@ type fakeRepo struct {
 	members    map[int64]map[int64]bool // diaryID → userID → canCheck
 	lastSearch string
 	nextID     int64
+	teams      map[int64][]int64 // userID → команды
 }
+
+// AccessOf — зеркало accessExpr: хозяин личного и автор ежедневника своей
+// команды — владельцы, участникам — team_access, адресатам — view/check.
+func (f *fakeRepo) AccessOf(_ domain.Ctx, diaryID, userID int64) (string, error) {
+	d := f.diaries[diaryID]
+	if d == nil {
+		return domain.AccessNone, nil
+	}
+	best := domain.AccessNone
+	if d.CompanyID == nil {
+		if d.OwnerID == userID {
+			return domain.AccessOwner, nil
+		}
+	} else if slices.Contains(f.teams[userID], *d.CompanyID) {
+		if d.OwnerID == userID {
+			return domain.AccessOwner, nil
+		}
+		best = d.TeamAccess
+	}
+	if canCheck, ok := f.members[diaryID][userID]; ok {
+		lvl := domain.AccessView
+		if canCheck {
+			lvl = domain.AccessCheck
+		}
+		if !domain.AccessAtLeast(best, lvl) {
+			best = lvl
+		}
+	}
+	return best, nil
+}
+func (f *fakeRepo) Audience(_ domain.Ctx, diaryID int64) ([]int64, error) {
+	out := []int64{}
+	if d := f.diaries[diaryID]; d != nil {
+		out = append(out, d.OwnerID)
+	}
+	for uid := range f.members[diaryID] {
+		out = append(out, uid)
+	}
+	return out, nil
+}
+func (f *fakeRepo) MyDay(_ domain.Ctx, ownerID int64) (*domain.Diary, error) {
+	for _, d := range f.diaries {
+		if d.OwnerID == ownerID && d.Kind == domain.KindMyDay {
+			return d, nil
+		}
+	}
+	f.nextID++
+	d := &domain.Diary{ID: f.nextID, OwnerID: ownerID, Kind: domain.KindMyDay, Name: "Мой день"}
+	f.diaries[d.ID] = d
+	return d, nil
+}
+func (f *fakeRepo) MoveDiary(_ domain.Ctx, id, ownerID int64, companyID *int64, teamAccess string) error {
+	d := f.diaries[id]
+	d.OwnerID, d.CompanyID, d.TeamAccess = ownerID, companyID, teamAccess
+	return nil
+}
+func (f *fakeRepo) TodayEntries(_ domain.Ctx, userID int64, day time.Time, _ int) ([]*domain.Entry, map[int64]string, error) {
+	out := []*domain.Entry{}
+	names := map[int64]string{}
+	for _, e := range f.entries {
+		d := f.diaries[e.DiaryID]
+		if e.Done || d == nil || d.OwnerID != userID || (!e.Date.IsZero() && e.Date.After(day)) {
+			continue
+		}
+		names[d.ID] = d.Name
+		out = append(out, e)
+	}
+	return out, names, nil
+}
+func (f *fakeRepo) DoneOn(domain.Ctx, int64, time.Time, time.Time) (int, error) { return 0, nil }
 
 func newFakeRepo() *fakeRepo {
 	return &fakeRepo{
@@ -192,10 +265,13 @@ func (f *fakeRepo) RemoveMember(_ domain.Ctx, diaryID, userID int64) error {
 	return nil
 }
 
-type fakeUsers struct{}
+type fakeUsers struct{ teams map[int64][]int64 }
 
 func (fakeUsers) GetUser(_ domain.Ctx, id int64) (*domain.User, error) {
 	return &domain.User{ID: id, FIO: "Тест", IsActive: true}, nil
+}
+func (u fakeUsers) TeamRole(_ domain.Ctx, userID, companyID int64) (spaces.Role, error) {
+	return spaces.Role{Member: slices.Contains(u.teams[userID], companyID)}, nil
 }
 
 type fakeBus struct {
@@ -212,8 +288,76 @@ func newTestService() (*Service, *fakeRepo, *fakeBus) {
 	repo := newFakeRepo()
 	repo.diaries[1] = &domain.Diary{ID: 1, OwnerID: 7, Name: "Личный"}
 	repo.nextID = 1
+	repo.teams = map[int64][]int64{}
 	bus := &fakeBus{}
-	return New(Deps{Repo: repo, Users: fakeUsers{}, Bus: bus, Log: discardLogger()}), repo, bus
+	return New(Deps{Repo: repo, Users: fakeUsers{teams: repo.teams}, Bus: bus, Log: discardLogger()}), repo, bus
+}
+
+// «Мой день»: заводится сам, принимает дела без срока и вложения; обычный
+// ежедневник без даты запись не принимает.
+func TestMyDay_UndatedEntriesAndAttachments(t *testing.T) {
+	svc, _, _ := newTestService()
+	ctx := context.Background()
+	my, err := svc.MyDay(ctx, 7)
+	if err != nil || my.Kind != domain.KindMyDay {
+		t.Fatalf("«Мой день» не завёлся: %+v, %v", my, err)
+	}
+	again, _ := svc.MyDay(ctx, 7)
+	if again.ID != my.ID {
+		t.Fatal("«Мой день» должен быть один")
+	}
+	parent := int64(3)
+	atts := []domain.Attachment{{Kind: "note", ID: 5, Title: "Смета"},
+		{Kind: "registry_record", ID: 9, ParentID: &parent, Title: "Ноутбук"},
+		{Kind: "note", ID: 5, Title: "дубль"}}
+	e, err := svc.CreateEntry(ctx, 7, my.ID, EntryInput{Title: "Подумать", Attachments: &atts})
+	if err != nil {
+		t.Fatalf("дело без срока в «Моём дне»: %v", err)
+	}
+	if !e.Date.IsZero() || len(e.Attachments) != 2 {
+		t.Errorf("дело без срока с двумя вложениями: %+v", e)
+	}
+	bad := []domain.Attachment{{Kind: "registry_record", ID: 9}}
+	if _, err := svc.CreateEntry(ctx, 7, my.ID, EntryInput{Title: "x", Attachments: &bad}); err != domain.ErrAttachmentInvalid {
+		t.Errorf("запись реестра без реестра должна отбиваться, получено %v", err)
+	}
+	if _, err := svc.CreateEntry(ctx, 7, 1, EntryInput{Title: "x"}); err != domain.ErrDateRequired {
+		t.Errorf("обычный ежедневник без даты, получено %v", err)
+	}
+	if _, err := svc.UpdateDiary(ctx, 7, my.ID, "Другое"); err != domain.ErrMyDayFixed {
+		t.Errorf("«Мой день» не переименовать, получено %v", err)
+	}
+
+	today, err := svc.Today(ctx, 7, time.Now(), time.Now(), time.Now())
+	if err != nil {
+		t.Fatalf("Today: %v", err)
+	}
+	if today.MyDayID != my.ID || len(today.Later) != 1 {
+		t.Errorf("дело без срока должно попасть в «Потом»: %+v", today)
+	}
+}
+
+// Ежедневник команды: участник ведёт записи, но не удаляет ежедневник.
+func TestTeamDiaryAccess(t *testing.T) {
+	svc, repo, _ := newTestService()
+	ctx := context.Background()
+	repo.teams[7] = []int64{50}
+	repo.teams[8] = []int64{50}
+	team := int64(50)
+	d, err := svc.CreateDiary(ctx, 7, &team, "Отдел")
+	if err != nil {
+		t.Fatalf("ежедневник команды: %v", err)
+	}
+	if _, err := svc.CreateEntry(ctx, 8, d.ID, EntryInput{Title: "Дело", Date: time.Now()}); err != nil {
+		t.Errorf("участник ведёт записи: %v", err)
+	}
+	if err := svc.DeleteDiary(ctx, 8, d.ID); err != domain.ErrOwnerOnly {
+		t.Errorf("участник не удаляет ежедневник команды, получено %v", err)
+	}
+	foreign := int64(51)
+	if _, err := svc.CreateDiary(ctx, 7, &foreign, "Чужая"); err != domain.ErrNotTeamMember {
+		t.Errorf("в чужую команду нельзя, получено %v", err)
+	}
 }
 
 func TestCreateEntry_BuildsSearchTextAndValidates(t *testing.T) {
@@ -267,8 +411,8 @@ func TestSharedMemberReadOnly(t *testing.T) {
 	if !d.Shared {
 		t.Error("для адресата Shared должен быть true (read-only)")
 	}
-	// Но не может его менять.
-	if _, err := svc.UpdateDiary(context.Background(), 42, 1, "Хочу переименовать"); err != domain.ErrDiaryNotFound {
+	// Но не может его менять — и узнаёт об этом честно: ежедневник он видит.
+	if _, err := svc.UpdateDiary(context.Background(), 42, 1, "Хочу переименовать"); err != domain.ErrOwnerOnly {
 		t.Errorf("адресат не должен править чужой ежедневник, получено %v", err)
 	}
 	// И видит его в списке «Поделились».
@@ -311,7 +455,7 @@ func TestSetDone_MemberCanCheck(t *testing.T) {
 		t.Errorf("адресат с can_check должен отмечать: %v", err)
 	}
 	// Но по-прежнему не может редактировать содержимое.
-	if _, err := svc.UpdateEntry(context.Background(), 42, 1, e.ID, EntryInput{Date: at, Title: "Взлом"}); err != domain.ErrDiaryNotFound {
+	if _, err := svc.UpdateEntry(context.Background(), 42, 1, e.ID, EntryInput{Date: at, Title: "Взлом"}); err != domain.ErrReadOnly {
 		t.Errorf("can_check не даёт права правки, получено %v", err)
 	}
 }
@@ -364,7 +508,7 @@ func TestReorderEntries_OwnerOnlyAndPositions(t *testing.T) {
 
 	// Чужому (даже адресату) порядок менять нельзя.
 	repo.members[1] = map[int64]bool{42: true}
-	if err := svc.ReorderEntries(context.Background(), 42, 1, at, []int64{b.ID, a.ID}); err != domain.ErrDiaryNotFound {
+	if err := svc.ReorderEntries(context.Background(), 42, 1, at, []int64{b.ID, a.ID}); err != domain.ErrReadOnly {
 		t.Errorf("reorder чужим должен быть запрещён, получено %v", err)
 	}
 

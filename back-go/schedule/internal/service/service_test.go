@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"slices"
 	"strconv"
 	"testing"
 	"time"
@@ -35,10 +36,10 @@ func newRepo() *fakeRepo {
 
 func (r *fakeRepo) id() int64 { r.nextID++; return r.nextID }
 
-func (r *fakeRepo) ListOwned(_ domain.Ctx, ownerID int64) ([]*domain.Schedule, error) {
+func (r *fakeRepo) ListOwned(_ domain.Ctx, ownerID int64, _ []int64) ([]*domain.Schedule, error) {
 	out := []*domain.Schedule{}
 	for _, s := range r.schedules {
-		if s.OwnerID == ownerID {
+		if s.OwnerID == ownerID && s.CompanyID == nil {
 			out = append(out, s)
 		}
 	}
@@ -76,13 +77,34 @@ func (r *fakeRepo) GetSchedule(_ domain.Ctx, id int64) (*domain.Schedule, error)
 	return r.schedules[id], nil
 }
 
-func (r *fakeRepo) HasAccess(_ domain.Ctx, scheduleID, userID int64, companyIDs []int64) (bool, error) {
+// AccessOf — зеркало accessExpr: хозяин личного и автор расписания своей
+// команды — владельцы, участникам — team_access, адресатам — просмотр.
+func (r *fakeRepo) AccessOf(_ domain.Ctx, scheduleID, userID int64, companyIDs []int64) (string, error) {
+	sc := r.schedules[scheduleID]
+	if sc == nil {
+		return domain.AccessNone, nil
+	}
+	if sc.CompanyID == nil && sc.OwnerID == userID {
+		return domain.AccessOwner, nil
+	}
+	if sc.CompanyID != nil && slices.Contains(companyIDs, *sc.CompanyID) {
+		if sc.OwnerID == userID {
+			return domain.AccessOwner, nil
+		}
+		return sc.TeamAccess, nil
+	}
 	for _, sh := range r.userShares[scheduleID] {
 		if matchesTarget(sh, userID, companyIDs) {
-			return true, nil
+			return domain.AccessView, nil
 		}
 	}
-	return false, nil
+	return domain.AccessNone, nil
+}
+
+func (r *fakeRepo) MoveSchedule(_ domain.Ctx, id, ownerID int64, companyID *int64, teamAccess string) error {
+	sc := r.schedules[id]
+	sc.OwnerID, sc.CompanyID, sc.TeamAccess = ownerID, companyID, teamAccess
+	return nil
 }
 
 func (r *fakeRepo) NextPosition(domain.Ctx, int64) (int, error) { return 1, nil }

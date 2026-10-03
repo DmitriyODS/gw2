@@ -3,11 +3,13 @@ package postgres
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/DmitriyODS/gw2/back-go/calendar/internal/domain"
+	"github.com/DmitriyODS/gw2/back-go/pkg/spaces"
 )
 
 type Repo struct {
@@ -20,7 +22,8 @@ func NewRepo(pool *pgxpool.Pool) *Repo { return &Repo{pool: pool} }
 
 func scanCalendar(row pgx.Row) (*domain.Calendar, error) {
 	var c domain.Calendar
-	err := row.Scan(&c.ID, &c.CompanyID, &c.Name, &c.Position, &c.CreatedBy, &c.CreatedAt, &c.UpdatedAt)
+	err := row.Scan(&c.ID, &c.OwnerID, &c.CompanyID, &c.TeamAccess, &c.Name, &c.Position,
+		&c.CreatedBy, &c.CreatedAt, &c.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -30,23 +33,48 @@ func scanCalendar(row pgx.Row) (*domain.Calendar, error) {
 	return &c, nil
 }
 
-const calendarCols = `id, company_id, name, position, created_by, created_at, updated_at`
+const calendarCols = `id, owner_id, company_id, team_access, name, position, created_by, created_at, updated_at`
 
-func (r *Repo) ListCalendars(ctx context.Context, companyID int64) ([]*domain.Calendar, error) {
-	rows, err := r.pool.Query(ctx,
-		`SELECT `+calendarCols+` FROM calendars WHERE company_id = $1 ORDER BY position, id`,
-		companyID)
+/*
+accessExpr — эффективный уровень человека $1 к календарю cal.
+
+	Хозяин личного календаря, а у календаря команды — автор и администраторы
+	(пока состоят в ней) распоряжаются им целиком; остальные участники команды
+	получают team_access. Держать в паре с domain/access.go.
+*/
+var accessExpr = `
+	CASE
+	  WHEN cal.company_id IS NULL THEN CASE WHEN cal.owner_id = $1 THEN 'owner' ELSE '' END
+	  WHEN ` + spaces.Admin("$1", "cal.company_id") + ` THEN 'owner'
+	  WHEN ` + spaces.Member("$1", "cal.company_id") + `
+	       THEN CASE WHEN cal.owner_id = $1 THEN 'owner' ELSE cal.team_access END
+	  ELSE ''
+	END`
+
+// visibleCond — календарь лежит в пространстве человека $1: личный его либо в
+// одной из его команд.
+var visibleCond = `((cal.company_id IS NULL AND cal.owner_id = $1)
+	OR cal.company_id IN (` + spaces.MyTeams("$1") + `))`
+
+func (r *Repo) ListCalendars(ctx context.Context, userID int64) ([]*domain.Calendar, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT `+prefixed(calendarCols, "cal")+`, `+accessExpr+`, COALESCE(c.name, '')
+		  FROM calendars cal
+		  LEFT JOIN companies c ON c.id = cal.company_id
+		 WHERE `+visibleCond+`
+		 ORDER BY cal.position, cal.id`, userID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	out := []*domain.Calendar{}
 	for rows.Next() {
-		cal, err := scanCalendar(rows)
-		if err != nil {
+		var c domain.Calendar
+		if err := rows.Scan(&c.ID, &c.OwnerID, &c.CompanyID, &c.TeamAccess, &c.Name, &c.Position,
+			&c.CreatedBy, &c.CreatedAt, &c.UpdatedAt, &c.MyAccess, &c.CompanyName); err != nil {
 			return nil, err
 		}
-		out = append(out, cal)
+		out = append(out, &c)
 	}
 	return out, rows.Err()
 }
@@ -56,18 +84,51 @@ func (r *Repo) GetCalendar(ctx context.Context, id int64) (*domain.Calendar, err
 		`SELECT `+calendarCols+` FROM calendars WHERE id = $1`, id))
 }
 
-// CountCalendars — сколько календарей уже есть (лимит тарифа).
-func (r *Repo) CountCalendars(ctx context.Context, company_id int64) (int, error) {
+func (r *Repo) AccessOf(ctx context.Context, calendarID, userID int64) (string, error) {
+	var access string
+	err := r.pool.QueryRow(ctx,
+		`SELECT `+accessExpr+` FROM calendars cal WHERE cal.id = $2`, userID, calendarID).Scan(&access)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.AccessNone, nil
+	}
+	return access, err
+}
+
+// Audience — хозяин личного календаря либо все участники его команды.
+func (r *Repo) Audience(ctx context.Context, calendarID int64) ([]int64, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT owner_id FROM calendars WHERE id = $1 AND company_id IS NULL
+		UNION
+		SELECT uc.user_id FROM calendars cal
+		  JOIN user_companies uc ON uc.company_id = cal.company_id
+		 WHERE cal.id = $1`, calendarID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []int64{}
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
+}
+
+// CountOwned — сколько календарей завёл человек (лимит тарифа).
+func (r *Repo) CountOwned(ctx context.Context, ownerID int64) (int, error) {
 	var n int
-	err := r.pool.QueryRow(ctx, `SELECT count(*) FROM calendars WHERE company_id = $1`, company_id).Scan(&n)
+	err := r.pool.QueryRow(ctx, `SELECT count(*) FROM calendars WHERE owner_id = $1`, ownerID).Scan(&n)
 	return n, err
 }
 
 func (r *Repo) CreateCalendar(ctx context.Context, cal *domain.Calendar) error {
 	return r.pool.QueryRow(ctx,
-		`INSERT INTO calendars (company_id, name, position, created_by)
-		 VALUES ($1, $2, $3, $4) RETURNING id, created_at, updated_at`,
-		cal.CompanyID, cal.Name, cal.Position, cal.CreatedBy).
+		`INSERT INTO calendars (owner_id, company_id, team_access, name, position, created_by)
+		 VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, created_at, updated_at`,
+		cal.OwnerID, cal.CompanyID, cal.TeamAccess, cal.Name, cal.Position, cal.CreatedBy).
 		Scan(&cal.ID, &cal.CreatedAt, &cal.UpdatedAt)
 }
 
@@ -78,17 +139,36 @@ func (r *Repo) UpdateCalendar(ctx context.Context, id int64, name string, positi
 	return err
 }
 
+func (r *Repo) MoveCalendar(ctx context.Context, id, ownerID int64, companyID *int64, teamAccess string) error {
+	_, err := r.pool.Exec(ctx,
+		`UPDATE calendars
+		    SET owner_id = $2, company_id = $3, team_access = $4, updated_at = now()
+		  WHERE id = $1`,
+		id, ownerID, companyID, teamAccess)
+	return err
+}
+
 func (r *Repo) DeleteCalendar(ctx context.Context, id int64) error {
 	_, err := r.pool.Exec(ctx, `DELETE FROM calendars WHERE id = $1`, id)
 	return err
 }
 
-func (r *Repo) NextCalendarPosition(ctx context.Context, companyID int64) (int, error) {
+func (r *Repo) NextCalendarPosition(ctx context.Context, ownerID int64) (int, error) {
 	var pos int
 	err := r.pool.QueryRow(ctx,
-		`SELECT COALESCE(MAX(position), 0) + 1 FROM calendars WHERE company_id = $1`,
-		companyID).Scan(&pos)
+		`SELECT COALESCE(MAX(position), 0) + 1 FROM calendars WHERE owner_id = $1`,
+		ownerID).Scan(&pos)
 	return pos, err
+}
+
+// prefixed — перечень колонок с алиасом таблицы: список полей один, а запросы
+// с JOIN требуют квалификации.
+func prefixed(cols, alias string) string {
+	parts := strings.Split(cols, ",")
+	for i, p := range parts {
+		parts[i] = alias + "." + strings.TrimSpace(p)
+	}
+	return strings.Join(parts, ", ")
 }
 
 // ── Поля ─────────────────────────────────────────────────────────

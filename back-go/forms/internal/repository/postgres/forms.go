@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/DmitriyODS/gw2/back-go/forms/internal/domain"
+	"github.com/DmitriyODS/gw2/back-go/pkg/spaces"
 )
 
 type Repo struct {
@@ -20,7 +22,7 @@ var _ domain.FormRepository = (*Repo)(nil)
 
 func NewRepo(pool *pgxpool.Pool) *Repo { return &Repo{pool: pool} }
 
-const formCols = `id, owner_id, company_id, title, description, status,
+const formCols = `id, owner_id, company_id, team_access, title, description, status,
 	allow_anonymous, one_response, allow_edit, collect_email, collect_name, show_progress,
 	shuffle_questions, confirmation, show_summary, quiz, quiz_release,
 	quiz_show_answers, opens_at, closes_at, max_responses, position,
@@ -30,7 +32,7 @@ const formCols = `id, owner_id, company_id, title, description, status,
 // и одиночный запрос, и список с JOIN).
 func formScanTargets(f *domain.Form) []any {
 	return []any{
-		&f.ID, &f.OwnerID, &f.CompanyID, &f.Title, &f.Description, &f.Status,
+		&f.ID, &f.OwnerID, &f.CompanyID, &f.TeamAccess, &f.Title, &f.Description, &f.Status,
 		&f.AllowAnonymous, &f.OneResponse, &f.AllowEdit, &f.CollectEmail, &f.CollectName,
 		&f.ShowProgress,
 		&f.ShuffleQuestions, &f.Confirmation, &f.ShowSummary, &f.Quiz, &f.QuizRelease,
@@ -39,76 +41,84 @@ func formScanTargets(f *domain.Form) []any {
 	}
 }
 
+// accessRankSQL — уровень доступа числом: 'view' > 'edit' лексикографически,
+// и наивный MAX(access) молча понижал бы права. Держать в паре с domain/access.go.
+const accessRankSQL = `CASE %s WHEN 'edit' THEN 3 WHEN 'view' THEN 2 WHEN 'respond' THEN 1 ELSE 0 END`
+
+// myShare — шара формы f, выданная человеку $1 лично или его командам.
+var myShare = `sh.form_id = f.id
+	AND (sh.user_id = $1 OR sh.company_id IN (` + spaces.MyTeams("$1") + `))`
+
 /*
-accessExpr — эффективный уровень доступа одним выражением.
+accessExpr — эффективный уровень доступа человека $1 одним выражением.
 
-	Уровень приходит человеку несколькими путями сразу (он владелец, ему выдали
-	лично, выдали его компании), и брать нужно СИЛЬНЕЙШИЙ. Порядок уровней задан
-	здесь числом, а не сравнением строк: 'view' > 'edit' лексикографически, и
-	наивный MAX(access) молча понижал бы права. Держать в паре с domain/access.go.
-
-	$2 — АКТИВНАЯ компания сессии (0 — её нет): назначение, выданное другой
-	компании человека, в этой компании прав не даёт, иначе список и уровень
-	доступа расходились бы.
+	«Владелец» — хозяин личной формы, а у формы команды — её автор и
+	администраторы команды (пока состоят в ней). Остальным уровень приходит
+	несколькими путями сразу: участникам команды — team_access, плюс личная
+	шара и шары их команд. Берётся СИЛЬНЕЙШИЙ.
 */
-const accessExpr = `
-	CASE WHEN f.owner_id = $1 THEN 'owner' ELSE COALESCE((
-		SELECT CASE max(CASE sh.access
-		            WHEN 'edit' THEN 3 WHEN 'view' THEN 2 ELSE 1 END)
-		         WHEN 3 THEN 'edit' WHEN 2 THEN 'view' WHEN 1 THEN 'respond' END
-		  FROM form_user_shares sh
-		 WHERE sh.form_id = f.id
-		   AND (sh.user_id = $1 OR sh.company_id = $2)
-	), '') END`
+var accessExpr = `
+	CASE
+	  WHEN f.company_id IS NULL AND f.owner_id = $1 THEN 'owner'
+	  WHEN f.company_id IS NOT NULL AND (` + spaces.Admin("$1", "f.company_id") + `
+	       OR (f.owner_id = $1 AND ` + spaces.Member("$1", "f.company_id") + `)) THEN 'owner'
+	  ELSE COALESCE((
+		SELECT CASE max(lvl) WHEN 3 THEN 'edit' WHEN 2 THEN 'view' WHEN 1 THEN 'respond' END
+		  FROM (
+		    SELECT ` + fmt.Sprintf(accessRankSQL, "f.team_access") + ` AS lvl
+		     WHERE f.company_id IS NOT NULL AND ` + spaces.Member("$1", "f.company_id") + `
+		    UNION ALL
+		    SELECT ` + fmt.Sprintf(accessRankSQL, "sh.access") + `
+		      FROM form_user_shares sh WHERE ` + myShare + `
+		  ) lv
+		 WHERE lvl > 0
+	  ), '')
+	END`
 
-/* ownedCondition — свои формы, видимые в активной компании ($2).
-
-   Форма помнит компанию, в которой заведена, и в другой компании владельцу не
-   показывается: иначе переключение компании ничего не меняло бы. Заведённые вне
-   компаний (company_id IS NULL) остаются личными и видны всегда. */
-const ownedCondition = `f.owner_id = $1
-	AND (f.company_id IS NULL OR f.company_id = $2)`
+// inMySpaces — форма лежит в пространстве человека $1: личная его либо в
+// одной из его команд.
+var inMySpaces = `((f.company_id IS NULL AND f.owner_id = $1)
+	OR f.company_id IN (` + spaces.MyTeams("$1") + `))`
 
 // scopeCondition — условие вкладки раздела.
 func scopeCondition(scope string) string {
 	switch scope {
 	case domain.ScopeMine:
-		return ownedCondition
+		return inMySpaces
 	case domain.ScopeAssigned:
-		return `f.owner_id <> $1
-		        AND EXISTS (SELECT 1 FROM form_user_shares sh
-		                     WHERE sh.form_id = f.id AND sh.access = 'respond'
-		                       AND (sh.user_id = $1 OR sh.company_id = $2))`
+		return `EXISTS (SELECT 1 FROM form_user_shares sh
+		                 WHERE ` + myShare + ` AND sh.access = 'respond')
+		        AND NOT (f.company_id IS NULL AND f.owner_id = $1)`
 	case domain.ScopeShared:
-		return `f.owner_id <> $1
+		return `NOT ` + inMySpaces + `
 		        AND EXISTS (SELECT 1 FROM form_user_shares sh
-		                     WHERE sh.form_id = f.id AND sh.access IN ('view', 'edit')
-		                       AND (sh.user_id = $1 OR sh.company_id = $2))`
+		                     WHERE ` + myShare + ` AND sh.access IN ('view', 'edit'))`
 	default:
-		return `((` + ownedCondition + `)
-		         OR (f.owner_id <> $1
-		             AND EXISTS (SELECT 1 FROM form_user_shares sh
-		                          WHERE sh.form_id = f.id
-		                            AND (sh.user_id = $1 OR sh.company_id = $2))))`
+		return `(` + inMySpaces + `
+		         OR EXISTS (SELECT 1 FROM form_user_shares sh WHERE ` + myShare + `))`
 	}
 }
+
+// dueExpr — ближайший срок ответа, назначенный человеку $1 лично или его командам.
+var dueExpr = `(SELECT min(sh.due_at) FROM form_user_shares sh
+	 WHERE ` + myShare + ` AND sh.access = 'respond')`
 
 // ListForms — формы области вместе с уровнем доступа, именем владельца, числом
 // собранных ответов и собственной обязанностью спрашивающего: карточка списка
 // показывает всё это сразу, поэтому и считается одним запросом.
-func (r *Repo) ListForms(ctx context.Context, userID, companyID int64, scope string) ([]*domain.Form, error) {
+func (r *Repo) ListForms(ctx context.Context, userID int64, scope string) ([]*domain.Form, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT `+prefixed(formCols, "f")+`, `+accessExpr+`, COALESCE(u.fio, ''),
 		       (SELECT count(*) FROM form_responses fr WHERE fr.form_id = f.id),
-		       (SELECT min(sh.due_at) FROM form_user_shares sh
-		         WHERE sh.form_id = f.id AND sh.access = 'respond'
-		           AND (sh.user_id = $1 OR sh.company_id = $2)),
+		       `+dueExpr+`,
 		       EXISTS (SELECT 1 FROM form_responses fr
-		                WHERE fr.form_id = f.id AND fr.user_id = $1)
+		                WHERE fr.form_id = f.id AND fr.user_id = $1),
+		       COALESCE(c.name, '')
 		  FROM forms f
 		  LEFT JOIN users u ON u.id = f.owner_id
+		  LEFT JOIN companies c ON c.id = f.company_id
 		 WHERE `+scopeCondition(scope)+`
-		 ORDER BY f.updated_at DESC, f.id DESC`, userID, companyID)
+		 ORDER BY f.updated_at DESC, f.id DESC`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -118,7 +128,7 @@ func (r *Repo) ListForms(ctx context.Context, userID, companyID int64, scope str
 	for rows.Next() {
 		var f domain.Form
 		targets := append(formScanTargets(&f),
-			&f.MyAccess, &f.OwnerName, &f.Responses, &f.MyDueAt, &f.MyResponded)
+			&f.MyAccess, &f.OwnerName, &f.Responses, &f.MyDueAt, &f.MyResponded, &f.CompanyName)
 		if err := rows.Scan(targets...); err != nil {
 			return nil, err
 		}
@@ -156,15 +166,23 @@ func (r *Repo) CreateForm(ctx context.Context, f *domain.Form) error {
 		    allow_anonymous, one_response, allow_edit, collect_email, collect_name,
 		    show_progress, shuffle_questions, confirmation, show_summary, quiz,
 		    quiz_release, quiz_show_answers, opens_at, closes_at, max_responses,
-		    position, created_by)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
+		    position, created_by, team_access)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
 		RETURNING id, created_at, updated_at`,
 		f.OwnerID, f.CompanyID, f.Title, f.Description, f.Status,
 		f.AllowAnonymous, f.OneResponse, f.AllowEdit, f.CollectEmail, f.CollectName,
 		f.ShowProgress,
 		f.ShuffleQuestions, f.Confirmation, f.ShowSummary, f.Quiz, f.QuizRelease,
-		f.QuizShowAnswers, f.OpensAt, f.ClosesAt, f.MaxResponses, f.Position, f.CreatedBy).
+		f.QuizShowAnswers, f.OpensAt, f.ClosesAt, f.MaxResponses, f.Position, f.CreatedBy,
+		f.TeamAccess).
 		Scan(&f.ID, &f.CreatedAt, &f.UpdatedAt)
+}
+
+func (r *Repo) MoveForm(ctx context.Context, id, ownerID int64, companyID *int64, teamAccess string) error {
+	_, err := r.pool.Exec(ctx,
+		`UPDATE forms SET owner_id = $2, company_id = $3, team_access = $4, updated_at = now()
+		  WHERE id = $1`, id, ownerID, companyID, teamAccess)
+	return err
 }
 
 func (r *Repo) UpdateForm(ctx context.Context, f *domain.Form) error {
@@ -196,14 +214,14 @@ func (r *Repo) NextPosition(ctx context.Context, ownerID int64) (int, error) {
 }
 
 // SearchForms — строка поиска Hola: доступные формы по названию и описанию.
-func (r *Repo) SearchForms(ctx context.Context, userID, companyID int64, query string, limit int) ([]*domain.SearchHit, error) {
+func (r *Repo) SearchForms(ctx context.Context, userID int64, query string, limit int) ([]*domain.SearchHit, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT f.id, f.title, left(f.description, 160), f.status
 		  FROM forms f
 		 WHERE `+scopeCondition(domain.ScopeAll)+`
-		   AND (f.title ILIKE '%' || $3 || '%' OR f.description ILIKE '%' || $3 || '%')
+		   AND (f.title ILIKE '%' || $2 || '%' OR f.description ILIKE '%' || $2 || '%')
 		 ORDER BY f.updated_at DESC
-		 LIMIT $4`, userID, companyID, query, limit)
+		 LIMIT $3`, userID, query, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -231,7 +249,7 @@ func prefixed(cols, alias string) string {
 
 // FormsSummary — те же формы и поля, что у ListForms (область «все»), но
 // свёрнутые в счётчики: плитке не нужен список целиком.
-func (r *Repo) FormsSummary(ctx context.Context, userID, companyID int64) (*domain.FormsSummary, error) {
+func (r *Repo) FormsSummary(ctx context.Context, userID int64) (*domain.FormsSummary, error) {
 	var (
 		out   domain.FormsSummary
 		id    *int64
@@ -241,9 +259,7 @@ func (r *Repo) FormsSummary(ctx context.Context, userID, companyID int64) (*doma
 	err := r.pool.QueryRow(ctx, `
 		WITH vis AS (
 		    SELECT f.id, f.title, `+accessExpr+` AS access,
-		           (SELECT min(sh.due_at) FROM form_user_shares sh
-		             WHERE sh.form_id = f.id AND sh.access = 'respond'
-		               AND (sh.user_id = $1 OR sh.company_id = $2)) AS due,
+		           `+dueExpr+` AS due,
 		           EXISTS (SELECT 1 FROM form_responses fr
 		                    WHERE fr.form_id = f.id AND fr.user_id = $1) AS responded
 		      FROM forms f
@@ -258,7 +274,7 @@ func (r *Repo) FormsSummary(ctx context.Context, userID, companyID int64) (*doma
 		  LEFT JOIN LATERAL (
 		        SELECT id, title, due FROM vis
 		         WHERE due IS NOT NULL AND NOT responded
-		         ORDER BY due, id LIMIT 1) n ON TRUE`, userID, companyID).
+		         ORDER BY due, id LIMIT 1) n ON TRUE`, userID).
 		Scan(&out.Total, &out.Pending, &out.Responses, &id, &title, &due)
 	if err != nil {
 		return nil, err

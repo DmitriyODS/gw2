@@ -9,14 +9,14 @@ import (
 	"time"
 
 	"github.com/DmitriyODS/gw2/back-go/forms/internal/domain"
-	"github.com/DmitriyODS/gw2/back-go/pkg/pasetoauth"
+	"github.com/DmitriyODS/gw2/back-go/pkg/spaces"
 )
 
 const (
-	ownerID     = 42 // владелец тестовой формы
-	companyID   = 7  // компания, в которой она заведена
-	strangerID  = 99 // посторонний
-	assigneeID  = 13 // тот, кому форму назначили
+	ownerID    = 42 // владелец тестовой формы
+	companyID  = 7  // компания, в которой она заведена
+	strangerID = 99 // посторонний
+	assigneeID = 13 // тот, кому форму назначили
 )
 
 func discardLogger() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard, nil)) }
@@ -24,6 +24,7 @@ func discardLogger() *slog.Logger { return slog.New(slog.NewTextHandler(io.Disca
 // ── Фейки портов ─────────────────────────────────────────────────
 
 type fakeRepo struct {
+	users      *fakeUsers
 	form       *domain.Form
 	sections   []domain.Section
 	responses  map[int64]*domain.Response
@@ -32,11 +33,11 @@ type fakeRepo struct {
 	nextID     int64
 }
 
-func (f *fakeRepo) ListForms(_ domain.Ctx, _, _ int64, _ string) ([]*domain.Form, error) {
+func (f *fakeRepo) ListForms(_ domain.Ctx, _ int64, _ string) ([]*domain.Form, error) {
 	return []*domain.Form{f.form}, nil
 }
 
-func (f *fakeRepo) FormsSummary(domain.Ctx, int64, int64) (*domain.FormsSummary, error) {
+func (f *fakeRepo) FormsSummary(domain.Ctx, int64) (*domain.FormsSummary, error) {
 	return &domain.FormsSummary{Total: 1}, nil
 }
 
@@ -48,7 +49,7 @@ func (f *fakeRepo) GetForm(_ domain.Ctx, id int64) (*domain.Form, error) {
 	return nil, nil
 }
 
-func (f *fakeRepo) CountOwned(_ domain.Ctx, _ int64) (int, error)  { return 1, nil }
+func (f *fakeRepo) CountOwned(_ domain.Ctx, _ int64) (int, error) { return 1, nil }
 func (f *fakeRepo) CreateForm(_ domain.Ctx, form *domain.Form) error {
 	f.nextID++
 	form.ID = f.nextID
@@ -60,7 +61,7 @@ func (f *fakeRepo) UpdateForm(_ domain.Ctx, form *domain.Form) error {
 }
 func (f *fakeRepo) DeleteForm(_ domain.Ctx, _ int64) error          { f.form = nil; return nil }
 func (f *fakeRepo) NextPosition(_ domain.Ctx, _ int64) (int, error) { return 1, nil }
-func (f *fakeRepo) SearchForms(_ domain.Ctx, _, _ int64, _ string, _ int) ([]*domain.SearchHit, error) {
+func (f *fakeRepo) SearchForms(_ domain.Ctx, _ int64, _ string, _ int) ([]*domain.SearchHit, error) {
 	return []*domain.SearchHit{}, nil
 }
 
@@ -186,26 +187,37 @@ func (f *fakeRepo) ResponsesOfOwner(_ domain.Ctx, _ int64, _ []int64) ([]*domain
 	return nil, nil
 }
 
-// AccessOf — владелец получает всё, остальные — по личной шаре и шаре активной
-// компании.
-func (f *fakeRepo) AccessOf(_ domain.Ctx, formID, userID, companyID int64) (string, error) {
+// AccessOf — зеркало accessExpr: хозяин личной формы и автор формы команды —
+// владельцы, участникам команды — team_access, плюс шары лично и любым
+// командам человека.
+func (f *fakeRepo) AccessOf(_ domain.Ctx, formID, userID int64) (string, error) {
 	if f.form == nil || f.form.ID != formID {
 		return domain.AccessNone, nil
 	}
-	if f.form.OwnerID == userID {
+	mine := f.users.companies[userID]
+	member := f.form.CompanyID != nil && slices.Contains(mine, *f.form.CompanyID)
+	if f.form.OwnerID == userID && (f.form.CompanyID == nil || member) {
 		return domain.AccessOwner, nil
 	}
 	best := domain.AccessNone
+	if member {
+		best = f.form.TeamAccess
+	}
 	for _, sh := range f.userShares {
 		if sh.FormID != formID {
 			continue
 		}
 		if (sh.UserID != nil && *sh.UserID == userID) ||
-			(sh.CompanyID != nil && companyID != 0 && *sh.CompanyID == companyID) {
+			(sh.CompanyID != nil && slices.Contains(mine, *sh.CompanyID)) {
 			best = domain.BestAccess(best, sh.Access)
 		}
 	}
 	return best, nil
+}
+
+func (f *fakeRepo) MoveForm(_ domain.Ctx, _, ownerID int64, companyID *int64, teamAccess string) error {
+	f.form.OwnerID, f.form.CompanyID, f.form.TeamAccess = ownerID, companyID, teamAccess
+	return nil
 }
 
 func (f *fakeRepo) Audience(_ domain.Ctx, _ int64) ([]int64, error) { return []int64{ownerID}, nil }
@@ -256,9 +268,14 @@ func (u *fakeUsers) CompanyMembers(_ domain.Ctx, _ int64) ([]int64, error) {
 func (u *fakeUsers) SearchDirectory(_ domain.Ctx, _ []int64, _ string, _ int) ([]*domain.User, error) {
 	return nil, nil
 }
-func (u *fakeUsers) CompanyName(_ domain.Ctx, _ int64) (string, error) { return "Компания", nil }
+func (u *fakeUsers) CompanyName(_ domain.Ctx, _ int64) (string, error) {
+	return "Компания", nil
+}
+func (u *fakeUsers) TeamRole(_ domain.Ctx, userID, companyID int64) (spaces.Role, error) {
+	return spaces.Role{Member: slices.Contains(u.companies[userID], companyID)}, nil
+}
 
-type fakeFiles struct{ removed []string }
+type fakeFiles struct{ removed, moved []string }
 
 func (f *fakeFiles) SaveFor(_ context.Context, _, _ int64, name string, _ []byte) (string, error) {
 	return "forms/" + name, nil
@@ -270,6 +287,10 @@ func (f *fakeFiles) RemoveFor(_ context.Context, _, _ int64, paths []string) {
 	f.removed = append(f.removed, paths...)
 }
 func (f *fakeFiles) Remove(paths []string) { f.removed = append(f.removed, paths...) }
+func (f *fakeFiles) MoveFor(_ context.Context, _, _ int64, paths []string) error {
+	f.moved = append(f.moved, paths...)
+	return nil
+}
 
 type busEvent struct {
 	event   string
@@ -322,9 +343,11 @@ func newStand() *stand {
 	}
 	bus := &fakeBus{}
 	files := &fakeFiles{}
+	users := &fakeUsers{companies: map[int64][]int64{ownerID: {companyID}, assigneeID: {companyID}}}
+	repo.users = users
 	svc := New(Deps{
 		Repo:  repo,
-		Users: &fakeUsers{companies: map[int64][]int64{ownerID: {companyID}, assigneeID: {companyID}}},
+		Users: users,
 		Files: files,
 		Bus:   bus,
 		Log:   discardLogger(),
@@ -580,29 +603,46 @@ func TestShareWithNotifiesAssignee(t *testing.T) {
 	}
 }
 
-/* Назначение компании действует, только пока эта компания активна: форма
-   назначена компании, а человек работает в другой — обязанности у него нет.
-   Иначе привязка к компании была бы фикцией: список её учитывает, а доступ нет. */
-func TestCompanyShareOnlyInActiveCompany(t *testing.T) {
+// Назначение команде действует, в какой бы компании человек ни работал
+// сейчас: команда не прячет инструменты. Посторонний формы не видит.
+func TestTeamShareRegardlessOfActiveCompany(t *testing.T) {
 	s := newStand()
 	company := int64(companyID)
 	s.repo.userShares = []*domain.UserShare{
 		{FormID: 1, CompanyID: &company, Access: domain.AccessRespond},
 	}
-	s.svc.users.(*fakeUsers).companies[assigneeID] = []int64{companyID, companyID + 1}
-
-	inCompany := pasetoauth.WithCompany(ctx(), companyID)
-	form, err := s.svc.GetForm(inCompany, assigneeID, 1)
+	form, err := s.svc.GetForm(ctx(), assigneeID, 1)
 	if err != nil {
-		t.Fatalf("чтение в своей компании: %v", err)
+		t.Fatalf("чтение участником команды: %v", err)
 	}
 	if form.MyAccess != domain.AccessRespond {
-		t.Errorf("уровень в компании назначения: получено %q", form.MyAccess)
+		t.Errorf("уровень назначенного: получено %q", form.MyAccess)
 	}
+	if got := code(t, mustErr(s.svc.GetForm(ctx(), 9999, 1))); got != "NOT_FOUND" {
+		t.Fatalf("посторонний увидел форму (%s)", got)
+	}
+}
 
-	elsewhere := pasetoauth.WithCompany(ctx(), companyID+1)
-	if got := code(t, mustErr(s.svc.GetForm(elsewhere, assigneeID, 1))); got != "NOT_FOUND" {
-		t.Fatalf("в другой компании форма показалась (%s)", got)
+// Перенос: в чужую команду нельзя; забирая форму к себе, человек становится
+// хозяином, а файлы ответов переезжают на его квоту.
+func TestMoveForm(t *testing.T) {
+	s := newStand()
+	s.repo.responses[1] = &domain.Response{ID: 1, FormID: 1, Answers: map[string]any{
+		"100": []any{map[string]any{"path": "forms/a.png", "name": "a.png"}},
+	}}
+	foreign := int64(companyID + 1)
+	if _, err := s.svc.MoveForm(ctx(), ownerID, 1, &foreign, ""); code(t, err) != "NOT_TEAM_MEMBER" {
+		t.Fatalf("перенос в чужую команду должен отбиваться, получено %v", err)
+	}
+	form, err := s.svc.MoveForm(ctx(), ownerID, 1, nil, "")
+	if err != nil {
+		t.Fatalf("перенос к себе: %v", err)
+	}
+	if form.CompanyID != nil || form.MyAccess != domain.AccessOwner {
+		t.Errorf("форма не стала личной: %+v", form)
+	}
+	if len(s.files.moved) != 1 || s.files.moved[0] != "forms/a.png" {
+		t.Errorf("файлы не переехали на новую квоту: %v", s.files.moved)
 	}
 }
 

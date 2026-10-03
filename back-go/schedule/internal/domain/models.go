@@ -44,9 +44,13 @@ const GridCols = 2
 // категории, свои поля. Цикл живёт ВНУТРИ расписания и к их списку отношения
 // не имеет.
 type Schedule struct {
-	ID      int64  `json:"id"`
-	OwnerID int64  `json:"owner_id"`
-	Name    string `json:"name"`
+	ID      int64 `json:"id"`
+	OwnerID int64 `json:"owner_id"`
+	// CompanyID — пространство: nil — личное, иначе расписание команды.
+	CompanyID *int64 `json:"company_id"`
+	// TeamAccess — уровень рядовых участников команды (см. access.go).
+	TeamAccess string `json:"team_access"`
+	Name       string `json:"name"`
 	// CycleWeeks — длина цикла в неделях (1..MaxCycleWeeks). 1 — обычная
 	// неделя, 2 — числитель/знаменатель.
 	CycleWeeks int `json:"cycle_weeks"`
@@ -70,6 +74,10 @@ type Schedule struct {
 	OwnerName   string  `json:"owner_name,omitempty"`
 	OwnerAvatar *string `json:"owner_avatar,omitempty"`
 	Shared      bool    `json:"shared"`
+	// MyAccess — эффективный уровень спрашивающего; считает сервер.
+	MyAccess string `json:"my_access"`
+	// CompanyName — название команды-пространства.
+	CompanyName string `json:"company_name,omitempty"`
 	// ItemCount — сколько занятий в расписании (подпись в списке).
 	ItemCount int `json:"item_count"`
 

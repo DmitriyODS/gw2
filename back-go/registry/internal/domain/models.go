@@ -38,11 +38,15 @@ var FieldTypes = records.FieldTypes
 type Registry struct {
 	ID      int64 `json:"id"`
 	OwnerID int64 `json:"owner_id"`
-	// CompanyID — компания, в которой реестр заведён (nil — личный, вне
-	// компании). Определяет, чья квота платит за файлы записей.
+	// CompanyID — пространство реестра: nil — личное пространство владельца,
+	// иначе реестр принадлежит команде, а OwnerID — его автор. Пространство же
+	// решает, чья квота платит за файлы записей.
 	CompanyID *int64 `json:"company_id"`
-	Name      string `json:"name"`
-	Position  int    `json:"position"`
+	// TeamAccess — уровень рядовых участников команды (у личного реестра не
+	// действует). Автор и администраторы команды распоряжаются реестром целиком.
+	TeamAccess string `json:"team_access"`
+	Name       string `json:"name"`
+	Position   int    `json:"position"`
 	// SectionFieldID — поле-источник подразделов: его варианты становятся
 	// вкладками над таблицей и фильтруют записи. Только поле типа select и
 	// только своего реестра; nil — подразделы выключены.
@@ -59,9 +63,10 @@ type Registry struct {
 	// MyAccess — эффективный уровень спрашивающего (см. access.go). Считает
 	// сервер: клиенту нельзя доверять решение, что ему показывать.
 	MyAccess string `json:"my_access"`
-	// OwnerName — чей это реестр (вкладки «Поделились» и «Компания» должны
-	// называть хозяина).
+	// OwnerName — чей это реестр (вкладка «Поделились» должна называть хозяина).
 	OwnerName string `json:"owner_name,omitempty"`
+	// CompanyName — название команды-пространства (список группируется по ним).
+	CompanyName string `json:"company_name,omitempty"`
 }
 
 // Field — поле (колонка карточки) реестра. Config хранит настройки конкретного

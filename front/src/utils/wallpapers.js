@@ -24,12 +24,13 @@ const wp = (key, label, files) => ({
 export const WALLPAPERS = [
   wp('wave', 'Волна'),
   wp('star', 'Звезда'),
+  wp('gw8', 'Groove Work 8'),
   wp('gw7', 'Groove Work 7'),
   wp('surf', 'Прибой'),
 ]
 
 // Обои «из коробки»: их видит каждый, кто своих не выбирал.
-export const DEFAULT_WALLPAPER_KEY = 'gw7'
+export const DEFAULT_WALLPAPER_KEY = 'gw8'
 
 export function wallpaperByKey(key) {
   return WALLPAPERS.find((w) => w.key === key) || null

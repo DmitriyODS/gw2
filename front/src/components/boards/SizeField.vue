@@ -82,7 +82,7 @@ function set(value) {
 
 <style scoped>
 .sf { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-.sf-label { font-size: 11px; color: var(--color-text-muted); }
+.sf-label { font-size: 11px; color: var(--color-text-dim); }
 .sf-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .sf-slider { flex: 1; min-width: 0; }
 

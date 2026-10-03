@@ -12,13 +12,13 @@ import (
 /* Раздел «Настройки → Хранилище»: биллинг спрашивает владельца файлов, что у
    него ещё живо, и просит удалить выбранное.
 
-   Файлы реестра лежат значениями внутри записей и принадлежат КОМПАНИИ —
-   платит её создатель, поэтому работаем по companyIDs (их присылает биллинг,
-   он же знает создателей). Удаление очищает поле записи: сама запись со
+   Файлы реестра лежат значениями внутри записей. За личный реестр платит его
+   хозяин, за реестр команды — создатель команды: companyIDs присылает биллинг,
+   он же знает создателей. Удаление очищает поле записи: сама запись со
    всеми остальными значениями остаётся. */
 
-func (s *Service) ListStorageFiles(ctx context.Context, _ int64, companyIDs []int64) ([]storagefiles.File, error) {
-	scopes, err := s.repo.RecordsOfCompanies(ctx, companyIDs)
+func (s *Service) ListStorageFiles(ctx context.Context, userID int64, companyIDs []int64) ([]storagefiles.File, error) {
+	scopes, err := s.repo.RecordsForQuota(ctx, userID, companyIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -41,8 +41,8 @@ func (s *Service) ListStorageFiles(ctx context.Context, _ int64, companyIDs []in
 	return out, nil
 }
 
-func (s *Service) DeleteStorageFiles(ctx context.Context, _ int64, companyIDs []int64, keys []string) ([]string, error) {
-	scopes, err := s.repo.RecordsOfCompanies(ctx, companyIDs)
+func (s *Service) DeleteStorageFiles(ctx context.Context, userID int64, companyIDs []int64, keys []string) ([]string, error) {
+	scopes, err := s.repo.RecordsForQuota(ctx, userID, companyIDs)
 	if err != nil {
 		return nil, err
 	}

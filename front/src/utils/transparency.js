@@ -8,8 +8,10 @@
  *   становятся плотными, обои под ними не видны. Размытие под плотной панелью
  *   бессмысленно, поэтому снимается вместе с ней.
  *
- * Обе по умолчанию следуют системной `prefers-reduced-transparency`; явный
- * выбор хранится на УСТРОЙСТВЕ (localStorage) — это про железо, а не про вкус.
+ * Материал платформы — матовый soft touch, поэтому по умолчанию обе ВЫКЛЮЧЕНЫ:
+ * поверхности плотные и шероховатые (зерно в токенах), стекло — выбор
+ * любителя. Явный выбор хранится на УСТРОЙСТВЕ (localStorage) — стекло
+ * стоит видеокарте и батарее, это про железо, а не про вкус.
  * Значения токенов — в конце tokens.css.
  */
 import { ref } from 'vue'
@@ -33,20 +35,14 @@ function writeChoice(key, value) {
   } catch { /* приватный режим — выбор живёт до перезагрузки */ }
 }
 
-const mq = typeof window !== 'undefined' && typeof window.matchMedia === 'function'
-  ? window.matchMedia('(prefers-reduced-transparency: reduce)')
-  : null
-
-/** Явный выбор: 'on' | 'off' | null (как в системе). */
+/** Явный выбор: 'on' | 'off' | null (по умолчанию — матовый материал). */
 export const blurChoice = ref(readChoice(BLUR_KEY))
 export const transparencyChoice = ref(readChoice(OPACITY_KEY))
 /** Действующие значения. */
-export const blurEnabled = ref(true)
-export const transparencyEnabled = ref(true)
+export const blurEnabled = ref(false)
+export const transparencyEnabled = ref(false)
 
-function effective(choice) {
-  return choice ? choice === 'on' : !mq?.matches
-}
+const effective = (choice) => choice === 'on'
 
 function apply() {
   transparencyEnabled.value = effective(transparencyChoice.value)
@@ -57,24 +53,19 @@ function apply() {
   root.toggleAttribute('data-no-blur', !blurEnabled.value)
 }
 
-let installed = false
-
-/** Применить при старте и следить за системной настройкой. */
+/** Применить при старте. */
 export function initTransparency() {
   apply()
-  if (installed || !mq) return
-  installed = true
-  mq.addEventListener?.('change', apply)
 }
 
-/** Размытие: true/false — явно, null — как в системе. */
+/** Размытие: true/false — явно, null — по умолчанию. */
 export function setBlur(value) {
   blurChoice.value = value === null ? null : (value ? 'on' : 'off')
   writeChoice(BLUR_KEY, blurChoice.value)
   apply()
 }
 
-/** Прозрачность: true/false — явно, null — как в системе. */
+/** Прозрачность: true/false — явно, null — по умолчанию. */
 export function setTransparency(value) {
   transparencyChoice.value = value === null ? null : (value ? 'on' : 'off')
   writeChoice(OPACITY_KEY, transparencyChoice.value)

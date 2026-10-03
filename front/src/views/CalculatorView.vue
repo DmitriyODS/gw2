@@ -508,7 +508,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 }
 
 .calc-key:hover { border-color: color-mix(in oklch, var(--color-primary) 34%, var(--acrylic-border)); }
-.calc-key:active { background: color-mix(in oklch, var(--color-primary) 14%, var(--glass-bg)); }
+.calc-key:active { background: linear-gradient(color-mix(in oklch, var(--color-primary) 14%, transparent), color-mix(in oklch, var(--color-primary) 14%, transparent)), var(--glass-bg); }
 
 .calc-key.op { color: var(--color-primary); }
 .calc-key.act { color: var(--color-text-dim); }

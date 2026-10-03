@@ -214,6 +214,35 @@ func (c *Client) TrackStorage(ctx context.Context, userID, companyID int64, ch S
 	c.Invalidate(userID)
 }
 
+/*
+MoveStorage — файлы сменили плательщика: вещь переехала между личным
+пространством и командой. Новый владелец квоты — как в TrackStorage
+(companyID > 0 — создатель команды).
+
+	В отличие от TrackStorage ошибка ВОЗВРАЩАЕТСЯ, и вещь без неё не переезжает:
+	сверка «Хранилища» удаляет объекты, которых владельцы ей не называют, и
+	файл, оставшийся в журнале прежнего плательщика, она стёрла бы у живой вещи.
+*/
+func (c *Client) MoveStorage(ctx context.Context, userID, companyID int64, keys []string) error {
+	if c == nil || len(keys) == 0 || (userID <= 0 && companyID <= 0) {
+		return nil
+	}
+	rctx, cancel := context.WithTimeout(ctx, callTimeout)
+	defer cancel()
+	if _, err := c.api.MoveStorage(rctx, &billingpb.MoveStorageRequest{
+		UserId: userID, CompanyId: companyID, Keys: keys,
+	}); err != nil {
+		c.log.Warn("billing.move_storage_failed", "user_id", userID, "company_id", companyID, "error", err)
+		return err
+	}
+	// Кэш лимитов держит занятое место: прежний и новый владельцы видят
+	// другие цифры, а кто именно прежний — знает только журнал биллинга.
+	c.mu.Lock()
+	c.cache = map[string]cacheEntry{}
+	c.mu.Unlock()
+	return nil
+}
+
 // EnsureStorage — влезает ли файл размера bytes в квоту владельца.
 func (c *Client) EnsureStorage(ctx context.Context, userID, companyID, bytes int64) error {
 	if c == nil {

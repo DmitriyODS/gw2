@@ -9,13 +9,20 @@ import (
 // время начала/конца — отдельные опциональные минуты от полуночи.
 const DateLayout = "2006-01-02"
 
-// Diary — личный ежедневник пользователя: набор записей-задач, привязанных к
-// дню. Принадлежит ровно одному пользователю (OwnerID); другие видят его только
-// через шаринг (read-only) — публичной ссылкой или адресно. Поля Owner*/Shared
-// заполняются лишь для чужих ежедневников во вкладке «Поделились».
+// Diary — ежедневник: набор записей-задач, привязанных к дню. Лежит в
+// пространстве (см. access.go): личном — тогда OwnerID его хозяин, — либо
+// команды (CompanyID), где OwnerID — автор. Другие видят его ещё и через
+// шаринг — публичной ссылкой или адресно. Поля Owner*/Shared заполняются для
+// чужих ежедневников во вкладке «Поделились».
 type Diary struct {
-	ID          int64     `json:"id"`
-	OwnerID     int64     `json:"owner_id"`
+	ID      int64 `json:"id"`
+	OwnerID int64 `json:"owner_id"`
+	// CompanyID — пространство: nil — личное, иначе ежедневник команды.
+	CompanyID *int64 `json:"company_id"`
+	// TeamAccess — уровень рядовых участников команды.
+	TeamAccess string `json:"team_access"`
+	// Kind — regular либо скрытый my_day экрана «Сегодня».
+	Kind        string    `json:"kind"`
 	Name        string    `json:"name"`
 	Position    int       `json:"position"`
 	CreatedAt   time.Time `json:"created_at"`
@@ -30,22 +37,28 @@ type Diary struct {
 	// заполняются в списках ежедневников.
 	ActiveCount int `json:"active_count"`
 	DoneCount   int `json:"done_count"`
+	// MyAccess — эффективный уровень спрашивающего; считает сервер.
+	MyAccess string `json:"my_access"`
+	// CompanyName — название команды-пространства (список группируется по ним).
+	CompanyName string `json:"company_name,omitempty"`
 }
 
 // Entry — запись (заметка-задача) ежедневника. Date — день, к которому привязана
-// запись (без времени). StartMin/EndMin — опциональное время начала/конца в
-// минутах от полуночи (nil — без времени). Done — выполнена (уходит в архив).
-// LinkedTaskID — связанная задача в tasksvc (создаётся кнопкой в карточке).
+// запись (без времени); нулевая — записи «Мого дня» без срока («Потом»).
+// StartMin/EndMin — опциональное время начала/конца в минутах от полуночи
+// (nil — без времени). Done — выполнена (уходит в архив). LinkedTaskID —
+// связанная задача в tasksvc, Attachments — вещи других разделов.
 type Entry struct {
-	ID           int64     `json:"-"`
-	DiaryID      int64     `json:"-"`
-	Date         time.Time `json:"-"`
-	StartMin     *int      `json:"-"`
-	EndMin       *int      `json:"-"`
-	Title        string    `json:"-"`
-	Description  string    `json:"-"`
-	Done         bool      `json:"-"`
-	LinkedTaskID *int64    `json:"-"`
+	ID           int64        `json:"-"`
+	DiaryID      int64        `json:"-"`
+	Date         time.Time    `json:"-"`
+	StartMin     *int         `json:"-"`
+	EndMin       *int         `json:"-"`
+	Title        string       `json:"-"`
+	Description  string       `json:"-"`
+	Done         bool         `json:"-"`
+	LinkedTaskID *int64       `json:"-"`
+	Attachments  []Attachment `json:"-"`
 	// Position — ручной порядок внутри дня (0 — не упорядочено, сортируется по
 	// времени после упорядоченных; reorder проставляет 1..N).
 	Position  int       `json:"-"`
@@ -57,24 +70,53 @@ type Entry struct {
 // чтобы клиент не «сдвигал» запись через границу суток в другом часовом поясе.
 func (e Entry) MarshalJSON() ([]byte, error) {
 	return json.Marshal(struct {
-		ID           int64     `json:"id"`
-		DiaryID      int64     `json:"diary_id"`
-		EntryDate    string    `json:"entry_date"`
-		StartMin     *int      `json:"start_min"`
-		EndMin       *int      `json:"end_min"`
-		Title        string    `json:"title"`
-		Description  string    `json:"description"`
-		Done         bool      `json:"done"`
-		LinkedTaskID *int64    `json:"linked_task_id"`
-		Position     int       `json:"position"`
-		CreatedAt    time.Time `json:"created_at"`
-		UpdatedAt    time.Time `json:"updated_at"`
+		ID           int64        `json:"id"`
+		DiaryID      int64        `json:"diary_id"`
+		EntryDate    *string      `json:"entry_date"`
+		StartMin     *int         `json:"start_min"`
+		EndMin       *int         `json:"end_min"`
+		Title        string       `json:"title"`
+		Description  string       `json:"description"`
+		Done         bool         `json:"done"`
+		LinkedTaskID *int64       `json:"linked_task_id"`
+		Attachments  []Attachment `json:"attachments"`
+		Position     int          `json:"position"`
+		CreatedAt    time.Time    `json:"created_at"`
+		UpdatedAt    time.Time    `json:"updated_at"`
 	}{
-		ID: e.ID, DiaryID: e.DiaryID, EntryDate: e.Date.Format(DateLayout),
+		ID: e.ID, DiaryID: e.DiaryID, EntryDate: FormatDay(e.Date),
 		StartMin: e.StartMin, EndMin: e.EndMin, Title: e.Title, Description: e.Description,
-		Done: e.Done, LinkedTaskID: e.LinkedTaskID, Position: e.Position,
-		CreatedAt: e.CreatedAt, UpdatedAt: e.UpdatedAt,
+		Done: e.Done, LinkedTaskID: e.LinkedTaskID, Attachments: attachmentsOrEmpty(e.Attachments),
+		Position: e.Position, CreatedAt: e.CreatedAt, UpdatedAt: e.UpdatedAt,
 	})
+}
+
+// FormatDay — день записи датой YYYY-MM-DD; nil у записи без срока.
+func FormatDay(t time.Time) *string {
+	if t.IsZero() {
+		return nil
+	}
+	s := t.Format(DateLayout)
+	return &s
+}
+
+func attachmentsOrEmpty(a []Attachment) []Attachment {
+	if a == nil {
+		return []Attachment{}
+	}
+	return a
+}
+
+// Today — экран «Сегодня» со стороны ежедневников: невыполненные дела дня из
+// всех доступных ежедневников, дела «Потом» (без срока) из «Моего дня» и
+// сколько дел за день уже закрыто. Diaries — названия ежедневников по id:
+// карточке нужно подписать, откуда дело.
+type Today struct {
+	MyDayID int64            `json:"my_day_id"`
+	Items   []*Entry         `json:"items"`
+	Later   []*Entry         `json:"later"`
+	Done    int              `json:"done"`
+	Diaries map[int64]string `json:"diaries"`
 }
 
 // EntryListFilter — выборка записей одного ежедневника. Archived делит на
@@ -144,6 +186,6 @@ func (h SearchHit) MarshalJSON() ([]byte, error) {
 	type alias SearchHit
 	return json.Marshal(struct {
 		alias
-		Date string `json:"entry_date"`
-	}{alias(h), h.Date.Format("2006-01-02")})
+		Date *string `json:"entry_date"`
+	}{alias(h), FormatDay(h.Date)})
 }

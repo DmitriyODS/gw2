@@ -13,7 +13,7 @@ func (s *Service) ListRegistries(ctx context.Context, userID int64, scope string
 	if err != nil {
 		return nil, err
 	}
-	regs, err := s.repo.ListRegistries(ctx, a.UserID, a.CompanyID, domain.NormalizeScope(scope))
+	regs, err := s.repo.ListRegistries(ctx, a.UserID, domain.NormalizeScope(scope))
 	if err != nil {
 		return nil, err
 	}
@@ -41,7 +41,7 @@ func (s *Service) TileSummary(ctx context.Context, userID int64) (*domain.Regist
 	if err != nil {
 		return nil, err
 	}
-	return s.repo.RegistriesSummary(ctx, a.UserID, a.CompanyID, 3)
+	return s.repo.RegistriesSummary(ctx, a.UserID, 3)
 }
 
 // GetRegistry — один доступный реестр с полями.
@@ -62,11 +62,13 @@ func (s *Service) GetRegistry(ctx context.Context, userID, id int64) (*domain.Re
 	return reg, nil
 }
 
-// CreateRegistry — новый реестр (структура полей задаётся отдельно). Владелец —
-// создающий; компания активной сессии запоминается, чтобы её квота платила за
-// файлы и чтобы было что предложить в «поделиться с компанией».
+// CreateRegistry — новый реестр (структура полей задаётся отдельно) в личном
+// пространстве (companyID == nil) либо в команде, где автор состоит.
 func (s *Service) CreateRegistry(ctx context.Context, userID int64, companyID *int64, name string, accounting bool) (*domain.Registry, error) {
 	if err := s.ensureLimit(ctx, userID); err != nil {
+		return nil, err
+	}
+	if err := s.requireMember(ctx, userID, companyID); err != nil {
 		return nil, err
 	}
 	pos, err := s.repo.NextRegistryPosition(ctx, userID)
@@ -74,7 +76,7 @@ func (s *Service) CreateRegistry(ctx context.Context, userID int64, companyID *i
 		return nil, err
 	}
 	reg := &domain.Registry{
-		OwnerID: userID, CompanyID: companyID, Name: name,
+		OwnerID: userID, CompanyID: companyID, TeamAccess: domain.AccessEdit, Name: name,
 		Position: pos, Accounting: accounting, CreatedBy: &userID,
 	}
 	if err := s.repo.CreateRegistry(ctx, reg); err != nil {
@@ -150,8 +152,9 @@ func (s *Service) updateRegistryIn(ctx context.Context, reg *domain.Registry, p 
 	return reg, nil
 }
 
-// DeleteRegistry — только владелец: отдать реестр вместе со всеми записями —
-// не то действие, которое доверяют приглашённому администратору.
+// DeleteRegistry — только владелец (у реестра команды — автор или
+// администратор команды): отдать реестр вместе со всеми записями — не то
+// действие, которое доверяют приглашённому администратору.
 func (s *Service) DeleteRegistry(ctx context.Context, userID, id int64) error {
 	a, err := s.actor(ctx, userID)
 	if err != nil {
@@ -173,6 +176,116 @@ func (s *Service) DeleteRegistry(ctx context.Context, userID, id int64) error {
 	s.removeRecordFiles(ctx, reg, records...)
 	s.bus.Publish(ctx, "registry:deleted", rooms, map[string]any{"id": id})
 	return nil
+}
+
+// requireMember — положить вещь в команду может только её участник.
+func (s *Service) requireMember(ctx context.Context, userID int64, companyID *int64) error {
+	if companyID == nil {
+		return nil
+	}
+	role, err := s.users.TeamRole(ctx, userID, *companyID)
+	if err != nil {
+		return err
+	}
+	if !role.Member {
+		return domain.ErrNotTeamMember
+	}
+	return nil
+}
+
+/*
+MoveRegistry — сменить пространство реестра и уровень участников команды.
+
+	Распоряжается этим «владелец»: хозяин личного реестра, у реестра команды —
+	автор и администраторы. Забирая реестр к себе, человек становится его
+	хозяином. Учёт файлов переезжает ДО реестра: за личный платит хозяин, за
+	командный — создатель команды, и сверка «Хранилища» стёрла бы файлы,
+	оставшиеся в журнале прежнего плательщика. Не переехал учёт — не переезжает
+	и реестр. Кто доступ потерял, получает событие удаления — иначе реестр висел
+	бы у него в списке до перезагрузки.
+*/
+func (s *Service) MoveRegistry(ctx context.Context, userID, id int64, companyID *int64, teamAccess string) (*domain.Registry, error) {
+	a, err := s.actor(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	reg, err := s.require(ctx, a, id, domain.AccessOwner)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.requireMember(ctx, userID, companyID); err != nil {
+		return nil, err
+	}
+	ownerID := reg.OwnerID
+	if companyID == nil {
+		ownerID = userID
+	}
+	access := domain.NormalizeTeamAccess(teamAccess)
+	if teamAccess == "" {
+		access = reg.TeamAccess
+	}
+
+	before := s.audience(ctx, id)
+	oldUser, oldCompany := quotaScope(reg)
+	next := *reg
+	next.OwnerID, next.CompanyID, next.TeamAccess = ownerID, companyID, access
+	if newUser, newCompany := quotaScope(&next); newUser != oldUser || newCompany != oldCompany {
+		if err := s.moveRecordFiles(ctx, &next); err != nil {
+			return nil, domain.ErrMoveFailed
+		}
+	}
+	if err := s.repo.MoveRegistry(ctx, id, ownerID, companyID, access); err != nil {
+		return nil, err
+	}
+	reg = &next
+
+	fields, err := s.repo.ListFields(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	reg.Fields = fields
+	after := s.audience(ctx, id)
+	if gone := missing(before, after); len(gone) > 0 {
+		s.bus.Publish(ctx, "registry:deleted", gone, map[string]any{"id": id})
+	}
+	if len(after) > 0 {
+		s.bus.Publish(ctx, "registry:updated", after, registryPayload(reg))
+	}
+	if reg.MyAccess, err = s.repo.AccessOf(ctx, id, userID); err != nil {
+		return nil, err
+	}
+	return reg, nil
+}
+
+// moveRecordFiles — переписать файлы записей на плательщика реестра reg.
+func (s *Service) moveRecordFiles(ctx context.Context, reg *domain.Registry) error {
+	recs, err := s.repo.AllRecords(ctx, reg.ID)
+	if err != nil {
+		return err
+	}
+	var paths []string
+	for _, rec := range recs {
+		for _, v := range rec.Data {
+			paths = append(paths, filePaths(v)...)
+		}
+	}
+	userID, companyID := quotaScope(reg)
+	return s.files.MoveFor(ctx, userID, companyID, paths)
+}
+
+// missing — комнаты, которые были в before и пропали из after.
+func missing(before, after []string) []string {
+	kept := make(map[string]bool, len(after))
+	for _, r := range after {
+		kept[r] = true
+	}
+	out := []string{}
+	for _, r := range before {
+		if !kept[r] {
+			out = append(out, r)
+		}
+	}
+	return out
 }
 
 // ReplaceFields — полная замена набора полей. Отключённые (удалённые) поля
@@ -249,7 +362,8 @@ func (s *Service) stripRemovedFields(ctx context.Context, reg *domain.Registry, 
 
 func registryPayload(r *domain.Registry) map[string]any {
 	return map[string]any{
-		"id": r.ID, "owner_id": r.OwnerID, "company_id": r.CompanyID, "name": r.Name,
+		"id": r.ID, "owner_id": r.OwnerID, "company_id": r.CompanyID,
+		"team_access": r.TeamAccess, "name": r.Name,
 		"position": r.Position, "section_field_id": r.SectionFieldID,
 		"accounting": r.Accounting, "fields": r.Fields,
 	}

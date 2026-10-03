@@ -720,6 +720,115 @@ func (x *TrackStorageResponse) GetTotalBytes() int64 {
 	return 0
 }
 
+// MoveStorageRequest — файлы сменили плательщика: вещь переехала из личного
+// пространства в команду или обратно. Новый владелец квоты задаётся так же,
+// как в TrackStorage (company_id > 0 — создатель команды); прежнего биллинг
+// знает из журнала. Перенос не проверяет остаток: файлы уже лежат в
+// хранилище, и отказ оставил бы вещь без учёта.
+type MoveStorageRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UserId        int64                  `protobuf:"varint,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	CompanyId     int64                  `protobuf:"varint,2,opt,name=company_id,json=companyId,proto3" json:"company_id,omitempty"`
+	Keys          []string               `protobuf:"bytes,3,rep,name=keys,proto3" json:"keys,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MoveStorageRequest) Reset() {
+	*x = MoveStorageRequest{}
+	mi := &file_billing_v1_billing_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MoveStorageRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MoveStorageRequest) ProtoMessage() {}
+
+func (x *MoveStorageRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_billing_v1_billing_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MoveStorageRequest.ProtoReflect.Descriptor instead.
+func (*MoveStorageRequest) Descriptor() ([]byte, []int) {
+	return file_billing_v1_billing_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *MoveStorageRequest) GetUserId() int64 {
+	if x != nil {
+		return x.UserId
+	}
+	return 0
+}
+
+func (x *MoveStorageRequest) GetCompanyId() int64 {
+	if x != nil {
+		return x.CompanyId
+	}
+	return 0
+}
+
+func (x *MoveStorageRequest) GetKeys() []string {
+	if x != nil {
+		return x.Keys
+	}
+	return nil
+}
+
+type MoveStorageResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Moved         int64                  `protobuf:"varint,1,opt,name=moved,proto3" json:"moved,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MoveStorageResponse) Reset() {
+	*x = MoveStorageResponse{}
+	mi := &file_billing_v1_billing_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MoveStorageResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MoveStorageResponse) ProtoMessage() {}
+
+func (x *MoveStorageResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_billing_v1_billing_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MoveStorageResponse.ProtoReflect.Descriptor instead.
+func (*MoveStorageResponse) Descriptor() ([]byte, []int) {
+	return file_billing_v1_billing_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *MoveStorageResponse) GetMoved() int64 {
+	if x != nil {
+		return x.Moved
+	}
+	return 0
+}
+
 type CheckAIRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	UserId        int64                  `protobuf:"varint,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
@@ -730,7 +839,7 @@ type CheckAIRequest struct {
 
 func (x *CheckAIRequest) Reset() {
 	*x = CheckAIRequest{}
-	mi := &file_billing_v1_billing_proto_msgTypes[8]
+	mi := &file_billing_v1_billing_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -742,7 +851,7 @@ func (x *CheckAIRequest) String() string {
 func (*CheckAIRequest) ProtoMessage() {}
 
 func (x *CheckAIRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_billing_v1_billing_proto_msgTypes[8]
+	mi := &file_billing_v1_billing_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -755,7 +864,7 @@ func (x *CheckAIRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CheckAIRequest.ProtoReflect.Descriptor instead.
 func (*CheckAIRequest) Descriptor() ([]byte, []int) {
-	return file_billing_v1_billing_proto_rawDescGZIP(), []int{8}
+	return file_billing_v1_billing_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *CheckAIRequest) GetUserId() int64 {
@@ -784,7 +893,7 @@ type CheckAIResponse struct {
 
 func (x *CheckAIResponse) Reset() {
 	*x = CheckAIResponse{}
-	mi := &file_billing_v1_billing_proto_msgTypes[9]
+	mi := &file_billing_v1_billing_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -796,7 +905,7 @@ func (x *CheckAIResponse) String() string {
 func (*CheckAIResponse) ProtoMessage() {}
 
 func (x *CheckAIResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_billing_v1_billing_proto_msgTypes[9]
+	mi := &file_billing_v1_billing_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -809,7 +918,7 @@ func (x *CheckAIResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CheckAIResponse.ProtoReflect.Descriptor instead.
 func (*CheckAIResponse) Descriptor() ([]byte, []int) {
-	return file_billing_v1_billing_proto_rawDescGZIP(), []int{9}
+	return file_billing_v1_billing_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *CheckAIResponse) GetAllowed() bool {
@@ -852,7 +961,7 @@ type ConsumeAIRequest struct {
 
 func (x *ConsumeAIRequest) Reset() {
 	*x = ConsumeAIRequest{}
-	mi := &file_billing_v1_billing_proto_msgTypes[10]
+	mi := &file_billing_v1_billing_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -864,7 +973,7 @@ func (x *ConsumeAIRequest) String() string {
 func (*ConsumeAIRequest) ProtoMessage() {}
 
 func (x *ConsumeAIRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_billing_v1_billing_proto_msgTypes[10]
+	mi := &file_billing_v1_billing_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -877,7 +986,7 @@ func (x *ConsumeAIRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConsumeAIRequest.ProtoReflect.Descriptor instead.
 func (*ConsumeAIRequest) Descriptor() ([]byte, []int) {
-	return file_billing_v1_billing_proto_rawDescGZIP(), []int{10}
+	return file_billing_v1_billing_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *ConsumeAIRequest) GetPayerId() int64 {
@@ -953,7 +1062,7 @@ type ConsumeAIResponse struct {
 
 func (x *ConsumeAIResponse) Reset() {
 	*x = ConsumeAIResponse{}
-	mi := &file_billing_v1_billing_proto_msgTypes[11]
+	mi := &file_billing_v1_billing_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -965,7 +1074,7 @@ func (x *ConsumeAIResponse) String() string {
 func (*ConsumeAIResponse) ProtoMessage() {}
 
 func (x *ConsumeAIResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_billing_v1_billing_proto_msgTypes[11]
+	mi := &file_billing_v1_billing_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -978,7 +1087,7 @@ func (x *ConsumeAIResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConsumeAIResponse.ProtoReflect.Descriptor instead.
 func (*ConsumeAIResponse) Descriptor() ([]byte, []int) {
-	return file_billing_v1_billing_proto_rawDescGZIP(), []int{11}
+	return file_billing_v1_billing_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *ConsumeAIResponse) GetOk() bool {
@@ -1008,7 +1117,7 @@ type LogActionRequest struct {
 
 func (x *LogActionRequest) Reset() {
 	*x = LogActionRequest{}
-	mi := &file_billing_v1_billing_proto_msgTypes[12]
+	mi := &file_billing_v1_billing_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1020,7 +1129,7 @@ func (x *LogActionRequest) String() string {
 func (*LogActionRequest) ProtoMessage() {}
 
 func (x *LogActionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_billing_v1_billing_proto_msgTypes[12]
+	mi := &file_billing_v1_billing_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1033,7 +1142,7 @@ func (x *LogActionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogActionRequest.ProtoReflect.Descriptor instead.
 func (*LogActionRequest) Descriptor() ([]byte, []int) {
-	return file_billing_v1_billing_proto_rawDescGZIP(), []int{12}
+	return file_billing_v1_billing_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *LogActionRequest) GetActorId() int64 {
@@ -1080,7 +1189,7 @@ type LogActionResponse struct {
 
 func (x *LogActionResponse) Reset() {
 	*x = LogActionResponse{}
-	mi := &file_billing_v1_billing_proto_msgTypes[13]
+	mi := &file_billing_v1_billing_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1092,7 +1201,7 @@ func (x *LogActionResponse) String() string {
 func (*LogActionResponse) ProtoMessage() {}
 
 func (x *LogActionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_billing_v1_billing_proto_msgTypes[13]
+	mi := &file_billing_v1_billing_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1105,7 +1214,7 @@ func (x *LogActionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogActionResponse.ProtoReflect.Descriptor instead.
 func (*LogActionResponse) Descriptor() ([]byte, []int) {
-	return file_billing_v1_billing_proto_rawDescGZIP(), []int{13}
+	return file_billing_v1_billing_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *LogActionResponse) GetOk() bool {
@@ -1190,7 +1299,14 @@ const file_billing_v1_billing_proto_rawDesc = "" +
 	"\x05title\x18\x06 \x01(\tR\x05title\"7\n" +
 	"\x14TrackStorageResponse\x12\x1f\n" +
 	"\vtotal_bytes\x18\x01 \x01(\x03R\n" +
-	"totalBytes\"H\n" +
+	"totalBytes\"`\n" +
+	"\x12MoveStorageRequest\x12\x17\n" +
+	"\auser_id\x18\x01 \x01(\x03R\x06userId\x12\x1d\n" +
+	"\n" +
+	"company_id\x18\x02 \x01(\x03R\tcompanyId\x12\x12\n" +
+	"\x04keys\x18\x03 \x03(\tR\x04keys\"+\n" +
+	"\x13MoveStorageResponse\x12\x14\n" +
+	"\x05moved\x18\x01 \x01(\x03R\x05moved\"H\n" +
 	"\x0eCheckAIRequest\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\x03R\x06userId\x12\x1d\n" +
 	"\n" +
@@ -1223,11 +1339,12 @@ const file_billing_v1_billing_proto_rawDesc = "" +
 	"\ttarget_id\x18\x04 \x01(\tR\btargetId\x12\x18\n" +
 	"\asummary\x18\x05 \x01(\tR\asummary\"#\n" +
 	"\x11LogActionResponse\x12\x0e\n" +
-	"\x02ok\x18\x01 \x01(\bR\x02ok2\xea\x03\n" +
+	"\x02ok\x18\x01 \x01(\bR\x02ok2\xba\x04\n" +
 	"\x0eBillingService\x12Z\n" +
 	"\x0fGetEntitlements\x12\".billing.v1.GetEntitlementsRequest\x1a#.billing.v1.GetEntitlementsResponse\x12Q\n" +
 	"\fCheckStorage\x12\x1f.billing.v1.CheckStorageRequest\x1a .billing.v1.CheckStorageResponse\x12Q\n" +
-	"\fTrackStorage\x12\x1f.billing.v1.TrackStorageRequest\x1a .billing.v1.TrackStorageResponse\x12B\n" +
+	"\fTrackStorage\x12\x1f.billing.v1.TrackStorageRequest\x1a .billing.v1.TrackStorageResponse\x12N\n" +
+	"\vMoveStorage\x12\x1e.billing.v1.MoveStorageRequest\x1a\x1f.billing.v1.MoveStorageResponse\x12B\n" +
 	"\aCheckAI\x12\x1a.billing.v1.CheckAIRequest\x1a\x1b.billing.v1.CheckAIResponse\x12H\n" +
 	"\tConsumeAI\x12\x1c.billing.v1.ConsumeAIRequest\x1a\x1d.billing.v1.ConsumeAIResponse\x12H\n" +
 	"\tLogAction\x12\x1c.billing.v1.LogActionRequest\x1a\x1d.billing.v1.LogActionResponseB?Z=github.com/DmitriyODS/gw2/back-go/pkg/gen/billingpb;billingpbb\x06proto3"
@@ -1244,7 +1361,7 @@ func file_billing_v1_billing_proto_rawDescGZIP() []byte {
 	return file_billing_v1_billing_proto_rawDescData
 }
 
-var file_billing_v1_billing_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
+var file_billing_v1_billing_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
 var file_billing_v1_billing_proto_goTypes = []any{
 	(*Limits)(nil),                  // 0: billing.v1.Limits
 	(*GetEntitlementsRequest)(nil),  // 1: billing.v1.GetEntitlementsRequest
@@ -1254,12 +1371,14 @@ var file_billing_v1_billing_proto_goTypes = []any{
 	(*TrackStorageRequest)(nil),     // 5: billing.v1.TrackStorageRequest
 	(*StoredFile)(nil),              // 6: billing.v1.StoredFile
 	(*TrackStorageResponse)(nil),    // 7: billing.v1.TrackStorageResponse
-	(*CheckAIRequest)(nil),          // 8: billing.v1.CheckAIRequest
-	(*CheckAIResponse)(nil),         // 9: billing.v1.CheckAIResponse
-	(*ConsumeAIRequest)(nil),        // 10: billing.v1.ConsumeAIRequest
-	(*ConsumeAIResponse)(nil),       // 11: billing.v1.ConsumeAIResponse
-	(*LogActionRequest)(nil),        // 12: billing.v1.LogActionRequest
-	(*LogActionResponse)(nil),       // 13: billing.v1.LogActionResponse
+	(*MoveStorageRequest)(nil),      // 8: billing.v1.MoveStorageRequest
+	(*MoveStorageResponse)(nil),     // 9: billing.v1.MoveStorageResponse
+	(*CheckAIRequest)(nil),          // 10: billing.v1.CheckAIRequest
+	(*CheckAIResponse)(nil),         // 11: billing.v1.CheckAIResponse
+	(*ConsumeAIRequest)(nil),        // 12: billing.v1.ConsumeAIRequest
+	(*ConsumeAIResponse)(nil),       // 13: billing.v1.ConsumeAIResponse
+	(*LogActionRequest)(nil),        // 14: billing.v1.LogActionRequest
+	(*LogActionResponse)(nil),       // 15: billing.v1.LogActionResponse
 }
 var file_billing_v1_billing_proto_depIdxs = []int32{
 	0,  // 0: billing.v1.GetEntitlementsResponse.limits:type_name -> billing.v1.Limits
@@ -1267,17 +1386,19 @@ var file_billing_v1_billing_proto_depIdxs = []int32{
 	1,  // 2: billing.v1.BillingService.GetEntitlements:input_type -> billing.v1.GetEntitlementsRequest
 	3,  // 3: billing.v1.BillingService.CheckStorage:input_type -> billing.v1.CheckStorageRequest
 	5,  // 4: billing.v1.BillingService.TrackStorage:input_type -> billing.v1.TrackStorageRequest
-	8,  // 5: billing.v1.BillingService.CheckAI:input_type -> billing.v1.CheckAIRequest
-	10, // 6: billing.v1.BillingService.ConsumeAI:input_type -> billing.v1.ConsumeAIRequest
-	12, // 7: billing.v1.BillingService.LogAction:input_type -> billing.v1.LogActionRequest
-	2,  // 8: billing.v1.BillingService.GetEntitlements:output_type -> billing.v1.GetEntitlementsResponse
-	4,  // 9: billing.v1.BillingService.CheckStorage:output_type -> billing.v1.CheckStorageResponse
-	7,  // 10: billing.v1.BillingService.TrackStorage:output_type -> billing.v1.TrackStorageResponse
-	9,  // 11: billing.v1.BillingService.CheckAI:output_type -> billing.v1.CheckAIResponse
-	11, // 12: billing.v1.BillingService.ConsumeAI:output_type -> billing.v1.ConsumeAIResponse
-	13, // 13: billing.v1.BillingService.LogAction:output_type -> billing.v1.LogActionResponse
-	8,  // [8:14] is the sub-list for method output_type
-	2,  // [2:8] is the sub-list for method input_type
+	8,  // 5: billing.v1.BillingService.MoveStorage:input_type -> billing.v1.MoveStorageRequest
+	10, // 6: billing.v1.BillingService.CheckAI:input_type -> billing.v1.CheckAIRequest
+	12, // 7: billing.v1.BillingService.ConsumeAI:input_type -> billing.v1.ConsumeAIRequest
+	14, // 8: billing.v1.BillingService.LogAction:input_type -> billing.v1.LogActionRequest
+	2,  // 9: billing.v1.BillingService.GetEntitlements:output_type -> billing.v1.GetEntitlementsResponse
+	4,  // 10: billing.v1.BillingService.CheckStorage:output_type -> billing.v1.CheckStorageResponse
+	7,  // 11: billing.v1.BillingService.TrackStorage:output_type -> billing.v1.TrackStorageResponse
+	9,  // 12: billing.v1.BillingService.MoveStorage:output_type -> billing.v1.MoveStorageResponse
+	11, // 13: billing.v1.BillingService.CheckAI:output_type -> billing.v1.CheckAIResponse
+	13, // 14: billing.v1.BillingService.ConsumeAI:output_type -> billing.v1.ConsumeAIResponse
+	15, // 15: billing.v1.BillingService.LogAction:output_type -> billing.v1.LogActionResponse
+	9,  // [9:16] is the sub-list for method output_type
+	2,  // [2:9] is the sub-list for method input_type
 	2,  // [2:2] is the sub-list for extension type_name
 	2,  // [2:2] is the sub-list for extension extendee
 	0,  // [0:2] is the sub-list for field type_name
@@ -1294,7 +1415,7 @@ func file_billing_v1_billing_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_billing_v1_billing_proto_rawDesc), len(file_billing_v1_billing_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   14,
+			NumMessages:   16,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

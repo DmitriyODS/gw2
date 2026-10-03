@@ -98,6 +98,7 @@ func NewServer(svc *service.Service, users domain.UserReader,
 	api.Get("/:id<int>", h.getForm)
 	api.Patch("/:id<int>", h.updateForm)
 	api.Delete("/:id<int>", h.deleteForm)
+	api.Put("/:id<int>/space", h.moveForm)
 	api.Post("/:id<int>/duplicate", h.duplicateForm)
 	api.Put("/:id<int>/structure", h.replaceStructure)
 
@@ -172,16 +173,6 @@ func userID(c *fiber.Ctx) int64 {
 		return u.ID
 	}
 	return 0
-}
-
-// activeCompany — компания сессии; nil, если человек ни в одной не состоит либо
-// не выбрал активную. Нужна при СОЗДАНИИ формы: она решает, чья квота платит за
-// файлы ответов и что предложить в «назначить компании».
-func activeCompany(c *fiber.Ctx) *int64 {
-	if u := currentUser(c); u != nil {
-		return u.CompanyID
-	}
-	return nil
 }
 
 // visitor — кто открывает публичную ссылку. Адрес берём из заголовков прокси:

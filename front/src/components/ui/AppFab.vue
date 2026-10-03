@@ -68,24 +68,38 @@ defineEmits(['click'])
               opacity 0.22s ease;
 }
 
-/* Единый стеклянный стиль плавающих кнопок: полупрозрачное стекло с блюром
-   контента под ним, светлая рамка, монохромная иконка. Настоящий
-   backdrop-filter здесь уместен — кнопка плавает над страницей, а не внутри
-   акриловой панели. Тона primary/tertiary не различаются. */
+/* Плавающая кнопка — главное действие экрана: выпуклое тело своего цвета,
+   как filled-кнопка, но с тенью повыше — она парит над страницей. */
 .fab--primary,
-.fab--tertiary {
-  background: var(--acrylic-bg);
-  -webkit-backdrop-filter: var(--acrylic-blur);
-  backdrop-filter: var(--acrylic-blur);
-  border: 1px solid var(--acrylic-border);
-  color: var(--color-text);
-  box-shadow: var(--glass-edge), var(--shadow-lg, 0 12px 32px rgba(0, 0, 0, 0.18));
+.fab--tertiary { background: var(--color-primary); color: var(--color-on-primary); box-shadow: var(--shadow-lg); }
+@supports (color: color-mix(in oklch, red, blue)) {
+  .fab--primary,
+  .fab--tertiary {
+    --sk-tone: var(--color-primary);
+    border: 1px solid color-mix(in oklch, var(--sk-tone) 70%, black);
+    background:
+      var(--grain),
+      linear-gradient(180deg,
+        color-mix(in oklch, var(--sk-tone) 82%, white),
+        var(--sk-tone) 55%,
+        color-mix(in oklch, var(--sk-tone) 88%, black));
+    color: var(--color-on-primary);
+    box-shadow:
+      inset 0 1px 0 color-mix(in oklch, white 40%, transparent),
+      inset 0 -1px 0 color-mix(in oklch, black 18%, transparent),
+      0 2px 4px color-mix(in oklch, black 18%, transparent),
+      0 10px 24px color-mix(in oklch, var(--sk-tone) 30%, transparent);
+  }
 }
+
+.fab--tertiary { --sk-tone: var(--color-tertiary); color: var(--color-on-tertiary); }
 
 .fab--primary:active,
 .fab--tertiary:active {
-  transform: scale(0.96);
-  background: var(--acrylic-bg-strong);
+  transform: scale(0.97);
+  box-shadow:
+    inset 0 2px 5px color-mix(in oklch, black 28%, transparent),
+    0 1px 2px color-mix(in oklch, black 18%, transparent);
 }
 
 .fab .material-symbols-outlined {

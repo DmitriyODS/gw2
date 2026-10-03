@@ -11,7 +11,6 @@
 #   osipovskijdima/groove_work:auth       — authsvc, Go     (back-go/auth/)
 #   osipovskijdima/groove_work:messenger  — msgsvc, Go      (back-go/messenger/)
 #   osipovskijdima/groove_work:ai         — aisvc, Go       (back-go/ai/)
-#   osipovskijdima/groove_work:pets      — petsvc, Go      (back-go/pets/)
 #   osipovskijdima/groove_work:tasks      — tasksvc, Go     (back-go/tasks/)
 #   osipovskijdima/groove_work:push       — pushsvc, Go     (back-go/push/)
 #   osipovskijdima/groove_work:portal     — portalsvc, Go   (back-go/portal/)
@@ -20,7 +19,7 @@
 # Дополнительно каждый образ получает версионный тег `<svc>-X.Y.Z`
 # (версия из front/package.json) — для отката: на сервере в deploy/.env
 # выставить GATEWAY_TAG=gateway-X.Y.Z (MIGRATE_TAG / CALLS_TAG / AUTH_TAG /
-# MESSENGER_TAG / PETS_TAG / AI_TAG / TASKS_TAG / FRONT_TAG — аналогично)
+# MESSENGER_TAG / AI_TAG / TASKS_TAG / FRONT_TAG — аналогично)
 # и перезапустить деплой.
 #
 # Требуется один раз: `docker login` под аккаунтом с правом push.
@@ -37,7 +36,7 @@ set -euo pipefail
 cd "$(cd "$(dirname "$0")/.." && pwd)"
 
 REPO="${DOCKER_REPO:-osipovskijdima/groove_work}"
-ALL_SERVICES=(migrate gateway calls auth messenger ai pets tasks push mail registry forms schedule calendar diary portal notes board drive reminder billing alice front)
+ALL_SERVICES=(migrate gateway calls auth messenger ai tasks push mail registry forms schedule calendar diary portal notes board drive reminder billing alice front)
 # Прод — linux/amd64. На Apple Silicon: Go-стадии кросс-компилируют нативно
 # (см. $BUILDPLATFORM в Dockerfile), python/node-стадии бегут под Rosetta.
 PLATFORM="${DOCKER_PLATFORM:-linux/amd64}"
@@ -51,14 +50,14 @@ context_of() {
     front) echo front ;;
     # Go-сервисы собираются из общего контекста back-go/ (модуль pkg
     # подключён через replace ../pkg), Dockerfile — внутри сервиса.
-    migrate|gateway|calls|auth|messenger|ai|pets|tasks|push|mail|registry|forms|schedule|calendar|diary|portal|notes|board|drive|reminder|billing|alice) echo back-go ;;
-    *) printf 'Неизвестный сервис: %s (ожидается migrate|gateway|calls|auth|messenger|ai|pets|tasks|push|mail|registry|forms|schedule|calendar|diary|portal|notes|board|drive|reminder|billing|alice|front)\n' "$1" >&2; return 2 ;;
+    migrate|gateway|calls|auth|messenger|ai|tasks|push|mail|registry|forms|schedule|calendar|diary|portal|notes|board|drive|reminder|billing|alice) echo back-go ;;
+    *) printf 'Неизвестный сервис: %s (ожидается migrate|gateway|calls|auth|messenger|ai|tasks|push|mail|registry|forms|schedule|calendar|diary|portal|notes|board|drive|reminder|billing|alice|front)\n' "$1" >&2; return 2 ;;
   esac
 }
 
 dockerfile_of() {
   case "$1" in
-    migrate|gateway|calls|auth|messenger|ai|pets|tasks|push|mail|registry|forms|schedule|calendar|diary|portal|notes|board|drive|reminder|billing|alice) echo "back-go/$1/Dockerfile" ;;
+    migrate|gateway|calls|auth|messenger|ai|tasks|push|mail|registry|forms|schedule|calendar|diary|portal|notes|board|drive|reminder|billing|alice) echo "back-go/$1/Dockerfile" ;;
     *) echo "" ;;
   esac
 }
@@ -100,7 +99,6 @@ changed_services() {
       back-go/auth/*) hits="$hits auth" ;;
       back-go/messenger/*) hits="$hits messenger" ;;
       back-go/ai/*) hits="$hits ai" ;;
-      back-go/pets/*) hits="$hits pets" ;;
       back-go/tasks/*) hits="$hits tasks" ;;
       back-go/push/*) hits="$hits push" ;;
       back-go/mail/*) hits="$hits mail" ;;
@@ -122,7 +120,7 @@ changed_services() {
   done <<EOF
 $files
 EOF
-  [ "$go" = 1 ] && hits="$hits migrate gateway calls auth messenger ai pets tasks push mail registry forms schedule calendar diary portal notes board drive reminder billing alice"
+  [ "$go" = 1 ] && hits="$hits migrate gateway calls auth messenger ai tasks push mail registry forms schedule calendar diary portal notes board drive reminder billing alice"
   [ "$front" = 1 ] && hits="$hits front"
   [ -n "$unknown" ] && printf 'changed: не отнёс к сервисам (образы не трогаю):%s\n' "$unknown" >&2
   local s

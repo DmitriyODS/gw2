@@ -1,11 +1,6 @@
-// Package service — ИИ-ассистент (Сущность 3 плана переосмысления «Мой
-// Groove»): деловой корпоративный ассистент по статистике/задачам, БЕЗ
-// «сладкой» тональности бывшего Грувика и без привязки к питомцу.
-//
-// Перенесено из бывшего groove/internal/{clients/ai.go,service/tools.go,
-// service/ai.go} (tools-цикл + диспетчер + системный промпт), с одним
-// архитектурным отличием: инструменты статистики больше не читают таблицы
-// tasksvc напрямую — только через честный gRPC-клиент (s.tasks).
+// Package service — деловой ИИ-ассистент по статистике и задачам.
+// Инструменты статистики читают данные tasksvc только через gRPC-клиент
+// (s.tasks), а не таблицы напрямую.
 package service
 
 import (
@@ -22,13 +17,12 @@ import (
 
 const (
 	// assistantHistoryLimit — сколько последних сообщений диалога берём как
-	// контекст для tools-цикла (аналог petChatHistoryLimit=12 у Грувика, с
-	// запасом — ассистент обсуждает более развёрнутые деловые темы).
+	// контекст для tools-цикла.
 	assistantHistoryLimit  = 20
 	assistantMaxIterations = 4
 	assistantMaxTokens     = 500
-	// assistantTemperature — ниже, чем у Грувика (0.9): деловой ассистент
-	// должен быть предсказуем, а не «с характером».
+	// assistantTemperature — низкая: деловой ассистент должен быть
+	// предсказуем.
 	assistantTemperature = 0.3
 	assistantTimeout     = 30 * time.Second
 )
@@ -392,7 +386,7 @@ func truncateRunes(s string, n int) string {
 // ── Диспетчер инструментов ────────────────────────────────────────
 
 // dispatchAssistantTool — запустить инструмент по имени; сбой → {"error":
-// "..."}, НИКОГДА не роняет tools-цикл (как dispatchTool у Грувика).
+// "..."}, НИКОГДА не роняет tools-цикл .
 func (s *Service) dispatchAssistantTool(ctx context.Context, name string, args map[string]any, companyID int64) any {
 	if s.tasks == nil {
 		return map[string]any{"error": "tasks_unavailable"}

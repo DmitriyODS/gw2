@@ -38,7 +38,7 @@ var backupExcluded = map[string]bool{
 // подписи — на фронте, front/src/utils/backupSections.js).
 var backupSectionKeys = []string{
 	"auth", "companies", "tasks", "registry", "forms", "schedule", "calendar", "diary", "notes",
-	"boards", "drive", "reminders", "messenger", "calls", "groove", "portal", "ai", "billing", "integration",
+	"boards", "drive", "reminders", "messenger", "calls", "portal", "ai", "billing", "integration",
 }
 
 // dbTables — таблицы public-схемы тестовой БД (её ведут те же миграции, что и прод).
@@ -181,44 +181,16 @@ func TestBackupSectionsCoverEveryTable(t *testing.T) {
 	}
 }
 
-// Раздел питомцев обязан выгружаться целиком: экономика грувика — это не
-// только pets, но и банк с магазином, историей и счётчиками признания.
-func TestBackupGrooveSectionCarriesPetEconomy(t *testing.T) {
-	root := newSuperAdmin(t)
-	tables := exportArchive(t, root, "groove")
-
-	for _, tbl := range []string{"pets", "pet_strokes", "pet_activity_log", "pet_kudos_ledger",
-		"pet_kudos_weekly", "pet_shop_purchases", "pet_bank_goals"} {
-		if _, ok := tables[tbl]; !ok {
-			t.Errorf("раздел «Питомцы» не несёт таблицу %q", tbl)
-		}
-	}
-	// Портал — свой раздел, в питомцев он попадать не должен.
-	if _, ok := tables["portal_posts"]; ok {
-		t.Error("раздел «Питомцы» тянет за собой портал")
-	}
-}
-
-// Сквозной цикл: наполняем компанию данными новых механик (грувик с
-// потребностями и болезнью, выписка банка, ветка комментариев с лайком),
+// Сквозной цикл: наполняем компанию данными (ветка комментариев с лайком),
 // выгружаем архив, ломаем данные и восстанавливаем — состояние возвращается.
 func TestBackupExportImportRoundTrip(t *testing.T) {
 	root := newSuperAdmin(t)
-	admin, member, _ := petsCompany(t)
-
-	petsAPI.doJSON(t, http.MethodGet, "/api/pets/pet", member.Token, nil)
-	grantKudos(t, member.ID, 50)
-	setNeed(t, member.ID, "need_hygiene", 0)
-	makeSick(t, member.ID, "grime", 1)
-	r := petsAPI.doJSON(t, http.MethodPost, "/api/pets/bath", member.Token, nil)
-	requireStatus(t, r, 200, "купание (даёт запись выписки)")
-	// Купание грязнулю вылечило — а в архив должен уехать БОЛЬНОЙ грувик с
-	// приметной шкалой: иначе проверять после восстановления нечего.
-	setNeed(t, member.ID, "need_hygiene", 42)
-	makeSick(t, member.ID, "grime", 1)
+	admin := newVerifiedUser(t)
+	companyID := admin.createCompany(t, uniq("Бэкап "))
+	member := newMember(t, admin, companyID, roleEmployee)
 
 	postID := createPost(t, admin, "Пост для бэкапа")
-	r = portalAPI.doJSON(t, http.MethodPost, fmt.Sprintf("/api/portal/posts/%d/comments", postID),
+	r := portalAPI.doJSON(t, http.MethodPost, fmt.Sprintf("/api/portal/posts/%d/comments", postID),
 		member.Token, map[string]any{"text": "корневой"})
 	requireStatus(t, r, 201, "комментарий")
 	rootComment := int64(r.Num("id"))
@@ -229,16 +201,11 @@ func TestBackupExportImportRoundTrip(t *testing.T) {
 		fmt.Sprintf("/api/portal/comments/%d/like", rootComment), admin.Token, nil)
 	requireStatus(t, r, 200, "лайк комментария")
 
-	counted := []string{"users", "pets", "pet_kudos_ledger", "portal_posts",
+	counted := []string{"users", "user_companies", "portal_posts",
 		"portal_comments", "portal_comment_likes"}
 	before := map[string]int{}
 	for _, tbl := range counted {
 		before[tbl] = countRows(t, tbl)
-	}
-	var hygieneBefore int
-	if err := db.QueryRow(dbCtx(t),
-		`SELECT need_hygiene FROM pets WHERE user_id=$1`, member.ID).Scan(&hygieneBefore); err != nil {
-		t.Fatalf("шкала до бэкапа: %v", err)
 	}
 
 	// Экспорт всей базы.
@@ -246,15 +213,12 @@ func TestBackupExportImportRoundTrip(t *testing.T) {
 	requireStatus(t, exp, 200, "экспорт бэкапа")
 	raw := exp.Raw
 
-	// Ломаем: сносим обсуждение, выписку и шкалы питомца.
-	for _, q := range []string{
-		`DELETE FROM portal_comments`,
-		`DELETE FROM pet_kudos_ledger`,
-		`UPDATE pets SET need_hygiene = 0, need_satiety = 0`,
-	} {
-		if _, err := db.Exec(dbCtx(t), q); err != nil {
-			t.Fatalf("порча данных (%s): %v", q, err)
-		}
+	// Ломаем: сносим обсуждение и членство сотрудника.
+	if _, err := db.Exec(dbCtx(t), `DELETE FROM portal_comments`); err != nil {
+		t.Fatalf("порча обсуждения: %v", err)
+	}
+	if _, err := db.Exec(dbCtx(t), `DELETE FROM user_companies WHERE user_id = $1`, member.ID); err != nil {
+		t.Fatalf("порча членства: %v", err)
 	}
 	if countRows(t, "portal_comments") != 0 {
 		t.Fatal("данные не удалились — тест бессмыслен")
@@ -270,20 +234,7 @@ func TestBackupExportImportRoundTrip(t *testing.T) {
 		}
 	}
 
-	// Питомец вернул шкалы и болезнь, обсуждение — дерево и лайки.
-	var hygiene int
-	var ailment *string
-	if err := db.QueryRow(dbCtx(t),
-		`SELECT need_hygiene, ailment FROM pets WHERE user_id=$1`, member.ID).
-		Scan(&hygiene, &ailment); err != nil {
-		t.Fatalf("питомец после восстановления: %v", err)
-	}
-	if hygiene != hygieneBefore {
-		t.Errorf("шкала чистоты = %d, ожидалась %d", hygiene, hygieneBefore)
-	}
-	if ailment == nil || *ailment != "grime" {
-		t.Errorf("болезнь не восстановилась: %v", ailment)
-	}
+	// Обсуждение вернулось деревом и с лайками.
 	var replies, likes int
 	if err := db.QueryRow(dbCtx(t),
 		`SELECT count(*) FROM portal_comments WHERE reply_to_id IS NOT NULL`).Scan(&replies); err != nil {

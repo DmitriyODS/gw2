@@ -5,9 +5,9 @@
   <Teleport to="body">
     <div class="lock" role="dialog" aria-modal="true" aria-label="Экран заблокирован">
       <!-- Обои запертого экрана — тот же рецепт фона, что у рабочего стола и
-           чатов; не выбраны — остаётся фирменная волна экранов входа. -->
+           чатов; не выбраны — остаётся однотонный фон экранов входа. -->
       <ChatBackgroundLayer v-if="wallpaper" :recipe="wallpaper" class="lock-bg" />
-      <AuthWave v-else class="lock-wave" />
+      <AuthBackdrop v-else class="lock-wave" />
 
       <div class="lock-card">
         <BrandWordmark class="lock-brand" />
@@ -17,7 +17,7 @@
         <p class="lock-hint">Введите пин-код, чтобы продолжить</p>
 
         <form class="lock-form" @submit.prevent="submit">
-          <input
+          <InputText
             ref="inputEl"
             v-model="secret"
             class="lock-input"
@@ -27,7 +27,7 @@
             :placeholder="usePassword ? 'Пароль от аккаунта' : 'Пин-код'"
             :disabled="busy"
             @input="error = ''"
-          >
+          />
           <AppButton
             variant="icon"
             :icon="showSecret ? 'visibility_off' : 'visibility'"
@@ -61,9 +61,10 @@
 
 <script setup>
 import { computed, nextTick, onMounted, ref } from 'vue'
-import AuthWave from '@/components/auth/AuthWave.vue'
+import AuthBackdrop from '@/components/auth/AuthBackdrop.vue'
 import BrandWordmark from '@/components/common/BrandWordmark.vue'
 import AppButton from '@/components/ui/AppButton.vue'
+import InputText from 'primevue/inputtext'
 import { useAuthStore } from '@/stores/auth.js'
 import ChatBackgroundLayer from '@/components/common/ChatBackgroundLayer.vue'
 import { useScreenLock } from '@/composables/useScreenLock.js'
@@ -98,7 +99,7 @@ async function submit() {
     error.value = e?.message || 'Не подошло — попробуйте ещё раз'
     secret.value = ''
     await nextTick()
-    inputEl.value?.focus()
+    inputEl.value?.$el?.focus()
   } finally {
     busy.value = false
   }
@@ -109,7 +110,7 @@ async function logout() {
   await auth.logout()
 }
 
-onMounted(() => inputEl.value?.focus())
+onMounted(() => inputEl.value?.$el?.focus())
 </script>
 
 <style scoped>
@@ -121,7 +122,7 @@ onMounted(() => inputEl.value?.focus())
   z-index: 20000;
   display: grid;
   place-items: center;
-  background: var(--color-surface);
+  background: var(--color-bg);
   overflow: hidden;
 }
 
@@ -139,10 +140,10 @@ onMounted(() => inputEl.value?.focus())
   gap: 12px;
   width: min(420px, calc(100vw - 32px));
   padding: 28px 24px;
-  border: 1px solid var(--acrylic-border);
+  border: 1px solid var(--sk-edge);
   border-radius: var(--radius-xl);
-  background: var(--glass-bg), var(--acrylic-card-bg);
-  box-shadow: var(--glass-edge);
+  background: var(--acrylic-card-bg);
+  box-shadow: var(--sk-panel-shadow), var(--shadow-lg);
   text-align: center;
 }
 
@@ -177,19 +178,11 @@ onMounted(() => inputEl.value?.focus())
 .lock-input {
   flex: 1;
   min-width: 0;
-  padding: 12px 14px;
-  border: 1px solid var(--acrylic-border);
-  border-radius: var(--radius-md);
-  background: var(--glass-bg), var(--color-surface-variant);
-  color: var(--color-text);
+  height: 44px;
+  padding: 0 14px;
   font-size: 1.05rem;
   letter-spacing: 0.15em;
   text-align: center;
-}
-
-.lock-input:focus {
-  outline: none;
-  border-color: var(--color-primary);
 }
 
 .lock-error {

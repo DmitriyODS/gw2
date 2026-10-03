@@ -1,14 +1,13 @@
 // Package service — бизнес-логика registrysvc: реестры, их поля (структура
 // карточки), записи, учёт выдач и шаринг.
 //
-// Реестр принадлежит ЧЕЛОВЕКУ, а не компании: коллеги и компании получают его
-// адресным доступом трёх уровней (см. domain/access.go). Поэтому проверка прав
-// здесь — не «состоит ли в компании», а «какой у него уровень», и она стоит на
-// входе КАЖДОЙ операции.
+// Реестр лежит в пространстве — личном или команды, а коллеги и команды
+// получают его ещё и шарингом трёх уровней (см. domain/access.go). Проверка
+// прав — «какой у него уровень», и она стоит на входе КАЖДОЙ операции.
 //
 // Сокет-события клиентам публикуются в Redis gw2:registry:events (доставляет
 // gatewaysvc) и адресуются АУДИТОРИИ реестра поимённо: общей комнаты у раздела
-// больше нет — реестр перестал быть общим достоянием компании.
+// нет.
 package service
 
 import (
@@ -18,7 +17,6 @@ import (
 
 	"github.com/DmitriyODS/gw2/back-go/pkg/billingclient"
 	"github.com/DmitriyODS/gw2/back-go/pkg/chunkupload"
-	"github.com/DmitriyODS/gw2/back-go/pkg/pasetoauth"
 	"github.com/DmitriyODS/gw2/back-go/registry/internal/domain"
 )
 
@@ -50,32 +48,22 @@ func New(d Deps) *Service {
 /*
 Actor — кто выполняет операцию.
 
-	Companies — ВСЕ компании человека: они нужны раздаче доступа (кому вообще
-	можно отдать реестр) и справочнику коллег.
-
-	CompanyID — АКТИВНАЯ компания сессии (0 — её нет). Ею ограничены видимость и
-	права: реестр живёт в компании, где заведён, а шара компании действует, пока
-	эта компания выбрана. Иначе переключение компании не меняло бы ничего.
+	Companies — ВСЕ команды человека: они нужны раздаче доступа (кому вообще
+	можно отдать реестр) и справочнику коллег. Активная компания сессии на
+	доступ не влияет: команда не прячет инструменты.
 */
 type Actor struct {
 	UserID    int64
-	CompanyID int64
 	Companies []int64
 }
 
-// actor — собрать контекст выполняющего. Активная компания приезжает контекстом
-// запроса (её кладёт мидлварь pasetoauth), поэтому сигнатуры операций про неё
-// не знают — а знать её обязана каждая проверка доступа.
+// actor — собрать контекст выполняющего.
 func (s *Service) actor(ctx context.Context, userID int64) (Actor, error) {
 	companies, err := s.users.CompaniesOf(ctx, userID)
 	if err != nil {
 		return Actor{}, err
 	}
-	return Actor{
-		UserID:    userID,
-		CompanyID: pasetoauth.CompanyFromContext(ctx),
-		Companies: companies,
-	}, nil
+	return Actor{UserID: userID, Companies: companies}, nil
 }
 
 /*
@@ -94,7 +82,7 @@ func (s *Service) require(ctx context.Context, a Actor, registryID int64, want s
 	if reg == nil {
 		return nil, domain.ErrRegistryNotFound
 	}
-	access, err := s.repo.AccessOf(ctx, registryID, a.UserID, a.CompanyID)
+	access, err := s.repo.AccessOf(ctx, registryID, a.UserID)
 	if err != nil {
 		return nil, err
 	}
@@ -111,8 +99,8 @@ func (s *Service) require(ctx context.Context, a Actor, registryID int64, want s
 	return reg, nil
 }
 
-// quotaScope — чья квота платит за файлы реестра: файл компанийного реестра
-// тратит место создателя компании, личного — самого владельца.
+// quotaScope — чья квота платит за файлы реестра: файл реестра команды
+// тратит место создателя команды, личного — самого владельца.
 func quotaScope(reg *domain.Registry) (userID, companyID int64) {
 	if reg.CompanyID != nil {
 		return 0, *reg.CompanyID

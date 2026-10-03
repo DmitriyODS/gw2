@@ -14,7 +14,9 @@ const props = defineProps({
   minHeight: { type: Number, default: 240 },
 })
 
-const clipId = `bl-clip-${useId()}`
+const uid = useId()
+const clipId = `bl-clip-${uid}`
+const discId = `bl-disc-${uid}`
 
 // В блочном режиме размер держит сам svg, а контейнер растягивается и центрирует.
 const rootStyle = computed(() => (props.block
@@ -35,8 +37,14 @@ const rootStyle = computed(() => (props.block
         <clipPath :id="clipId">
           <circle cx="35.5" cy="35.5" r="35.5" />
         </clipPath>
+        <!-- Шайба логотипа: свет сверху слева, фаска по кромке. -->
+        <radialGradient :id="discId" cx="0.32" cy="0.22" r="0.95">
+          <stop offset="0" class="bl-st-hi" />
+          <stop offset="0.55" class="bl-st" />
+          <stop offset="1" class="bl-st-lo" />
+        </radialGradient>
       </defs>
-      <circle cx="35.5" cy="35.5" r="35.5" class="bl-bg" />
+      <circle cx="35.5" cy="35.5" r="35.5" :fill="`url(#${discId})`" />
       <g :clip-path="`url(#${clipId})`">
         <!-- Каждая волна — синус с периодом 71 и хвостом на второй период:
              сдвиг на -71px возвращает её в исходную фазу, петля бесшовна. -->
@@ -53,6 +61,7 @@ const rootStyle = computed(() => (props.block
           d="M0 46 Q17.75 38 35.5 46 T71 46 T106.5 46 T142 46 V71 H0 Z"
         />
       </g>
+      <circle cx="35.5" cy="35.5" r="34.9" class="bl-rim" />
     </svg>
   </div>
 </template>
@@ -72,8 +81,15 @@ const rootStyle = computed(() => (props.block
   flex: 1;
 }
 
-.bl-bg {
-  fill: var(--color-primary-container);
+/* Та же шайба, что у логотипа (BrandLogo): второй цвет темы, утемнённый. */
+.bl-st-hi { stop-color: color-mix(in oklch, var(--color-secondary) 70%, white); }
+.bl-st    { stop-color: color-mix(in oklch, var(--color-secondary) 80%, black); }
+.bl-st-lo { stop-color: color-mix(in oklch, var(--color-secondary) 45%, black); }
+
+.bl-rim {
+  fill: none;
+  stroke: color-mix(in oklch, white 30%, transparent);
+  stroke-width: 1.2;
 }
 
 .bl-wave {
@@ -82,12 +98,12 @@ const rootStyle = computed(() => (props.block
 }
 
 .bl-wave-back {
-  fill: color-mix(in oklch, var(--color-primary) 45%, var(--color-primary-container));
+  fill: color-mix(in oklch, var(--color-primary-container) 70%, white);
   animation-duration: 5.2s;
 }
 
 .bl-wave-mid {
-  fill: color-mix(in oklch, var(--color-primary) 78%, var(--color-on-primary-container));
+  fill: color-mix(in oklch, var(--color-primary) 45%, var(--color-tertiary));
   animation-duration: 3.6s;
   animation-direction: reverse;
 }

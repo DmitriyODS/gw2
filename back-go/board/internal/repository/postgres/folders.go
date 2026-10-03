@@ -186,21 +186,22 @@ func (r *Repo) ReparentChildren(ctx context.Context, folderID int64, newParent *
 }
 
 // CopyFolderTree — глубокая копия поддерева папки со всеми досками владельца
-// (и их тегами). Возвращает id корневой копии. Всё в одной транзакции.
-func (r *Repo) CopyFolderTree(ctx context.Context, ownerID, folderID int64, newParent *int64) (int64, error) {
+// Возвращает id корневой копии и id скопированных досок. Всё в одной транзакции.
+func (r *Repo) CopyFolderTree(ctx context.Context, ownerID, folderID int64, newParent *int64) (int64, []int64, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 	defer tx.Rollback(ctx)
-	rootID, err := copyFolderRec(ctx, tx, ownerID, folderID, newParent)
+	boards := []int64{}
+	rootID, err := copyFolderRec(ctx, tx, ownerID, folderID, newParent, &boards)
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
-	return rootID, tx.Commit(ctx)
+	return rootID, boards, tx.Commit(ctx)
 }
 
-func copyFolderRec(ctx context.Context, tx pgx.Tx, ownerID, srcID int64, parentID *int64) (int64, error) {
+func copyFolderRec(ctx context.Context, tx pgx.Tx, ownerID, srcID int64, parentID *int64, boards *[]int64) (int64, error) {
 	var (
 		newID       int64
 		name, color string
@@ -213,7 +214,7 @@ func copyFolderRec(ctx context.Context, tx pgx.Tx, ownerID, srcID int64, parentI
 		Scan(&newID, &name, &color, &pos); err != nil {
 		return 0, err
 	}
-	// Копируем доски этой папки вместе с тегами.
+	// Копируем доски этой папки.
 	boardRows, err := tx.Query(ctx, `SELECT id FROM boards WHERE folder_id = $1 AND owner_id = $2`, srcID, ownerID)
 	if err != nil {
 		return 0, err
@@ -232,12 +233,15 @@ func copyFolderRec(ctx context.Context, tx pgx.Tx, ownerID, srcID int64, parentI
 		return 0, err
 	}
 	for _, srcBoard := range srcBoardIDs {
-		if _, err := tx.Exec(ctx, `
-			INSERT INTO boards (owner_id, folder_id, title, color, scene, text_content)
-			SELECT owner_id, $2, title, color, scene, text_content FROM boards WHERE id = $1`,
-			srcBoard, newID); err != nil {
+		var id int64
+		if err := tx.QueryRow(ctx, `
+			INSERT INTO boards (owner_id, folder_id, title, color, archived, scene, text_content)
+			SELECT owner_id, $2, title, color, archived, scene, text_content FROM boards WHERE id = $1
+			RETURNING id`,
+			srcBoard, newID).Scan(&id); err != nil {
 			return 0, err
 		}
+		*boards = append(*boards, id)
 	}
 	// Рекурсивно копируем подпапки.
 	childRows, err := tx.Query(ctx, `SELECT id FROM board_folders WHERE parent_id = $1`, srcID)
@@ -258,7 +262,7 @@ func copyFolderRec(ctx context.Context, tx pgx.Tx, ownerID, srcID int64, parentI
 		return 0, err
 	}
 	for _, child := range childIDs {
-		if _, err := copyFolderRec(ctx, tx, ownerID, child, &newID); err != nil {
+		if _, err := copyFolderRec(ctx, tx, ownerID, child, &newID, boards); err != nil {
 			return 0, err
 		}
 	}

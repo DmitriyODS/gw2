@@ -22,24 +22,24 @@
         </div>
       </Transition>
 
-      <!-- Про железо, а не про вкус: стекло — самая дорогая часть интерфейса
-           для видеокарты и батареи. Без прозрачности размытие теряет смысл,
-           поэтому его переключатель тогда неактивен. -->
+      <!-- Материал платформы — матовый soft touch; стекло — по желанию и
+           дорогое для видеокарты и батареи. Без прозрачности размытие теряет
+           смысл, поэтому его переключатель тогда неактивен. -->
       <AppSwitchRow
         :model-value="transparencyEnabled"
         title="Прозрачность"
-        hint="Выключено — окна и панели плотные, обои под ними не видны."
+        hint="Включено — окна и панели полупрозрачные, сквозь них видны обои. Выключено — плотный матовый материал."
         @update:model-value="setTransparency"
       />
       <AppSwitchRow
         :model-value="blurEnabled"
         :disabled="!transparencyEnabled"
         title="Размытие"
-        hint="Выключено — панели остаются полупрозрачными, но без размытия. Легче для видеокарты и батареи."
+        hint="Размывает то, что под полупрозрачными панелями, — эффект стекла. Нагружает видеокарту и батарею."
         @update:model-value="setBlur"
       />
       <div v-if="transparencyChoice || blurChoice" class="fx-actions">
-        <AppButton variant="text" icon="settings_suggest" label="Как в системе" @click="resetGlass" />
+        <AppButton variant="text" icon="restart_alt" label="Матовый материал" @click="resetGlass" />
       </div>
     </PreviewLayout>
   </AppCard>

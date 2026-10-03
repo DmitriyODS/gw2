@@ -6,7 +6,7 @@
        созданный аккаунт (см. примерку в stores/theme.js). -->
   <div class="att">
     <div class="att-head">
-      <span class="att-title">цвет оформления</span>
+      <span class="att-title">Оформление</span>
       <span class="att-name">{{ theme.presetLabels[theme.activePreset] || theme.activePreset }}</span>
     </div>
     <div class="att-grid">
@@ -27,34 +27,28 @@
       </button>
     </div>
 
-    <!-- Светлая/тёмная: пока не выбрали, показываем системный вид — активна
-         та кнопка, которая на экране сейчас. -->
-    <div class="att-modes" role="tablist">
-      <button
-        v-for="m in MODES"
-        :key="m.value"
-        type="button"
-        class="att-mode"
-        :class="{ active: theme.dark === m.dark }"
-        role="tab"
-        :aria-selected="theme.dark === m.dark"
-        @click="theme.setMode(m.value)"
-      >
-        <span class="material-symbols-outlined">{{ m.icon }}</span>
-        {{ m.label }}
-      </button>
-    </div>
+    <!-- Светлая/тёмная: пока не выбрали, показываем системный вид — выбрана
+         та вкладка, которая на экране сейчас. -->
+    <AppTabs
+      :model-value="theme.dark ? 'dark' : 'light'"
+      :tabs="MODES"
+      variant="tint"
+      full-width
+      dense
+      @change="theme.setMode"
+    />
   </div>
 </template>
 
 <script setup>
 import { useThemeStore } from '@/stores/theme.js'
+import AppTabs from '@/components/ui/AppTabs.vue'
 
 const theme = useThemeStore()
 
 const MODES = [
-  { value: 'light', dark: false, icon: 'light_mode', label: 'светлая' },
-  { value: 'dark',  dark: true,  icon: 'dark_mode',  label: 'тёмная' },
+  { value: 'light', icon: 'light_mode', label: 'Светлая' },
+  { value: 'dark', icon: 'dark_mode', label: 'Тёмная' },
 ]
 </script>
 
@@ -73,9 +67,9 @@ const MODES = [
 }
 
 .att-title {
-  font-size: 12.5px;
+  font-size: 0.85rem;
   font-weight: 600;
-  color: var(--color-text-dim);
+  color: var(--color-text);
 }
 
 .att-name {
@@ -90,45 +84,6 @@ const MODES = [
   gap: 8px;
 }
 
-.att-modes {
-  display: flex;
-  gap: 4px;
-  padding: 4px;
-  border: 1px solid var(--acrylic-border);
-  border-radius: var(--radius-full);
-  background: var(--glass-bg), color-mix(in oklch, var(--color-surface) 45%, transparent);
-  box-shadow: var(--glass-edge);
-}
-
-.att-mode {
-  flex: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  min-width: 0;
-  height: 32px;
-  padding: 0 12px;
-  border: none;
-  border-radius: var(--radius-full);
-  background: none;
-  color: var(--color-text-dim);
-  font: inherit;
-  font-size: 12.5px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s;
-}
-
-.att-mode .material-symbols-outlined { font-size: 17px; }
-
-.att-mode:hover:not(.active) { color: var(--color-primary); }
-
-.att-mode.active {
-  background: var(--color-primary-container);
-  color: var(--color-on-primary-container);
-}
-
 .att-tile {
   position: relative;
   width: 100%;
@@ -140,14 +95,12 @@ const MODES = [
   overflow: hidden;
   cursor: pointer;
   background: none;
-  box-shadow: var(--shadow-sm);
-  transition: box-shadow 0.14s;
+  box-shadow: var(--sk-raised-shadow);
+  transition: box-shadow 0.14s, transform 0.14s;
 }
 
-/* Выделение — стеклянный блик по кромке, плитка не смещается. */
-.att-tile:hover {
-  box-shadow: inset 0 0 0 2px color-mix(in oklch, white 55%, transparent), var(--shadow-md);
-}
+/* Плитка — приподнятая клавиша палитры: под курсором чуть поднимается. */
+.att-tile:hover { transform: translateY(-1px); }
 
 /* Активная плитка помечена обводкой ВНУТРЕННЕЙ тенью: внешнюю срезает
    overflow плитки и скролл панели. */
@@ -155,7 +108,7 @@ const MODES = [
   box-shadow:
     inset 0 0 0 2px var(--color-surface),
     inset 0 0 0 4px var(--color-primary),
-    var(--shadow-md);
+    var(--sk-pressed-shadow);
 }
 
 .att-fill {

@@ -569,7 +569,7 @@ onBeforeUnmount(() => {
   /* Плотная подложка, как у панелей редактора: под попапом рисунок, и
      просвечивающий холст мешал целиться в спектр. */
   background: var(--color-surface);
-  box-shadow: var(--shadow-3);
+  box-shadow: var(--shadow-lg);
 }
 
 .bcp-head { display: flex; align-items: center; gap: 6px; }
@@ -619,7 +619,7 @@ onBeforeUnmount(() => {
 
 .bcp-row { display: flex; align-items: center; gap: 4px; }
 .bcp-stop { display: flex; flex-direction: column; gap: 4px; }
-.bcp-hint { margin: 0; font-size: 11px; color: var(--color-text-muted); }
+.bcp-hint { margin: 0; font-size: 11px; color: var(--color-text-dim); }
 .bcp-title { flex: 1; font-size: 13px; font-weight: 600; }
 
 .bcp-icon {
@@ -646,7 +646,7 @@ onBeforeUnmount(() => {
   gap: 6px;
 }
 
-.bcp-palette--recent { padding-top: 2px; border-top: 1px solid var(--color-outline-variant); }
+.bcp-palette--recent { padding-top: 2px; border-top: 1px solid var(--color-outline-dim); }
 
 .bcp-swatch {
   min-width: 24px;
@@ -659,7 +659,7 @@ onBeforeUnmount(() => {
   padding: 0;
   border: 1px solid var(--color-outline-dim);
   border-radius: 50%;
-  color: var(--color-text-muted);
+  color: var(--color-text-dim);
   cursor: pointer;
 }
 

@@ -19,7 +19,7 @@
 #      Образы НА СЕРВЕРЕ НЕ СОБИРАЮТСЯ — их пушит локальная машина
 #      (`make push` → scripts/build_push.sh) в Docker Hub
 #      osipovskijdima/groove_work (теги migrate/gateway/calls/auth/
-#      messenger/ai/pets/tasks/front).
+#      messenger/ai/tasks/front).
 #   4. Перечитывает конфиг nginx (он bind-mounted: git обновляет
 #      файл, но без reload контейнер живёт со старым конфигом).
 #   5. Health-чеки: фронт и маршруты через nginx, healthz всех
@@ -397,11 +397,6 @@ if [ "$tvfact_code" = "401" ]; then
   ok "маршрут /api/ai через nginx ведёт в aisvc"
 else
   warn "маршрут /api/ai/tv-fact вернул $tvfact_code (ожидался 401) — проверьте nginx"
-fi
-if $COMPOSE exec -T pets wget -qO- --timeout=3 http://127.0.0.1:8094/healthz >/dev/null 2>&1; then
-  ok "petsvc отвечает (healthz)"
-else
-  warn "petsvc не отвечает — питомцы-грувики не работают: make logs s=pets"
 fi
 
 # Микросервис задач: healthz изнутри контейнера + маршрутизация /api/tasks

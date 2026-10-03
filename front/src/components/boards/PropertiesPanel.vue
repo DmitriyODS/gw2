@@ -378,7 +378,7 @@ const ALIGN_BUTTONS = [
   border-radius: var(--radius-lg);
   /* Плотная подложка: панель стоит поверх рисунка, и стекло мешало бы читать. */
   background: var(--color-surface);
-  box-shadow: var(--shadow-2);
+  box-shadow: var(--shadow-md);
 }
 
 .pp-head { display: flex; align-items: center; gap: 6px; }
@@ -395,7 +395,7 @@ const ALIGN_BUTTONS = [
 }
 
 .pp-block { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-.pp-label { font-size: 11px; color: var(--color-text-muted); }
+.pp-label { font-size: 11px; color: var(--color-text-dim); }
 
 .pp-value {
   flex: 1;
@@ -479,7 +479,7 @@ const ALIGN_BUTTONS = [
   padding: 0;
   border: 2px solid var(--color-outline-dim);
   border-radius: 50%;
-  color: var(--color-text-muted);
+  color: var(--color-text-dim);
   cursor: pointer;
 }
 

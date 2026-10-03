@@ -352,12 +352,12 @@ func (f *fakeRepo) ReparentChildren(_ domain.Ctx, folderID int64, newParent *int
 	}
 	return nil
 }
-func (f *fakeRepo) CopyFolderTree(_ domain.Ctx, ownerID, folderID int64, newParent *int64) (int64, error) {
+func (f *fakeRepo) CopyFolderTree(_ domain.Ctx, ownerID, folderID int64, newParent *int64) (int64, []int64, error) {
 	src := f.folders[folderID]
 	cp := &domain.Folder{OwnerID: ownerID, ParentID: newParent, Name: src.Name, Color: src.Color}
 	cp.ID = f.id()
 	f.folders[cp.ID] = cp
-	return cp.ID, nil
+	return cp.ID, nil, nil
 }
 
 // ── Теги ──

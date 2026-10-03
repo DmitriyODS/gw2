@@ -1,7 +1,5 @@
 -- ================================================================
--- Демо-данные для dev-БД: компания с сотрудниками, грувики во ВСЕХ
--- состояниях (здоровый, голодный, простуженный, грязнуля, хандра на
--- пороге побега, одинокий, в приключении), портал с ветками
+-- Демо-данные для dev-БД: компания с сотрудниками, портал с ветками
 -- комментариев и лайками, задачи с юнитами для статистики.
 --
 -- Идемпотентен: повторный запуск чистит прежний посев (компания
@@ -14,8 +12,7 @@ BEGIN;
 
 -- ── Чистка прошлого посева ──────────────────────────────────────
 -- Пользователи demo.* и компания «Грув Демо»: связанные строки уходят
--- каскадом FK там, где он есть, остальное чистим явно (те же таблицы,
--- что и в DeletePet — они ссылаются на users, а не на pets).
+-- каскадом FK там, где он есть, остальное чистим явно.
 DO $$
 DECLARE
     demo_users bigint[];
@@ -24,15 +21,6 @@ BEGIN
     SELECT array_agg(id) INTO demo_users FROM users WHERE login LIKE 'demo.%';
     SELECT id INTO demo_company FROM companies WHERE name = 'Грув Демо';
 
-    IF demo_users IS NOT NULL THEN
-        DELETE FROM pet_strokes WHERE pet_user_id = ANY(demo_users) OR user_id = ANY(demo_users);
-        DELETE FROM pet_shop_purchases WHERE user_id = ANY(demo_users);
-        DELETE FROM pet_kudos_weekly WHERE user_id = ANY(demo_users);
-        DELETE FROM pet_kudos_seasonal WHERE user_id = ANY(demo_users);
-        DELETE FROM pet_season_claims WHERE user_id = ANY(demo_users);
-        DELETE FROM pet_kudos_ledger WHERE user_id = ANY(demo_users);
-        DELETE FROM pets WHERE user_id = ANY(demo_users);
-    END IF;
     IF demo_company IS NOT NULL THEN
         DELETE FROM units WHERE task_id IN (SELECT id FROM tasks WHERE company_id = demo_company);
         DELETE FROM tasks WHERE company_id = demo_company;
@@ -50,7 +38,7 @@ END $$;
 -- ── Компания ────────────────────────────────────────────────────
 INSERT INTO companies (name, description, is_active, settings, created_at, ai_enabled)
 VALUES ('Грув Демо', 'Демо-компания с данными для проверки', TRUE,
-        '{"weekend_days": [5, 6], "uses_groove": true}'::jsonb, now() - interval '90 days', FALSE);
+        '{"weekend_days": [5, 6]}'::jsonb, now() - interval '90 days', FALSE);
 
 -- ── Сотрудники ──────────────────────────────────────────────────
 -- created_by компании проставим после вставки админа (см. ниже).
@@ -147,108 +135,6 @@ FROM tasks t
 WHERE t.company_id = (SELECT id FROM companies WHERE name = 'Грув Демо')
   AND t.name = 'Собрать аналитику по воронке';
 
--- ── Грувики во всех состояниях ──────────────────────────────────
--- Каждый демо-питомец показывает свою механику: здоровый, голодный,
--- простуженный, грязнуля, хандра на пороге побега, одинокий и путник.
-INSERT INTO pets (user_id, company_id, name, species, stage, xp, kudos, hat, accessories,
-                  feed_streak, last_fed_date, sick_since, ailment, recovery,
-                  need_satiety, need_energy, need_hygiene, need_social, needs_at,
-                  personality, unlocked_species, quest_progress, quest_claimed,
-                  adventure_until, adventure_place, generation, house_owned, house_placed,
-                  house_theme, created_at)
-SELECT
-    u.id, c.id, p.pet_name, p.species, p.stage, p.xp, p.kudos, p.hat, p.accessories::jsonb,
-    p.streak,
-    CASE WHEN p.fed_days_ago IS NULL THEN NULL
-         ELSE (now() - (p.fed_days_ago || ' days')::interval)::date END,
-    CASE WHEN p.sick_days IS NULL THEN NULL
-         ELSE now() - (p.sick_days || ' days')::interval END,
-    p.ailment, p.recovery,
-    p.satiety, p.energy, p.hygiene, p.social, now(),
-    p.personality, p.unlocked::jsonb, 0, FALSE,
-    NULL, NULL, -- приключение ставится отдельным UPDATE (см. ниже)
-    p.generation, p.house_owned::jsonb, p.house_placed::jsonb, p.theme,
-    now() - interval '60 days'
-FROM companies c
-JOIN (VALUES
-    -- Здоровый прокачанный: эталон «всё хорошо», настроение отличное.
-    ('demo.admin',   'Босс',     'owl',        5, 1020, 640, 'crown',  '["crown","tie","medal"]', 9,  0,    NULL, NULL,     0, 95,  90, 88, 80, 'steady',    '["owl","fox"]',        2, '["sofa","piano","plant","picture"]', '[{"key":"sofa","x":30,"y":70},{"key":"piano","x":68,"y":66},{"key":"plant","x":14,"y":74},{"key":"picture","x":50,"y":24}]', 'night'),
-    ('demo.manager', 'Метрик',   'marathoner', 4, 620,  310, 'glasses','["glasses","tie"]',       5,  0,    NULL, NULL,     0, 78,  64, 70, 55, 'zen',       '["marathoner"]',       1, '["chair","books"]', '[{"key":"chair","x":34,"y":72},{"key":"books","x":66,"y":70}]', 'cozy'),
-    -- Голодный: сытость в нуле → истощение. Лечит еда (бульон).
-    ('demo.pavel',   'Крош',     'sprinter',   3, 300,  45,  NULL,     '["cap"]',                 0,  3,    2,    'hunger', 0, 0,   52, 60, 40, 'energizer', '["sprinter"]',         1, '[]', '[]', 'cozy'),
-    -- Простуженный: выдохся, энергия на нуле. Лечит сон.
-    ('demo.olga',    'Пиксель',  'lark',       3, 340,  120, 'bow',    '["bow","flower"]',        2,  1,    1,    'cold',   1, 55,  0,  62, 66, 'early',     '["lark"]',             1, '["bed","teddy"]', '[{"key":"bed","x":28,"y":70},{"key":"teddy","x":62,"y":72}]', 'lavender'),
-    -- Грязнуля: чистота в нуле. Лечит купание — одного раза хватит.
-    ('demo.artem',   'Уголёк',   'fox',        2, 160,  80,  NULL,     '["headphones"]',          1,  1,    2,    'grime',  0, 60,  58, 0,  45, 'steady',    '["fox"]',              1, '[]', '[]', 'forest'),
-    -- Хандра 13-й день: завтра сбежит — проверка предупреждения и побега.
-    ('demo.denis',   'Ждун',     'marathoner', 4, 700,  260, 'helmet', '["helmet"]',              0,  9,    13,   'blues',  1, 44,  50, 48, 20, 'lazy',      '["marathoner","fox"]', 1, '["console"]', '[{"key":"console","x":50,"y":72}]', 'space'),
-    -- Одинокий и здоровый: общения почти нет → повод погладить.
-    ('demo.elena',   'Тихоня',   'owl',        3, 380,  95,  'scarf',  '["scarf","mittens"]',     3,  0,    NULL, NULL,     0, 72,  68, 74, 5,  'night',     '["owl"]',              1, '["plant"]', '[{"key":"plant","x":52,"y":72}]', 'ocean'),
-    -- В приключении: платные действия отвечают PET_AWAY, на виджете 🧭.
-    ('demo.maria',   'Комета',   'unicorn',    4, 580,  400, 'star',   '["star","rainbow"]',      6,  0,    NULL, NULL,     0, 82,  74, 80, 70, 'energizer', '["unicorn","sprinter"]', 1, '["fountain","garland"]', '[{"key":"fountain","x":40,"y":68},{"key":"garland","x":50,"y":18}]', 'candy')
-) AS p(login, pet_name, species, stage, xp, kudos, hat, accessories, streak, fed_days_ago,
-       sick_days, ailment, recovery, satiety, energy, hygiene, social, personality, unlocked,
-       generation, house_owned, house_placed, theme)
-  ON TRUE
-JOIN users u ON u.login = p.login
-WHERE c.name = 'Грув Демо';
-
--- Комета — в приключении (поля берём отдельным UPDATE: в VALUES выше их
--- нет, чтобы не плодить NULL-колонки у остальных).
-UPDATE pets SET adventure_until = now() + interval '2 hours', adventure_place = 'в горы'
-WHERE user_id = (SELECT id FROM users WHERE login = 'demo.maria');
-
--- Недельный рейтинг признания: у каждого своя строка — топ не пустой.
-INSERT INTO pet_kudos_weekly (user_id, iso_year, iso_week, amount)
-SELECT u.id, EXTRACT(isoyear FROM now())::int, EXTRACT(week FROM now())::int, w.amount
-FROM (VALUES
-    ('demo.admin', 64), ('demo.maria', 51), ('demo.manager', 38),
-    ('demo.olga', 27), ('demo.artem', 19), ('demo.pavel', 12),
-    ('demo.elena', 8), ('demo.denis', 3)
-) AS w(login, amount)
-JOIN users u ON u.login = w.login;
-
--- Сезонный трек (квартал МСК): у админа открыты первые пороги.
-INSERT INTO pet_kudos_seasonal (user_id, season, amount)
-SELECT u.id,
-       EXTRACT(year FROM now())::text || '-Q' || EXTRACT(quarter FROM now())::text,
-       s.amount
-FROM (VALUES ('demo.admin', 420), ('demo.maria', 260), ('demo.manager', 130)) AS s(login, amount)
-JOIN users u ON u.login = s.login;
-
--- Выписка банка: приход/расход за две недели — история и аналитика.
-INSERT INTO pet_kudos_ledger (user_id, company_id, delta, kind, counterparty_id, comment, created_at)
-SELECT u.id, c.id, l.delta, l.kind,
-       CASE WHEN l.cp IS NULL THEN NULL ELSE (SELECT id FROM users WHERE login = l.cp) END,
-       l.comment, now() - (l.days || ' days')::interval
-FROM companies c
-JOIN (VALUES
-    ('demo.admin',   12,  'unit',        NULL,          '',              1),
-    ('demo.admin',   25,  'task_closed', NULL,          '',              2),
-    ('demo.admin',   -10, 'feed',        NULL,          '',              2),
-    ('demo.admin',   20,  'quest',       NULL,          '',              3),
-    ('demo.admin',   -30, 'transfer_out','demo.elena',  'за помощь',     3),
-    ('demo.admin',   3,   'stroke_in',   'demo.maria',  '',              4),
-    ('demo.admin',   -60, 'house',       NULL,          '',              5),
-    ('demo.maria',   15,  'unit',        NULL,          '',              1),
-    ('demo.maria',   -2,  'stroke',      'demo.admin',  '',              4),
-    ('demo.maria',   8,   'adventure',   NULL,          'на речку',      2),
-    ('demo.maria',   -12, 'bath',        NULL,          '',              3),
-    ('demo.elena',   30,  'transfer_in', 'demo.admin',  'за помощь',     3),
-    ('demo.elena',   -25, 'heal',        NULL,          '',              6),
-    ('demo.pavel',   -1,  'feed',        NULL,          'бульон',        1),
-    ('demo.olga',    -15, 'walk',        NULL,          '',              2)
-) AS l(login, delta, kind, cp, comment, days) ON TRUE
-JOIN users u ON u.login = l.login
-WHERE c.name = 'Грув Демо';
-
--- Поглаживания за сегодня: у Кометы уже 2 из 3 от админа — виден лимит.
-INSERT INTO pet_strokes (pet_user_id, user_id, day, created_at)
-SELECT (SELECT id FROM users WHERE login = 'demo.maria'),
-       (SELECT id FROM users WHERE login = 'demo.admin'),
-       (now() AT TIME ZONE 'utc')::date, now() - (n || ' hours')::interval
-FROM generate_series(1, 2) AS n;
-
 -- ── Портал: разделы (иконки И эмодзи), посты, ветки, лайки ──────
 INSERT INTO portal_topics (company_id, name, color, icon, created_by, created_at)
 SELECT c.id, t.name, t.color, t.icon,
@@ -275,11 +161,11 @@ SELECT c.id,
        now() - (p.hours || ' hours')::interval
 FROM companies c
 JOIN (VALUES
-    ('Объявления', 'demo.admin', 'Правила заботы о грувиках',
-E'Коротко о новом: у грувиков появились **потребности**.\n\n- 🍖 сытость — тает за сутки, голодный слегает с истощением\n- ⚡ энергия — восполняется сном\n- 🫧 чистота — купание в тазике\n- 💬 общение — закрывают коллеги, когда гладят питомца\n\n> Заброшенный грувик через две недели болезни сбежит, и прогресс обнулится.\n\nГладьте друг друга — хозяину капают кудосы.',
+    ('Объявления', 'demo.admin', 'Как мы ведём отпуска',
+E'Коротко о порядке:\n\n- 📅 заявку ставим в общий календарь отдела за две недели\n- 🔁 дела передаём сменщику до ухода\n- 💬 в мессенджере включаем статус «в отпуске»\n\n> Срочное — через руководителя отдела.\n\nХорошего отдыха!',
      TRUE, 72),
     ('Релизы 🚀', 'demo.manager', 'Релиз 6.4 уехал на прод',
-E'В этот раз:\n\n1. потребности и болезни грувиков\n2. ветки ответов и лайки в комментариях\n3. эмодзи в разделах портала\n\n```\nmake deploy\n```\nЖдём фидбек в комментариях.',
+E'В этот раз:\n\n1. новый экран «Сегодня»\n2. ветки ответов и лайки в комментариях\n3. эмодзи в разделах портала\n\n```\nmake deploy\n```\nЖдём фидбек в комментариях.',
      FALSE, 30),
     ('Кухня и кофе', 'demo.olga', 'Кофемашину починили ☕',
 E'Работает как новая. Капучино снова с пенкой, эспрессо — без драмы.\n\n| Напиток | Кнопка |\n|---|---|\n| Эспрессо | 1 |\n| Капучино | 2 |',
@@ -338,21 +224,21 @@ SELECT o.post_id, (SELECT id FROM users WHERE login = 'demo.manager'),
        'Прогнали, всё зелёное', o.id, now() - interval '15 hours'
 FROM other o;
 
--- Обсуждение под постом про грувиков — второй тред.
+-- Обсуждение под постом про отпуска — второй тред.
 WITH post AS (
     SELECT id FROM portal_posts
     WHERE company_id = (SELECT id FROM companies WHERE name = 'Грув Демо')
-      AND title = 'Правила заботы о грувиках'
+      AND title = 'Как мы ведём отпуска'
 ), root AS (
     INSERT INTO portal_comments (post_id, author_id, text, created_at)
     SELECT p.id, (SELECT id FROM users WHERE login = 'demo.pavel'),
-           'Мой Крош уже слёг от голода 😅 чем кормить-то?', now() - interval '10 hours'
+           'А если отпуск выпадает на конец квартала? 😅', now() - interval '10 hours'
     FROM post p
     RETURNING id, post_id
 )
 INSERT INTO portal_comments (post_id, author_id, text, reply_to_id, created_at)
 SELECT r.post_id, (SELECT id FROM users WHERE login = 'demo.elena'),
-       'Больного кормят бульоном — он дешёвый, кнопка та же', r.id, now() - interval '9 hours'
+       'Тогда заранее согласуем с руководителем', r.id, now() - interval '9 hours'
 FROM root r;
 
 -- Лайки: у корневых комментариев — по несколько, чтобы счётчик был живым.
@@ -384,12 +270,9 @@ ON CONFLICT DO NOTHING;
 COMMIT;
 
 -- ── Что получилось ──────────────────────────────────────────────
-SELECT u.login, u.fio, r.name AS role, p.name AS pet, p.stage,
-       p.ailment, p.need_satiety AS "сытость", p.need_energy AS "энергия",
-       p.need_hygiene AS "чистота", p.need_social AS "общение", p.kudos
+SELECT u.login, u.fio, r.name AS role
 FROM users u
 JOIN user_companies uc ON uc.user_id = u.id
 JOIN roles r ON r.id = uc.role_id
-LEFT JOIN pets p ON p.user_id = u.id
 WHERE u.login LIKE 'demo.%'
 ORDER BY r.level DESC, u.login;

@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/DmitriyODS/gw2/back-go/forms/internal/domain"
+	"github.com/DmitriyODS/gw2/back-go/pkg/spaces"
 )
 
 // UserReader — read-only доступ к идентичности пользователей (владелец таблицы
@@ -120,4 +121,9 @@ func (r *UserReader) CompanyActive(ctx context.Context, companyID *int64) (bool,
 		return false, err
 	}
 	return active, nil
+}
+
+// TeamRole — положение человека в команде.
+func (r *UserReader) TeamRole(ctx context.Context, userID, companyID int64) (spaces.Role, error) {
+	return spaces.RoleIn(ctx, r.pool, userID, companyID)
 }

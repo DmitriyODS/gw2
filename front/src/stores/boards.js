@@ -47,7 +47,11 @@ export const useBoardsStore = defineStore('boards', () => {
 
   // Папка чужая — правит её содержимое только тот, кому дали can_edit.
   const isSharedContext = computed(() =>
-    !!activeFolder.value && activeFolder.value.owner_id !== myId())
+    !!activeFolder.value && String(activeFolder.value.owner_id) !== String(myId()))
+
+  /* Куда класть новую доску: в открытую папку, только если она МОЯ, — сервер
+     создаёт доски лишь в своих папках, и в чужой создание падало бы. */
+  const ownFolderId = computed(() => (isSharedContext.value ? null : activeFolderId.value))
 
   const boardById = (id) => boards.value.find((b) => b.id === id) || null
 
@@ -128,7 +132,7 @@ export const useBoardsStore = defineStore('boards', () => {
 
   // ── Доски ──
   async function createBoard(title = 'Новая доска') {
-    const created = await api.createBoard(title, activeFolderId.value)
+    const created = await api.createBoard(title, ownFolderId.value)
     upsertBoard(created)
     logActivity({ kind: 'board', id: created.id, title: created.title || 'Доска' })
     return created
@@ -147,7 +151,8 @@ export const useBoardsStore = defineStore('boards', () => {
 
   async function moveBoard(id, folderId) {
     const moved = await api.moveBoard(id, folderId)
-    syncBoard(moved)
+    if (showShared.value) dropBoard(id)
+    else syncBoard(moved)
     return moved
   }
 
@@ -212,7 +217,9 @@ export const useBoardsStore = defineStore('boards', () => {
   function inCurrentScope(b) {
     if (!b) return false
     if (search.value.trim()) return true
-    if (showShared.value) return b.owner_id !== myId()
+    // «Поделились» — ещё не разложенные адресатом: убранная им в свой архив
+    // или папку доска уходит из этой вкладки (так её отдаёт и сервер).
+    if (showShared.value) return String(b.owner_id) !== String(myId()) && !b.archived
     if (!!b.archived !== showArchived.value) return false
     return (b.folder_id ?? null) === (activeFolderId.value ?? null)
   }
@@ -229,8 +236,15 @@ export const useBoardsStore = defineStore('boards', () => {
   function upsertBoard(b) {
     if (!b?.id) return
     const idx = boards.value.findIndex((x) => x.id === b.id)
-    if (idx >= 0) boards.value[idx] = { ...boards.value[idx], ...b }
-    else boards.value.push(b)
+    if (idx >= 0) {
+      boards.value[idx] = { ...boards.value[idx], ...b }
+      return
+    }
+    // Новая доска — в начало после закреплённых, как её поставил бы сервер
+    // (иначе только что созданная или скопированная терялась внизу списка).
+    const at = boards.value.findIndex((x) => !x.pinned_at)
+    if (at < 0 || b.pinned_at) boards.value.splice(b.pinned_at ? 0 : boards.value.length, 0, b)
+    else boards.value.splice(at, 0, b)
   }
 
   function dropBoard(id) {
@@ -239,7 +253,7 @@ export const useBoardsStore = defineStore('boards', () => {
 
   function upsertFolder(f) {
     if (!f?.id) return
-    const list = f.owner_id === myId() ? folders : sharedRoots
+    const list = String(f.owner_id) === String(myId()) ? folders : sharedRoots
     const idx = list.value.findIndex((x) => x.id === f.id)
     if (idx >= 0) list.value[idx] = { ...list.value[idx], ...f }
     else list.value.push(f)
@@ -260,7 +274,7 @@ export const useBoardsStore = defineStore('boards', () => {
     folders, sharedRoots, boards, loading, loadingFolders,
     activeFolderId, showArchived, showShared, search,
     // производное
-    folderById, folderTree, activeFolder, isSharedContext, path, boardById,
+    folderById, folderTree, activeFolder, isSharedContext, ownFolderId, path, boardById,
     // загрузка и навигация
     fetchFolders, fetchBoards, refresh,
     openFolder, openShared, openArchive,

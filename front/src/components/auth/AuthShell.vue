@@ -1,72 +1,86 @@
 <template>
   <div class="auth-page">
-    <AuthWave />
+    <AuthBackdrop />
 
-    <div v-if="$slots.hero" class="auth-hero">
-      <slot name="hero" />
-    </div>
+    <header class="auth-top">
+      <RouterLink to="/" class="auth-brand" aria-label="Groove Work — о платформе">
+        <BrandLogo :size="28" />
+        <BrandWordmark :size="17" />
+      </RouterLink>
+    </header>
 
-    <div class="auth-card" :class="`is-${size}`">
-      <header class="auth-brand">
-        <BrandLogo :size="22" class="auth-brand-logo" />
-        <span class="auth-brand-name">
-          <span class="wm-groove">Groove</span>
-          <span class="wm-work">Work</span>
-          <span v-if="majorVersion" class="wm-work">{{ majorVersion }}</span>
-        </span>
-        <slot name="brand-extra" />
-      </header>
+    <main class="auth-main">
+      <div v-if="$slots.hero" class="auth-hero">
+        <slot name="hero" />
+      </div>
 
-      <section class="auth-body">
-        <h1 v-if="title" class="auth-title">{{ title }}</h1>
-        <p v-if="subtitle" class="auth-sub">{{ subtitle }}</p>
-        <div class="auth-content" :class="{ spaced: !!title }">
+      <AppCard class="auth-card" :class="`is-${size}`" :gap="0" tag="section">
+        <header v-if="title || subtitle || showBack" class="auth-head">
+          <AppButton
+            v-if="showBack"
+            variant="icon"
+            icon="arrow_back"
+            :aria-label="backLabel"
+            :title="backLabel"
+            class="auth-back"
+            @click="goBack"
+          />
+          <div class="auth-head-text">
+            <h1 v-if="title" class="auth-title">{{ title }}</h1>
+            <p v-if="subtitle" class="auth-sub">{{ subtitle }}</p>
+          </div>
+        </header>
+
+        <div class="auth-content">
           <slot />
         </div>
-      </section>
 
-      <footer v-if="showBack || $slots.actions" class="auth-foot">
-        <button v-if="showBack" type="button" class="auth-back" @click="goBack">
-          <span class="material-symbols-outlined">arrow_back</span>
-          {{ backLabel }}
-        </button>
-        <span class="auth-foot-gap" />
-        <slot name="actions" />
-      </footer>
-    </div>
+        <footer v-if="$slots.actions" class="auth-foot">
+          <slot name="actions" />
+        </footer>
+      </AppCard>
+    </main>
+
+    <footer class="auth-bottom">
+      <span>© Groove Work</span>
+      <RouterLink to="/">О платформе</RouterLink>
+      <RouterLink v-if="LEGAL_CONSENT_VISIBLE" to="/legal">Правовые документы</RouterLink>
+    </footer>
 
     <slot name="overlays" />
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted, useAttrs } from 'vue'
+/* Каркас экранов входа и смежных публичных страниц: шапка с маркой, по центру
+   карточка ядра (AppCard) и короткий подвал. Карточка — тот же матовый лист,
+   что и в разделах приложения, поэтому вход выглядит частью платформы, а не
+   отдельным сайтом. */
+import { computed, useAttrs } from 'vue'
 import { useRouter } from 'vue-router'
 import BrandLogo from '@/components/common/BrandLogo.vue'
-import AuthWave from '@/components/auth/AuthWave.vue'
-import { useAppVersion } from '@/composables/useAppVersion.js'
+import BrandWordmark from '@/components/common/BrandWordmark.vue'
+import AuthBackdrop from '@/components/auth/AuthBackdrop.vue'
+import AppCard from '@/components/ui/AppCard.vue'
+import AppButton from '@/components/ui/AppButton.vue'
+import { LEGAL_CONSENT_VISIBLE } from '@/utils/release.js'
 
 const props = defineProps({
   title: { type: String, default: '' },
   subtitle: { type: String, default: '' },
   // Ширина карточки: sm — короткие экраны (код, QR), md — форма входа,
-  // lg — регистрация (две колонки полей + выбор темы).
+  // lg — регистрация и документы.
   size: { type: String, default: 'md' },
   // Путь кнопки «назад»; пустая строка — кнопки нет. Экран с внутренними
   // шагами вместо пути вешает @back и решает сам, куда возвращаться.
   back: { type: String, default: '' },
-  backLabel: { type: String, default: 'назад' },
+  backLabel: { type: String, default: 'Назад' },
 })
 
 const emit = defineEmits(['back'])
 
 const router = useRouter()
 const attrs = useAttrs()
-const { majorVersion, load: loadVersion } = useAppVersion()
-
-// Марка показывает мажорную версию выпуска — сведения тянутся с сервера
-// (в бандл версия не зашивается).
-onMounted(loadVersion)
 
 const showBack = computed(() => !!props.back || !!attrs.onBack)
 
@@ -86,151 +100,142 @@ function goBack() {
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 28px;
-  padding: 24px;
+  padding: 0 24px;
   overflow-x: hidden;
   overflow-y: auto;
 }
 
-/* Приветственный заголовок над карточкой (экран выбора «вход/регистрация»). */
-.auth-hero {
+/* ── Шапка: марка слева, как в шапке лендинга ─────────────────── */
+.auth-top {
   position: relative;
   z-index: 1;
+  display: flex;
+  align-items: center;
   width: 100%;
-  max-width: 940px;
-  animation: auth-rise 0.5s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 20px 0;
 }
 
-/* ── Внешняя стеклянная карточка ──────────────────────────────────
-   Лежит на гребне волны: полупрозрачное стекло собирает её цвет. */
-.auth-card {
+.auth-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+}
+
+/* ── Центр: приветствие и карточка ────────────────────────────── */
+.auth-main {
   position: relative;
   z-index: 1;
-  width: 100%;
-  margin: auto;
+  flex: 1 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  padding: 16px;
-  border-radius: 32px;
-  border: 1px solid var(--acrylic-border);
-  background: var(--glass-bg), var(--acrylic-bg);
-  -webkit-backdrop-filter: var(--acrylic-blur);
-  backdrop-filter: var(--acrylic-blur);
-  box-shadow: var(--shadow-xl), var(--glass-edge);
-  animation: auth-rise 0.42s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+  align-items: center;
+  justify-content: center;
+  gap: 28px;
+  padding: 12px 0 32px;
 }
 
-.auth-card.is-sm { max-width: 460px; }
-.auth-card.is-md { max-width: 620px; }
-.auth-card.is-lg { max-width: 940px; }
+.auth-hero {
+  width: 100%;
+  max-width: 900px;
+  animation: auth-rise 0.45s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+}
 
-/* Карточка выезжает следом за приветствием, а не одновременно с ним. */
-.auth-hero + .auth-card { animation-delay: 0.14s; }
+/* Специфичность выше scoped-класса AppCard: поля и радиус карточки входа
+   крупнее, чем у карточек разделов. */
+.auth-page .auth-card {
+  width: 100%;
+  padding: 28px 32px 32px;
+  border-radius: var(--radius-xl);
+  box-shadow: var(--sk-panel-shadow), var(--shadow-lg);
+  animation: auth-rise 0.4s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+}
+
+.auth-card.is-sm { max-width: 440px; }
+.auth-card.is-md { max-width: 520px; }
+.auth-card.is-lg { max-width: 900px; }
+
+.auth-hero + .auth-card { animation-delay: 0.1s; }
 
 @keyframes auth-rise {
-  from { opacity: 0; transform: translateY(18px) scale(0.985); }
+  from { opacity: 0; transform: translateY(14px); }
   to { opacity: 1; transform: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .auth-card { animation: none; }
+  .auth-hero,
+  .auth-page .auth-card { animation: none; }
 }
 
-/* ── Марка ─────────────────────────────────────────────────────── */
-.auth-brand {
+/* ── Заголовок карточки: «назад» слева от названия ────────────── */
+.auth-head {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 2px 8px 0;
+  align-items: flex-start;
+  gap: 14px;
+  margin-bottom: 24px;
 }
 
-.auth-brand-logo { display: block; flex-shrink: 0; }
+.auth-back { margin-top: -2px; }
 
-/* Марка — то же начертание, что и в меню «Пуск»: ExtraBlack вариативного
-   Roboto Flex, «Groove» фирменным цветом, «Work N» — цветом текста. */
-.auth-brand-name {
-  display: flex;
-  align-items: baseline;
-  gap: 5px;
-  font-family: 'Roboto Flex', 'Roboto', sans-serif;
-  font-size: 15px;
-  font-weight: 1000;
-  font-variation-settings: 'wght' 1000;
-  letter-spacing: 0.2px;
-}
-
-.wm-groove { color: var(--color-primary); }
-.wm-work { color: var(--color-text); }
-
-/* ── Внутренняя панель с содержимым ────────────────────────────── */
-.auth-body {
-  background: var(--acrylic-bg-strong);
-  border: 1px solid color-mix(in oklch, var(--acrylic-border) 60%, transparent);
-  border-radius: 24px;
-  padding: 28px 32px 32px;
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
+.auth-head-text { flex: 1; min-width: 0; }
 
 .auth-title {
   margin: 0;
-  font-size: clamp(24px, 3vw, 32px);
-  font-weight: 500;
-  line-height: 1.15;
-  letter-spacing: -0.02em;
+  font-size: clamp(22px, 2.6vw, 28px);
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.015em;
   color: var(--color-text);
+  overflow-wrap: anywhere;
 }
 
 .auth-sub {
-  margin: 8px 0 0;
+  margin: 6px 0 0;
   font-size: 14px;
   line-height: 1.5;
   color: var(--color-text-dim);
 }
 
-.auth-content.spaced { margin-top: 22px; }
+.auth-content { min-width: 0; }
 
-/* ── Подвал: «назад» слева, действия справа ────────────────────── */
 .auth-foot {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 2px 8px 4px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--color-outline-dim);
 }
 
-.auth-foot-gap { flex: 1 1 auto; }
-
-.auth-back {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 16px 8px 12px;
-  border: 1px solid var(--acrylic-border);
-  border-radius: var(--radius-full);
-  background: var(--glass-bg), var(--acrylic-bg-strong);
-  box-shadow: var(--glass-edge);
-  color: var(--color-text);
-  font: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
+/* ── Подвал страницы ──────────────────────────────────────────── */
+.auth-bottom {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  padding: 0 0 20px;
+  font-size: 12.5px;
+  color: var(--color-text-dim);
 }
 
-.auth-back:hover {
-  background: var(--glass-bg), color-mix(in oklch, var(--color-primary) 12%, var(--acrylic-bg-strong));
-  border-color: color-mix(in oklch, var(--color-primary) 30%, var(--acrylic-border));
+.auth-bottom a {
+  color: inherit;
+  text-decoration: none;
 }
 
-.auth-back .material-symbols-outlined { font-size: 18px; }
+.auth-bottom a:hover { color: var(--color-primary); }
 
 @media (max-width: 560px) {
-  .auth-page { padding: 12px; }
-  .auth-card { padding: 12px; border-radius: 26px; gap: 10px; }
-  .auth-body { padding: 22px 20px 24px; border-radius: 20px; }
+  .auth-page { padding: 0 12px; }
+  .auth-top { padding: 14px 4px; }
+  .auth-main { gap: 20px; padding-top: 4px; }
+  .auth-page .auth-card { padding: 20px 18px 22px; border-radius: var(--radius-lg); }
+  .auth-head { margin-bottom: 18px; gap: 10px; }
 }
 </style>

@@ -7,6 +7,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/DmitriyODS/gw2/back-go/pkg/spaces"
 	"github.com/DmitriyODS/gw2/back-go/registry/internal/domain"
 )
 
@@ -56,6 +57,11 @@ func (r *UserReader) CompaniesOf(ctx context.Context, userID int64) ([]int64, er
 		out = append(out, id)
 	}
 	return out, rows.Err()
+}
+
+// TeamRole — положение человека в команде.
+func (r *UserReader) TeamRole(ctx context.Context, userID, companyID int64) (spaces.Role, error) {
+	return spaces.RoleIn(ctx, r.pool, userID, companyID)
 }
 
 // CompanyMembers — участники компании: им адресуются события реестра, раздан-

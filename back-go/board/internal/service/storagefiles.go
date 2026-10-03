@@ -81,8 +81,12 @@ func (s *Service) DeleteStorageFiles(ctx context.Context, userID int64, _ []int6
 			deleted = append(deleted, b.PreviewPath)
 			touched = true
 		}
+		// Событие — полной плиткой: по одному id клиент счёл бы доску лежащей
+		// в корне и убрал её из открытой папки.
 		if touched {
-			s.bus.Publish(ctx, "board:updated", s.boardRooms(ctx, b.ID, userID), map[string]any{"id": b.ID})
+			if fresh, err := s.repo.GetBoard(ctx, b.ID); err == nil && fresh != nil {
+				s.publishBoard(ctx, "board:updated", fresh)
+			}
 		}
 	}
 	if len(deleted) > 0 {

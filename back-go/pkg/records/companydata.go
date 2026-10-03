@@ -102,11 +102,21 @@ func ImportCompany(ctx context.Context, pool *pgxpool.Pool, spec TableSpec, in c
 		r["id"] = setIDs[i]
 		r["company_id"] = in.CompanyID
 		remapUser(r, "created_by", in)
-		// Реестр принадлежит человеку — без переноса владельца он достался бы
-		// аккаунту из ЧУЖОЙ системы (у календарей такой колонки нет, и вызов
-		// ничего не делает). Несопоставленный владелец становится тем, кто
-		// импортирует, — колонка NOT NULL.
+		// Автор — сопоставленный человек этой системы, иначе тот, кто
+		// импортирует (колонка NOT NULL). Архивы до пространств автора набора не
+		// знали: им становится создатель набора.
+		if v, ok := r["owner_id"]; !ok || v == nil {
+			r["owner_id"] = r["created_by"]
+		}
 		remapUser(r, "owner_id", in)
+		if v, ok := r["owner_id"]; !ok || v == nil {
+			r["owner_id"] = in.ActorID
+		}
+		// Набор ложится в пространство команды; у архивов до пространств уровня
+		// участников нет — берём умолчание.
+		if v, ok := r["team_access"]; !ok || v == nil {
+			r["team_access"] = "edit"
+		}
 	}
 
 	fieldIDs, err := reserveIDs(ctx, tx, spec.Fields, len(dump.Fields))

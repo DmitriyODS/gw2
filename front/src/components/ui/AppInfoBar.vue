@@ -52,9 +52,11 @@ const defaultIcon = computed(() => ({
   align-items: flex-start;
   gap: 12px;
   padding: 14px 16px;
-  border: 1px solid var(--acrylic-border);
+  /* Сообщение лежит В поверхности — утоплено, а не приподнято. */
+  border: 1px solid var(--sk-edge);
   border-radius: var(--radius-lg);
-  background: var(--color-surface-high);
+  background: var(--grain), var(--color-surface-high);
+  box-shadow: var(--sk-well-shadow);
   color: var(--color-text);
   font-size: 0.88rem;
   line-height: 1.45;

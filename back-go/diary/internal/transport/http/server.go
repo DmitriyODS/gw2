@@ -66,11 +66,14 @@ func NewServer(eps endpoint.Endpoints, users domain.UserReader,
 	// Ежедневники.
 	api.Get("/search", h.searchEntries) // глобальный поиск рабочего стола
 	api.Get("/agenda", h.agenda)        // повестка дня для живой плитки
-	api.Get("", h.listDiaries) // ?tab=mine|shared
+	api.Get("/today", h.today)          // экран «Сегодня»
+	api.Get("/my-day", h.myDay)         // скрытый «Мой день»
+	api.Get("", h.listDiaries)          // ?tab=mine|shared
 	api.Post("", h.createDiary)
 	api.Get("/:id<int>", h.getDiary)
 	api.Patch("/:id<int>", h.updateDiary)
 	api.Delete("/:id<int>", h.deleteDiary)
+	api.Put("/:id<int>/space", h.moveDiary)
 
 	// Публичные ссылки (управление владельцем).
 	api.Get("/:id<int>/shares", h.listShares)

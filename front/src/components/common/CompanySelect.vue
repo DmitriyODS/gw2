@@ -355,7 +355,7 @@ watch(() => auth.companyId, (v) => {
 .company-button:hover:not(.is-static),
 .company-button.open {
   border-color: color-mix(in oklch, var(--color-primary) 34%, var(--acrylic-border));
-  background: color-mix(in oklch, var(--color-primary) 7%, var(--glass-bg));
+  background: linear-gradient(color-mix(in oklch, var(--color-primary) 7%, transparent), color-mix(in oklch, var(--color-primary) 7%, transparent)), var(--glass-bg);
 }
 
 .company-button-ico { font-size: 22px; flex-shrink: 0; }

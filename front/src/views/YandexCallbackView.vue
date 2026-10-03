@@ -6,24 +6,24 @@
       </template>
 
       <template v-else-if="state === 'return-app'">
-        <AppButton variant="filled" label="открыть приложение" class="yc-wide" @click="openInApp" />
-        <AppButton label="продолжить в браузере" class="yc-wide" @click="continueInBrowser" />
+        <AppButton variant="filled" label="Открыть приложение" size="lg" block @click="openInApp" />
+        <AppButton label="Продолжить в браузере" size="lg" block @click="continueInBrowser" />
       </template>
 
       <template v-else-if="state === 'select'">
-        <p v-if="error" class="yc-error">{{ error }}</p>
+        <AppInfoBar v-if="error" tone="error" inline :message="error" class="yc-wide" />
         <AppButton
           v-for="c in pickerCompanies"
           :key="c.company_id"
-          class="yc-wide"
+          size="lg" block
           :disabled="loading || c.is_active === false"
           @click="pick(c.company_id)"
         >{{ c.company_name }}</AppButton>
       </template>
 
       <template v-else>
-        <p class="yc-error">{{ error }}</p>
-        <AppButton variant="filled" label="ко входу" class="yc-wide" @click="router.push('/login')" />
+        <AppInfoBar tone="error" inline :message="error" class="yc-wide" />
+        <AppButton variant="filled" label="Ко входу" size="lg" block @click="router.push('/login')" />
       </template>
     </div>
   </AuthShell>
@@ -32,6 +32,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import AppButton from '@/components/ui/AppButton.vue'
+import AppInfoBar from '@/components/ui/AppInfoBar.vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
@@ -52,10 +53,10 @@ const pickerCompanies = ref([])
 const selectToken = ref('')
 
 const TITLES = {
-  loading: 'входим через Яндекс',
-  'return-app': 'возврат в приложение',
-  select: 'выбор компании',
-  error: 'не получилось',
+  loading: 'Входим через Яндекс',
+  'return-app': 'Возврат в приложение',
+  select: 'Выбор компании',
+  error: 'Не получилось',
 }
 
 const SUBTITLES = {
@@ -167,16 +168,6 @@ function finish() {
   gap: 10px;
 }
 
-.yc-wide {
-  width: 100%;
-  justify-content: center;
-  height: 44px;
-}
+.yc-wide { width: 100%; }
 
-.yc-error {
-  margin: 0;
-  font-size: 13px;
-  color: var(--color-error);
-  text-align: center;
-}
 </style>

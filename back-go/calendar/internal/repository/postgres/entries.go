@@ -75,17 +75,17 @@ func (r *Repo) ListEntries(ctx context.Context, f domain.EntryListFilter) ([]*do
 	return r.queryEntries(ctx, where, args, f.Limit)
 }
 
-// CompanyEntries — ближайшие записи всех календарей компании за период (живая
-// плитка рабочего стола). Общее число за период считаем окном — без второго
-// SELECT ради счётчика.
-func (r *Repo) CompanyEntries(ctx context.Context, companyID int64, from, to time.Time, limit int) ([]domain.AgendaRow, int, error) {
+// AgendaEntries — ближайшие записи всех доступных человеку календарей за
+// период (живая плитка, экран «Сегодня»). Общее число за период считаем окном —
+// без второго SELECT ради счётчика.
+func (r *Repo) AgendaEntries(ctx context.Context, userID int64, from, to time.Time, limit int) ([]domain.AgendaRow, int, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT e.calendar_id, c.name, e.id, e.event_at, e.data, count(*) OVER () AS total
+		SELECT e.calendar_id, cal.name, e.id, e.event_at, e.data, count(*) OVER () AS total
 		FROM calendar_records e
-		JOIN calendars c ON c.id = e.calendar_id
-		WHERE c.company_id = $1 AND e.event_at >= $2 AND e.event_at < $3
+		JOIN calendars cal ON cal.id = e.calendar_id
+		WHERE `+visibleCond+` AND e.event_at >= $2 AND e.event_at < $3
 		ORDER BY e.event_at ASC, e.id ASC
-		LIMIT $4`, companyID, from, to, limit)
+		LIMIT $4`, userID, from, to, limit)
 	if err != nil {
 		return nil, 0, err
 	}

@@ -10,19 +10,17 @@ import (
 /* Сторона реестров в контракте владельца файлов (раздел «Хранилище»).
 
    Файлы лежат значениями внутри registry_records.data, отдельной таблицы нет.
-   Реестр принадлежит КОМПАНИИ, а место за него платит её создатель — отсюда
-   отбор по companyIDs (кто создатель, знает биллинг). */
+   За личный реестр платит его хозяин, за реестр команды — создатель команды
+   (какие команды создал спрашивающий, знает биллинг). */
 
-func (r *Repo) RecordsOfCompanies(ctx context.Context, companyIDs []int64) ([]*domain.RecordScope, error) {
-	if len(companyIDs) == 0 {
-		return nil, nil
-	}
+func (r *Repo) RecordsForQuota(ctx context.Context, userID int64, companyIDs []int64) ([]*domain.RecordScope, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT rec.id, rec.registry_id, rec.data, rec.created_at, rec.updated_at,
 		       reg.name, reg.company_id
 		  FROM registry_records rec
 		  JOIN registries reg ON reg.id = rec.registry_id
-		 WHERE reg.company_id = ANY($1)`, companyIDs)
+		 WHERE reg.company_id = ANY($1)
+		    OR (reg.company_id IS NULL AND reg.owner_id = $2)`, companyIDs, userID)
 	if err != nil {
 		return nil, err
 	}

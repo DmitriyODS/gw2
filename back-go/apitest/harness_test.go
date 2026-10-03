@@ -9,7 +9,7 @@
 // (`go run ./cmd/migrate`), затем стартуют реальные сервисы (go run) на портах
 // +10000 к dev-портам: authsvc :18091, diarysvc :18101, tasksvc :18095,
 // registrysvc :18099, calendarsvc :18100, msgsvc :18092/:19092,
-// petsvc :18094/:19094, gatewaysvc :18096, pushsvc :18097 (FCM off),
+// gatewaysvc :18096, pushsvc :18097 (FCM off),
 // portalsvc :18102, mailsvc gRPC :19098. aisvc и callsvc НЕ поднимаются: AI-пути обязаны быть
 // fail-open (поиск → LIKE), а команды call:* шлюза — отвечать
 // CALLS_UNAVAILABLE (это тоже проверка).
@@ -61,7 +61,6 @@ const (
 	registryBase  = "http://localhost:18099"
 	calendarBase  = "http://localhost:18100"
 	messengerBase = "http://localhost:18092"
-	petsBase      = "http://localhost:18094"
 	gatewayBase   = "http://localhost:18096"
 	pushBase      = "http://localhost:18097"
 	billingBase   = "http://localhost:18107"
@@ -74,7 +73,7 @@ const (
 	livekitSecret    = "dev_livekit_secret_min_32_chars_ok"
 
 	// Тестам выделена СВОЯ база Redis того же dev-инстанса: ключи presence
-	// (gw2:presence:*) и дневных капов питомцев (gw2:pets:daily:*) не должны
+	// (gw2:presence:*) и прочие счётчики сервисов не должны
 	// пересекаться с dev-данными db0 — id пользователей тестовой БД начинаются
 	// с 1 на каждый прогон и совпали бы с dev-остатками. FLUSHDB на старте
 	// прогона даёт детерминированные капы/бюджеты. Pub/sub-каналы в Redis
@@ -229,14 +228,12 @@ func runMain(m *testing.M) int {
 		"PASETO_PUBLIC_KEY=" + pasetoPublicKey,
 		"HTTP_ADDR=:18106",
 	})
-	// tasksvc: petsvc/aisvc НЕ поднимаем нарочно — хуки геймификации
-	// fire-and-forget, а AI fail-open (поиск падает в LIKE); сервис обязан
-	// переживать их недоступность. Ключ Fernet YouGile — dev-ключ из dev.sh.
+	// tasksvc: aisvc НЕ поднимаем нарочно — AI fail-open (поиск падает в
+	// LIKE); сервис обязан переживать его недоступность. Ключ Fernet YouGile — dev-ключ из dev.sh.
 	procs.start("tasksvc", filepath.Join(repoRoot, "back-go/tasks"), "./cmd/tasksvc", []string{
 		"DATABASE_URL=" + testDBURL,
 		"REDIS_URL=" + testRedisURL,
 		"PASETO_PUBLIC_KEY=" + pasetoPublicKey,
-		"PETS_GRPC_ADDR=localhost:19094",
 		"AI_GRPC_ADDR=localhost:19093",
 		"YOUGILE_ENC_KEY=CT5VF1jg6uFFbj4W_6RW3z3416bPlfbxdMYelrEOIXc=",
 		"HTTP_ADDR=:18095",
@@ -256,7 +253,7 @@ func runMain(m *testing.M) int {
 		"UPLOAD_FOLDER=" + uploads,
 		"HTTP_ADDR=:18100",
 	})
-	// Волна 3: msgsvc, petsvc, pushsvc, portalsvc. Межсервисные вызовы внутри
+	// Волна 3: msgsvc, pushsvc, portalsvc. Межсервисные вызовы внутри
 	// волны fire-and-forget/ленивые (portalsvc → msgsvc — пересылка поста),
 	// поэтому порядок старта не важен; pushsvc без FIREBASE_* — отправка
 	// выключена (no-op sender), REST живёт.
@@ -271,16 +268,8 @@ func runMain(m *testing.M) int {
 		// автоответ dev-чата остаётся синхронным (его ждут тесты solo-чата).
 		"AI_GRPC_ADDR=",
 	})
-	// petsvc: исходящих межсервисных вызовов нет.
-	procs.start("petsvc", filepath.Join(repoRoot, "back-go/pets"), "./cmd/petsvc", []string{
-		"DATABASE_URL=" + testDBURL,
-		"REDIS_URL=" + testRedisURL,
-		"PASETO_PUBLIC_KEY=" + pasetoPublicKey,
-		"GRPC_ADDR=:19094",
-		"HTTP_ADDR=:18094",
-	})
-	// portalsvc: корпоративный портал (посты/комментарии/реакции/разделы),
-	// полностью независим от petsvc. Единственный межсервисный вызов —
+	// portalsvc: корпоративный портал (посты/комментарии/реакции/разделы).
+	// Единственный межсервисный вызов —
 	// пересылка поста в мессенджер (gRPC msgsvc CreatePostMessage), тот
 	// стартует выше в этой же волне.
 	procs.start("portalsvc", filepath.Join(repoRoot, "back-go/portal"), "./cmd/portalsvc", []string{
@@ -338,7 +327,7 @@ func runMain(m *testing.M) int {
 	for _, hc := range []string{
 		authBase + "/healthz", diaryBase + "/healthz", "http://localhost:18098/healthz",
 		tasksBase + "/healthz", registryBase + "/healthz", calendarBase + "/healthz",
-		messengerBase + "/healthz", petsBase + "/healthz", pushBase + "/healthz",
+		messengerBase + "/healthz", pushBase + "/healthz",
 		gatewayBase + "/healthz", portalBase + "/healthz", notesBase + "/healthz",
 		boardBase + "/healthz", reminderBase + "/healthz",
 		callsBase + "/healthz", callsGatewayBase + "/healthz",
@@ -596,7 +585,6 @@ var tasksAPI = &svcClient{base: tasksBase}
 var registryAPI = &svcClient{base: registryBase}
 var calendarAPI = &svcClient{base: calendarBase}
 var messengerAPI = &svcClient{base: messengerBase}
-var petsAPI = &svcClient{base: petsBase}
 var pushAPI = &svcClient{base: pushBase}
 var portalAPI = &svcClient{base: portalBase}
 var notesAPI = &svcClient{base: notesBase}

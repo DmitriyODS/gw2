@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DmitriyODS/gw2/back-go/pkg/pasetoauth"
+	"github.com/DmitriyODS/gw2/back-go/pkg/spaces"
 	"github.com/DmitriyODS/gw2/back-go/registry/internal/domain"
 )
 
@@ -35,13 +35,15 @@ type fakeRepo struct {
 	lastExport domain.ExportFilter
 	lastDelete domain.ExportFilter
 	nextID     int64
+	users      *fakeUsers
+	moved      []string
 }
 
-func (f *fakeRepo) RegistriesSummary(domain.Ctx, int64, int64, int) (*domain.RegistriesSummary, error) {
+func (f *fakeRepo) RegistriesSummary(domain.Ctx, int64, int) (*domain.RegistriesSummary, error) {
 	return &domain.RegistriesSummary{Names: []string{}}, nil
 }
 
-func (f *fakeRepo) ListRegistries(_ domain.Ctx, _, _ int64, _ string) ([]*domain.Registry, error) {
+func (f *fakeRepo) ListRegistries(_ domain.Ctx, _ int64, _ string) ([]*domain.Registry, error) {
 	return []*domain.Registry{f.reg}, nil
 }
 func (f *fakeRepo) GetRegistry(_ domain.Ctx, id int64) (*domain.Registry, error) {
@@ -51,26 +53,43 @@ func (f *fakeRepo) GetRegistry(_ domain.Ctx, id int64) (*domain.Registry, error)
 	return nil, nil
 }
 
-// AccessOf — владелец получает всё, остальные — по личной шаре и шаре активной
-// компании.
-func (f *fakeRepo) AccessOf(_ domain.Ctx, registryID, userID, companyID int64) (string, error) {
+// AccessOf — зеркало accessExpr: хозяин личного реестра и автор/админ реестра
+// команды — владельцы; участникам команды — team_access; плюс шары лично и
+// любым командам человека.
+func (f *fakeRepo) AccessOf(ctx domain.Ctx, registryID, userID int64) (string, error) {
 	if f.reg == nil || f.reg.ID != registryID {
 		return domain.AccessNone, nil
 	}
-	if f.reg.OwnerID == userID {
-		return domain.AccessOwner, nil
-	}
 	best := domain.AccessNone
+	if f.reg.CompanyID == nil {
+		if f.reg.OwnerID == userID {
+			return domain.AccessOwner, nil
+		}
+	} else {
+		role, _ := f.users.TeamRole(ctx, userID, *f.reg.CompanyID)
+		if role.Admin || (role.Member && f.reg.OwnerID == userID) {
+			return domain.AccessOwner, nil
+		}
+		if role.Member {
+			best = f.reg.TeamAccess
+		}
+	}
+	mine := f.users.companies[userID]
 	for _, sh := range f.userShares {
 		if sh.RegistryID != registryID {
 			continue
 		}
 		if (sh.UserID != nil && *sh.UserID == userID) ||
-			(sh.CompanyID != nil && companyID != 0 && *sh.CompanyID == companyID) {
+			(sh.CompanyID != nil && slices.Contains(mine, *sh.CompanyID)) {
 			best = domain.BestAccess(best, sh.Access)
 		}
 	}
 	return best, nil
+}
+
+func (f *fakeRepo) MoveRegistry(_ domain.Ctx, _, ownerID int64, companyID *int64, teamAccess string) error {
+	f.reg.OwnerID, f.reg.CompanyID, f.reg.TeamAccess = ownerID, companyID, teamAccess
+	return nil
 }
 
 func (f *fakeRepo) Audience(_ domain.Ctx, _ int64) ([]int64, error) {
@@ -106,7 +125,7 @@ func (f *fakeRepo) ListRecords(_ domain.Ctx, filter domain.RecordListFilter) ([]
 	f.lastFilter = filter
 	return nil, 0, nil
 }
-func (f *fakeRepo) SearchRecords(_ domain.Ctx, _, _ int64, _ string, _ int) ([]*domain.SearchHit, error) {
+func (f *fakeRepo) SearchRecords(_ domain.Ctx, _ int64, _ string, _ int) ([]*domain.SearchHit, error) {
 	return nil, nil
 }
 func (f *fakeRepo) GetRecord(_ domain.Ctx, id int64) (*domain.Record, error) {
@@ -227,15 +246,24 @@ func (f *fakeRepo) ReturnIssue(_ domain.Ctx, issueID int64, at time.Time, _ stri
 	return true, nil
 }
 
-// Раздел «Хранилище»: записи отбираются по компании их реестра.
-func (f *fakeRepo) RecordsOfCompanies(_ domain.Ctx, companyIDs []int64) ([]*domain.RecordScope, error) {
+// Раздел «Хранилище»: реестр команды — по списку команд, личный — по хозяину.
+func (f *fakeRepo) RecordsForQuota(_ domain.Ctx, userID int64, companyIDs []int64) ([]*domain.RecordScope, error) {
 	out := []*domain.RecordScope{}
-	if f.reg == nil || f.reg.CompanyID == nil || !slices.Contains(companyIDs, *f.reg.CompanyID) {
+	if f.reg == nil {
 		return out, nil
+	}
+	team := f.reg.CompanyID != nil && slices.Contains(companyIDs, *f.reg.CompanyID)
+	personal := f.reg.CompanyID == nil && f.reg.OwnerID == userID
+	if !team && !personal {
+		return out, nil
+	}
+	var company int64
+	if f.reg.CompanyID != nil {
+		company = *f.reg.CompanyID
 	}
 	for _, r := range f.records {
 		out = append(out, &domain.RecordScope{
-			Record: r, RegistryID: f.reg.ID, RegistryName: f.reg.Name, CompanyID: *f.reg.CompanyID,
+			Record: r, RegistryID: f.reg.ID, RegistryName: f.reg.Name, CompanyID: company,
 		})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Record.ID < out[j].Record.ID })
@@ -255,7 +283,7 @@ func (b *fakeBus) Publish(_ domain.Ctx, event string, _ []string, _ any) {
 	b.events = append(b.events, event)
 }
 
-type fakeFiles struct{ removed []string }
+type fakeFiles struct{ removed, moved []string }
 
 func (f *fakeFiles) SaveFor(_ context.Context, _, _ int64, _ string, _ []byte) (string, error) {
 	return "registry/x", nil
@@ -270,12 +298,28 @@ func (f *fakeFiles) RemoveFor(_ context.Context, _, _ int64, paths []string) {
 	f.removed = append(f.removed, paths...)
 }
 
+func (f *fakeFiles) MoveFor(_ context.Context, _, _ int64, paths []string) error {
+	f.moved = append(f.moved, paths...)
+	return nil
+}
+
 func (f *fakeFiles) Remove(paths []string) {
 	f.removed = append(f.removed, paths...)
 }
 
-// fakeUsers — идентичность: владелец состоит в компании companyID.
-type fakeUsers struct{ companies map[int64][]int64 }
+// fakeUsers — идентичность: владелец состоит в компании companyID; admins —
+// кто управляет какой командой.
+type fakeUsers struct {
+	companies map[int64][]int64
+	admins    map[int64][]int64
+}
+
+func (u *fakeUsers) TeamRole(_ domain.Ctx, userID, companyID int64) (spaces.Role, error) {
+	return spaces.Role{
+		Member: slices.Contains(u.companies[userID], companyID),
+		Admin:  slices.Contains(u.admins[userID], companyID),
+	}, nil
+}
 
 func (u *fakeUsers) GetUser(_ domain.Ctx, id int64) (*domain.User, error) {
 	return &domain.User{ID: id, IsActive: true}, nil
@@ -298,11 +342,13 @@ func (u *fakeUsers) CompanyName(_ domain.Ctx, _ int64) (string, error) {
 func newTestService(fields []domain.Field) (*Service, *fakeRepo, *fakeBus) {
 	company := int64(companyID)
 	repo := &fakeRepo{
-		reg:    &domain.Registry{ID: 1, OwnerID: ownerID, CompanyID: &company, Name: "Тест"},
+		reg: &domain.Registry{ID: 1, OwnerID: ownerID, CompanyID: &company,
+			TeamAccess: domain.AccessEdit, Name: "Тест"},
 		fields: fields,
 	}
 	bus := &fakeBus{}
-	users := &fakeUsers{companies: map[int64][]int64{ownerID: {companyID}}}
+	users := &fakeUsers{companies: map[int64][]int64{ownerID: {companyID}}, admins: map[int64][]int64{}}
+	repo.users = users
 	svc := New(Deps{Repo: repo, Users: users, Files: &fakeFiles{}, Bus: bus, Log: discardLogger()})
 	return svc, repo, bus
 }
@@ -523,50 +569,83 @@ func TestAccess_LevelsAreNested(t *testing.T) {
 }
 
 // Доступ приходит человеку несколькими путями сразу — берётся сильнейший.
-func TestAccess_BestOfPersonalAndCompany(t *testing.T) {
+func TestAccess_BestOfTeamAndShares(t *testing.T) {
 	svc, repo, _ := newTestService(nil)
 	const guest = 1001
-	user, company := int64(guest), int64(companyID)
-	repo.userShares = []*domain.UserShare{
-		{RegistryID: 1, CompanyID: &company, Access: domain.AccessAdmin},
-		{RegistryID: 1, UserID: &user, Access: domain.AccessEdit},
-	}
+	user := int64(guest)
+	repo.reg.TeamAccess = domain.AccessView
+	repo.userShares = []*domain.UserShare{{RegistryID: 1, UserID: &user, Access: domain.AccessEdit}}
 	svc.users.(*fakeUsers).companies[guest] = []int64{companyID}
 
-	ctx := pasetoauth.WithCompany(context.Background(), companyID)
-	reg, err := svc.GetRegistry(ctx, guest, 1)
+	reg, err := svc.GetRegistry(context.Background(), guest, 1)
 	if err != nil {
 		t.Fatalf("чтение: %v", err)
 	}
-	if reg.MyAccess != domain.AccessAdmin {
+	if reg.MyAccess != domain.AccessEdit {
 		t.Errorf("сильнейший уровень: получено %q", reg.MyAccess)
 	}
 }
 
-/* Шара компании действует, только пока эта компания активна: реестр раздан
-   компании, а человек работает в другой — прав у него нет. Иначе привязка к
-   компании была бы фикцией: список её учитывает, а доступ нет. */
-func TestAccess_CompanyShareOnlyInActiveCompany(t *testing.T) {
-	svc, repo, _ := newTestService(nil)
-	const guest = 1001
-	company := int64(companyID)
-	repo.userShares = []*domain.UserShare{
-		{RegistryID: 1, CompanyID: &company, Access: domain.AccessEdit},
-	}
-	svc.users.(*fakeUsers).companies[guest] = []int64{companyID, companyID + 1}
+// Реестр команды доступен её участникам с уровнем team_access, а распоряжаются
+// им автор и администраторы. Ушедший из команды автор теряет права: общее
+// остаётся команде.
+func TestAccess_TeamSpace(t *testing.T) {
+	svc, _, _ := newTestService(nil)
+	users := svc.users.(*fakeUsers)
+	const member, admin, outsider = 1001, 1002, 1003
+	users.companies[member] = []int64{companyID}
+	users.companies[admin] = []int64{companyID}
+	users.admins[admin] = []int64{companyID}
 
-	inCompany := pasetoauth.WithCompany(context.Background(), companyID)
-	reg, err := svc.GetRegistry(inCompany, guest, 1)
+	cases := []struct {
+		user int64
+		want string
+	}{
+		{ownerID, domain.AccessOwner},
+		{admin, domain.AccessOwner},
+		{member, domain.AccessEdit},
+	}
+	for _, c := range cases {
+		reg, err := svc.GetRegistry(context.Background(), c.user, 1)
+		if err != nil || reg.MyAccess != c.want {
+			t.Errorf("пользователь %d: уровень %v, ошибка %v, ожидался %q", c.user, reg, err, c.want)
+		}
+	}
+	if _, err := svc.GetRegistry(context.Background(), outsider, 1); err != domain.ErrRegistryNotFound {
+		t.Errorf("посторонний не должен видеть реестр команды, получено %v", err)
+	}
+	if err := svc.DeleteRegistry(context.Background(), member, 1); err != domain.ErrOwnerOnly {
+		t.Errorf("рядовой участник не удаляет реестр команды, получено %v", err)
+	}
+
+	users.companies[ownerID] = nil
+	if _, err := svc.GetRegistry(context.Background(), ownerID, 1); err != domain.ErrRegistryNotFound {
+		t.Errorf("автор, ушедший из команды, теряет доступ, получено %v", err)
+	}
+}
+
+// Перенос: в чужую команду нельзя; забирая к себе, человек становится
+// хозяином, а файлы переезжают на его квоту.
+func TestMoveRegistry(t *testing.T) {
+	svc, repo, _ := newTestService([]domain.Field{{ID: 10, Label: "Фото", Type: domain.FieldImage}})
+	repo.records = map[int64]*domain.Record{5: {ID: 5, RegistryID: 1,
+		Data: map[string]any{"10": map[string]any{"path": "registry/a.png", "name": "a.png"}}}}
+	ctx := context.Background()
+
+	foreign := int64(companyID + 1)
+	if _, err := svc.MoveRegistry(ctx, ownerID, 1, &foreign, ""); err != domain.ErrNotTeamMember {
+		t.Fatalf("перенос в чужую команду должен отбиваться, получено %v", err)
+	}
+
+	reg, err := svc.MoveRegistry(ctx, ownerID, 1, nil, "")
 	if err != nil {
-		t.Fatalf("чтение в своей компании: %v", err)
+		t.Fatalf("перенос к себе: %v", err)
 	}
-	if reg.MyAccess != domain.AccessEdit {
-		t.Errorf("уровень в компании шары: получено %q", reg.MyAccess)
+	if reg.CompanyID != nil || reg.OwnerID != ownerID || reg.MyAccess != domain.AccessOwner {
+		t.Errorf("реестр не стал личным: %+v", reg)
 	}
-
-	elsewhere := pasetoauth.WithCompany(context.Background(), companyID+1)
-	if _, err := svc.GetRegistry(elsewhere, guest, 1); err != domain.ErrRegistryNotFound {
-		t.Errorf("в другой компании реестра быть не должно, получено %v", err)
+	if moved := svc.files.(*fakeFiles).moved; len(moved) != 1 || moved[0] != "registry/a.png" {
+		t.Errorf("файлы не переехали на новую квоту: %v", moved)
 	}
 }
 

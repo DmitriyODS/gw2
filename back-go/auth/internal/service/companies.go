@@ -389,56 +389,6 @@ func (s *Service) GetWeekendSettings(ctx context.Context, actor *domain.User, co
 	return &dto.WeekendSettings{WeekendDays: weekendDays(company.Settings)}, nil
 }
 
-func grooveEnabled(settings map[string]any) bool {
-	v, ok := settings["uses_groove"]
-	if !ok {
-		return true
-	}
-	b, ok := v.(bool)
-	if !ok {
-		return true
-	}
-	return b
-}
-
-func (s *Service) GetGrooveSettings(ctx context.Context, actor *domain.User, companyID int64) (*dto.GrooveSettings, error) {
-	if _, err := s.companyAuthority(ctx, actor, companyID); err != nil {
-		return nil, err
-	}
-	company, err := s.companies.GetCompany(ctx, companyID)
-	if err != nil {
-		return nil, err
-	}
-	if company == nil {
-		return nil, errCompanyNotFound
-	}
-	return &dto.GrooveSettings{Enabled: grooveEnabled(company.Settings)}, nil
-}
-
-func (s *Service) UpdateGrooveSettings(ctx context.Context, actor *domain.User, companyID int64, enabled bool) (*dto.GrooveSettings, error) {
-	if _, err := s.companyAuthority(ctx, actor, companyID); err != nil {
-		return nil, err
-	}
-	company, err := s.companies.GetCompany(ctx, companyID)
-	if err != nil {
-		return nil, err
-	}
-	if company == nil {
-		return nil, errCompanyNotFound
-	}
-
-	settings := map[string]any{}
-	for k, v := range company.Settings {
-		settings[k] = v
-	}
-	settings["uses_groove"] = enabled
-	if err := s.companies.UpdateCompanyFields(ctx, companyID,
-		map[string]any{"settings": settings}); err != nil {
-		return nil, err
-	}
-	return &dto.GrooveSettings{Enabled: enabled}, nil
-}
-
 func (s *Service) UpdateWeekendSettings(ctx context.Context, actor *domain.User, companyID int64, days []int) (*dto.WeekendSettings, error) {
 	if _, err := s.companyAuthority(ctx, actor, companyID); err != nil {
 		return nil, err
