@@ -72,6 +72,8 @@ function onClick(e) {
   font: inherit;
   font-weight: 600;
   white-space: nowrap;
+  /* Кнопка-ссылка (tag="a") — всё равно кнопка: подчёркивания ссылки у неё нет. */
+  text-decoration: none;
   cursor: pointer;
   transition: background 0.15s, border-color 0.15s, filter 0.15s, box-shadow 0.15s;
 }

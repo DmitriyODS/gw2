@@ -2,14 +2,13 @@
   <AppDialog
     :model-value="modelValue"
     tone="tertiary"
-    size="lg"
+    size="xl"
     title="Оформление ленты"
     :actions="actions"
-    :busy="saving"
     @update:model-value="$emit('update:modelValue', $event)"
-    @confirm="apply"
+    @confirm="emit('update:modelValue', false)"
   >
-    <BackgroundEditor :recipe="recipe" :upload-fn="uploadFn" @update:recipe="(r) => Object.assign(recipe, r)" />
+    <BackgroundEditor :recipe="recipe" :upload-fn="uploadFn" @update:recipe="save" />
 
     <p class="pbg-hint">
       Оформление личное и синхронизируется на всех ваших устройствах — коллеги
@@ -19,13 +18,14 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, watch } from 'vue'
+import { computed, watch } from 'vue'
 import AppDialog from '@/components/ui/AppDialog.vue'
 import BackgroundEditor from '@/components/common/BackgroundEditor.vue'
 import { usePortalStore } from '@/stores/portal.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { uploadAttachment } from '@/api/messenger.js'
-import { DEFAULT_RECIPE, normalizeRecipe, cloneRecipe } from '@/utils/chatBackgrounds.js'
+import { useRecipeUndo } from '@/composables/useRecipeUndo.js'
+import { DEFAULT_RECIPE, normalizeRecipe } from '@/utils/chatBackgrounds.js'
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
@@ -35,52 +35,32 @@ const emit = defineEmits(['update:modelValue'])
 const portal = usePortalStore()
 const notif = useNotificationsStore()
 
-const saving = ref(false)
-const recipe = reactive(cloneRecipe(DEFAULT_RECIPE))
-
 // Картинка-фон — личный ассет пользователя; грузим через общий uploads
 // мессенджера (отдаётся тем же /uploads/, не требует привязки к посту).
 const uploadFn = (file) => uploadAttachment(file)
 
-function load() {
-  const stored = normalizeRecipe(portal.background)
-  Object.assign(recipe, cloneRecipe(stored || DEFAULT_RECIPE))
+const recipe = computed(() => normalizeRecipe(portal.background) || DEFAULT_RECIPE)
+
+/* Оформление применяется сразу — как темы и обои стола. */
+function save(r) {
+  portal.saveBackground(r)
+    .catch((e) => notif.error(e?.message || 'Не удалось сохранить оформление'))
 }
 
-watch(() => props.modelValue, (open) => { if (open) load() })
-
-const actions = computed(() => {
-  const out = [{ kind: 'cancel', label: 'Отмена' }]
-  if (portal.background) out.push({ kind: 'neutral', label: 'Сбросить', onClick: resetBg })
-  out.push({ kind: 'confirm', label: 'Применить', icon: 'check' })
-  return out
-})
-
-async function apply() {
-  if (saving.value) return
-  saving.value = true
-  try {
-    await portal.saveBackground(cloneRecipe(recipe))
-    emit('update:modelValue', false)
-  } catch (e) {
-    notif.error(e?.message || 'Не удалось сохранить оформление')
-  } finally {
-    saving.value = false
-  }
+function reset() {
+  portal.resetBackground()
+    .catch((e) => notif.error(e?.message || 'Не удалось сбросить оформление'))
 }
 
-async function resetBg() {
-  if (saving.value) return
-  saving.value = true
-  try {
-    await portal.resetBackground()
-    emit('update:modelValue', false)
-  } catch (e) {
-    notif.error(e?.message || 'Не удалось сбросить оформление')
-  } finally {
-    saving.value = false
-  }
-}
+const undo = useRecipeUndo(() => portal.background, (r) => (r ? save(r) : reset()))
+
+watch(() => props.modelValue, (open) => { if (open) undo.capture() })
+
+const actions = computed(() => [
+  { kind: 'neutral', label: 'Вернуть как было', icon: 'undo', disabled: !undo.changed.value, onClick: undo.undo },
+  { kind: 'neutral', label: 'Сбросить', icon: 'restart_alt', disabled: !portal.background, onClick: reset },
+  { kind: 'confirm', label: 'Готово', icon: 'check' },
+])
 </script>
 
 <style scoped>

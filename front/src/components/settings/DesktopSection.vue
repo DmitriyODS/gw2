@@ -6,6 +6,7 @@
   <AppStack>
     <DesktopLayoutCard />
     <DesktopShellCard v-if="windowsShell" />
+    <StartMenuCard />
     <DesktopTilesCard />
   </AppStack>
 </template>
@@ -16,11 +17,12 @@ import AppStack from '@/components/ui/AppStack.vue'
 import DesktopLayoutCard from './DesktopLayoutCard.vue'
 import DesktopShellCard from './DesktopShellCard.vue'
 import DesktopTilesCard from './DesktopTilesCard.vue'
+import StartMenuCard from './StartMenuCard.vue'
 import { useShellMode } from '@/composables/useShellMode.js'
 
 const { shell } = useShellMode()
 
-/* Сторона панели задач и режим меню «Пуск» — про ОКОННЫЙ каркас: у телефона,
-   планшета и «Виджетов» панель на своём месте, а «Пуск» и так во весь экран. */
+/* Сторона панели задач — про ОКОННЫЙ каркас: у телефона, планшета и
+   «Виджетов» панель на своём месте. */
 const windowsShell = computed(() => shell.value === 'windows')
 </script>

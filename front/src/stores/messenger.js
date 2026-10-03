@@ -8,6 +8,7 @@ import { useCallStore } from './call.js'
 // Тот же приём с socket/index.js (он импортирует этот стор): getSocket
 // зовётся только из экшенов, когда модули уже инициализированы.
 import { getSocket } from '@/socket/index.js'
+import { createDebouncedSaver } from '@/utils/debouncedSaver.js'
 import { normalizeRecipe } from '@/utils/chatBackgrounds.js'
 import { rememberReaction } from '@/utils/reactions.js'
 // Цикл messageOutbox ↔ messenger безопасен: оба зовут друг друга из функций.
@@ -79,6 +80,7 @@ export const useMessengerStore = defineStore('messenger', () => {
   // Хранятся нормализованными (форма — utils/chatBackgrounds.js).
   const chatBgDefault = ref(null)
   const chatBgByConv = ref({})
+  const chatBgSaver = createDebouncedSaver()
   // Папки чатов (личные, по образцу Telegram). activeFolderId === null —
   // виртуальная папка «Все чаты». folders хранятся отсортированными по position.
   const folders = ref([])
@@ -890,16 +892,19 @@ export const useMessengerStore = defineStore('messenger', () => {
   }
 
   // Сохранить рецепт: convId === null — общий дефолт, иначе конкретный чат.
-  // Оптимистично применяем сразу; сокет-эхо для других устройств идемпотентно.
+  // Применяется сразу (редактор зовёт на каждом шаге ползунка), на сервер
+  // уходит последнее значение после паузы; сокет-эхо для других устройств
+  // идемпотентно.
   async function saveChatBackground(convId, recipe) {
     const norm = normalizeRecipe(recipe)
     if (convId == null) chatBgDefault.value = norm
     else chatBgByConv.value = { ...chatBgByConv.value, [convId]: norm }
-    await api.setChatBackground(convId, recipe)
+    await chatBgSaver.save(convId ?? 'default', () => api.setChatBackground(convId, recipe))
   }
 
   // Сбросить рецепт (для чата — вернуться к общему дефолту).
   async function resetChatBackground(convId) {
+    chatBgSaver.cancel(convId ?? 'default')
     if (convId == null) {
       chatBgDefault.value = null
     } else {
@@ -1034,6 +1039,7 @@ export const useMessengerStore = defineStore('messenger', () => {
     groupReadsByConv.value = {}
     totalUnread.value = 0
     supportInbox.value = []
+    chatBgSaver.clear()
     chatBgDefault.value = null
     chatBgByConv.value = {}
     onlineIds.value = new Set()

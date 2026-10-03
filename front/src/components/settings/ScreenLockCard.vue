@@ -47,14 +47,22 @@
     <AppDialog
       v-if="wallpaperOpen"
       v-model="wallpaperOpen"
-      size="lg"
+      size="xl"
       title="Обои экрана блокировки"
-      subtitle="Готовый комплект, своя картинка, градиент или узор."
+      subtitle="Применяются сразу."
       :actions="wallpaperActions"
-      @confirm="applyWallpaper"
-      @cancel="wallpaperOpen = false"
+      @confirm="wallpaperOpen = false"
     >
-      <BackgroundEditor :recipe="wallpaper" :upload-fn="uploadFn" preview="desktop" :presets="WALLPAPERS" @update:recipe="(r) => Object.assign(wallpaper, r)" />
+      <BackgroundEditor
+        :recipe="wallpaper"
+        :upload-fn="uploadFn"
+        preview="desktop"
+        :presets="WALLPAPERS"
+        :recent="prefs.wallpapers"
+        @update:recipe="prefs.setLockWallpaper"
+        @uploaded="prefs.rememberWallpaper"
+        @forget-recent="prefs.forgetWallpaper"
+      />
     </AppDialog>
 
     <!-- Задание и смена пин-кода. -->
@@ -114,7 +122,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import InputText from 'primevue/inputtext'
 import BackgroundEditor from '@/components/common/BackgroundEditor.vue'
 import AppButton from '@/components/ui/AppButton.vue'
@@ -130,7 +138,8 @@ import { useScreenLock } from '@/composables/useScreenLock.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { useDesktopPrefsStore } from '@/stores/desktopPrefs.js'
 import { uploadAttachment } from '@/api/messenger.js'
-import { cloneRecipe, normalizeRecipe } from '@/utils/chatBackgrounds.js'
+import { normalizeRecipe } from '@/utils/chatBackgrounds.js'
+import { useRecipeUndo } from '@/composables/useRecipeUndo.js'
 import { WALLPAPERS, defaultWallpaperRecipe } from '@/utils/wallpapers.js'
 
 const notif = useNotificationsStore()
@@ -156,34 +165,24 @@ const busy = ref(false)
 const pinValid = computed(() => /^\d{4,8}$/.test(pin.value))
 
 /* ── Обои запертого экрана ── */
+// Обои применяются сразу, как и всё оформление; «Вернуть» откатывает к тому,
+// что стояло при открытии диалога.
 const wallpaperOpen = ref(false)
-const wallpaper = reactive(defaultWallpaperRecipe())
+const wallpaper = computed(() => normalizeRecipe(prefs.lockWallpaper) || defaultWallpaperRecipe())
 // Картинка — личный ассет: тот же общий uploads, что у обоев рабочего стола.
 const uploadFn = (file) => uploadAttachment(file)
+const wallpaperUndo = useRecipeUndo(() => prefs.lockWallpaper, prefs.setLockWallpaper)
 
 function openWallpaper() {
-  const saved = normalizeRecipe(prefs.lockWallpaper)
-  Object.assign(wallpaper, saved ? cloneRecipe(saved) : defaultWallpaperRecipe())
+  wallpaperUndo.capture()
   wallpaperOpen.value = true
 }
 
 const wallpaperActions = computed(() => [
-  { kind: 'cancel', label: 'Отмена' },
-  { kind: 'neutral', label: 'Убрать', icon: 'restart_alt', disabled: !prefs.lockWallpaper, onClick: clearWallpaper },
-  { kind: 'confirm', label: 'Применить', icon: 'check' },
+  { kind: 'neutral', label: 'Вернуть как было', icon: 'undo', disabled: !wallpaperUndo.changed.value, onClick: wallpaperUndo.undo },
+  { kind: 'neutral', label: 'Убрать', icon: 'restart_alt', disabled: !prefs.lockWallpaper, onClick: () => prefs.setLockWallpaper(null) },
+  { kind: 'confirm', label: 'Готово', icon: 'check' },
 ])
-
-function applyWallpaper() {
-  prefs.setLockWallpaper(cloneRecipe(wallpaper))
-  wallpaperOpen.value = false
-  notif.success('Обои экрана блокировки обновлены')
-}
-
-function clearWallpaper() {
-  prefs.setLockWallpaper(null)
-  Object.assign(wallpaper, defaultWallpaperRecipe())
-  wallpaperOpen.value = false
-}
 
 function openPin(mode = 'set') {
   pinMode.value = mode

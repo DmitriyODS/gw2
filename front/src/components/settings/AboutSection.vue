@@ -1,9 +1,12 @@
 <template>
+  <!-- Устройство — как у «Об этом Mac» и «О системе» Windows: крупная марка с
+       версией, под ней плоский список сведений «название → значение», дальше —
+       что нового и действия с приложениями. Каждый блок про одно. -->
   <div class="ab">
-    <!-- ── Карточка продукта ─────────────────────────────────── -->
-    <section class="ab-card ab-hero">
-      <!-- Фирменная волна Groove (мотив логотипа) дрейфует ЗА акриловым
-           стеклом: слой волн → матовая пелена → контент. -->
+    <!-- ── Марка: фирменные волны за стеклом ── -->
+    <section class="ab-hero">
+      <!-- Волна Groove (мотив логотипа) дрейфует ЗА акриловым стеклом:
+           слой волн → матовая пелена → контент. -->
       <div class="ab-waves" aria-hidden="true">
         <div class="ab-wave ab-wave--soft"><svg viewBox="0 0 2880 140" preserveAspectRatio="none"><path :d="WAVE_PATH" /></svg></div>
         <div class="ab-wave ab-wave--mid"><svg viewBox="0 0 2880 140" preserveAspectRatio="none"><path :d="WAVE_PATH" /></svg></div>
@@ -11,138 +14,96 @@
       </div>
       <div class="ab-frost" aria-hidden="true" />
 
-      <div class="ab-brand">
-        <BrandLogo :size="64" />
-        <h3 class="ab-brand-name">
-          <span>Groove Work</span>
-          <span v-if="majorVersion" class="ab-brand-major">{{ majorVersion }}</span>
-        </h3>
-      </div>
+      <BrandLogo :size="72" class="ab-logo" />
+      <h3 class="ab-name">
+        <span>Groove Work</span>
+        <span v-if="majorVersion" class="ab-name-major">{{ majorVersion }}</span>
+      </h3>
+      <p class="ab-tagline">Ваш timeline в удобном интерфейсе</p>
+    </section>
 
-      <p class="ab-about">
-        Groove Work собирает рабочий день в одном окне: задачи и учёт времени,
-        статистика по людям и отделам, мессенджер со звонками, корпоративный
-        портал, заметки, доски, ежедневники, календари и напоминания. Один
-        аккаунт живёт сразу в нескольких компаниях — переключайтесь между ними,
-        не выходя из системы; личные разделы и переписка остаются с вами в любой
-        из них. Работает в браузере, на компьютере и на телефоне.
-      </p>
-
-      <!-- Информация о приложении: версия, сборка и дата выпуска — ровно три
-           бейджа, источник один: data/changelog.json. -->
-      <div class="ab-badges">
-        <span v-if="appVersion" class="ab-badge primary">
-          <span class="material-symbols-outlined">verified</span>
-          <span class="ab-badge-text">
-            <small>Версия</small>
-            <strong>{{ appVersion }}</strong>
-          </span>
-        </span>
+    <!-- ── Сведения: одна строка — один факт ── -->
+    <AppCard title="Сведения" :gap="6">
+      <dl class="ab-facts">
+        <div v-if="appVersion" class="ab-fact">
+          <dt>Версия</dt>
+          <dd>{{ appVersion }}</dd>
+        </div>
         <!-- Номер сборки — вход в скрытый раздел разработчика: пять быстрых
              нажатий открывают «Настройки → DevTools» (приём мобильных ОС). -->
-        <span v-if="appBuild" class="ab-badge ab-badge-tap" role="presentation" @click="onBuildTap">
-          <span class="material-symbols-outlined">tag</span>
-          <span class="ab-badge-text">
-            <small>Сборка</small>
-            <strong>{{ appBuild }}</strong>
-          </span>
-        </span>
-        <span v-if="releaseDate" class="ab-badge">
-          <span class="material-symbols-outlined">event</span>
-          <span class="ab-badge-text">
-            <small>Дата выпуска</small>
-            <strong>{{ releaseDate }}</strong>
-          </span>
-        </span>
-      </div>
-    </section>
-
-    <!-- ── Что нового: только текущий выпуск, истории версий больше нет ── -->
-    <section v-if="release" class="ab-card ab-news">
-      <header class="ab-news-head">
-        <span class="ab-news-spark">
-          <span class="material-symbols-outlined">auto_awesome</span>
-        </span>
-        <div class="ab-news-title">
-          <h3 class="ab-h">Что нового?</h3>
-          <span v-if="release.title" class="ab-news-tag">{{ release.title }}</span>
+        <div v-if="appBuild" class="ab-fact ab-fact-tap" @click="onBuildTap">
+          <dt>Сборка</dt>
+          <dd>{{ appBuild }}</dd>
         </div>
-        <!-- Мини-счётчик выпуска: сколько нововведений в этой версии. -->
-        <span v-if="highlights.length" class="ab-news-count">
-          <strong>{{ highlights.length }}</strong>
-          <small>{{ countWord }}</small>
-        </span>
-      </header>
+        <div v-if="releaseDate" class="ab-fact">
+          <dt>Дата выпуска</dt>
+          <dd>{{ releaseDate }}</dd>
+        </div>
+        <div v-if="hasShellUpdate" class="ab-fact">
+          <dt>{{ shellLabel }}</dt>
+          <dd>
+            {{ shellBuild || '—' }}
+            <small v-if="updateInfo" class="ab-fact-note">
+              {{ updateInfo.updateAvailable ? `доступна ${updateInfo.latest}` : 'последняя версия' }}
+            </small>
+          </dd>
+        </div>
+      </dl>
 
+      <div v-if="hasShellUpdate" class="ab-actions">
+        <AppButton
+          :variant="updateInfo?.updateAvailable ? 'filled' : 'glass'"
+          :icon="updateInfo?.updateAvailable ? 'download' : 'refresh'"
+          :label="updateBtnLabel"
+          :disabled="updBusy"
+          @click="onUpdateClick"
+        />
+      </div>
+    </AppCard>
+
+    <!-- ── Что нового: только текущий выпуск, истории версий нет ── -->
+    <AppCard v-if="release" :title="newsTitle" :hint="release.title">
       <p v-if="release.description" class="ab-news-text">{{ release.description }}</p>
-
-      <!-- Каждому пункту свой номер и цвет из палитры меток: список читается
-           как инфографика, а не как простыня текста. -->
-      <ol v-if="highlights.length" class="ab-news-grid">
-        <li
-          v-for="(item, i) in highlights"
-          :key="i"
-          class="ab-news-item"
-          :style="{ '--hue': HIGHLIGHT_HUES[i % HIGHLIGHT_HUES.length], '--delay': `${i * 70}ms` }"
-        >
-          <span class="ab-news-num">{{ String(i + 1).padStart(2, '0') }}</span>
-          <span class="ab-news-body">{{ item }}</span>
+      <ul v-if="highlights.length" class="ab-news-list">
+        <li v-for="(item, i) in highlights" :key="i">
+          <span class="material-symbols-outlined ab-news-mark">check_circle</span>
+          <span>{{ item }}</span>
         </li>
-      </ol>
-    </section>
+      </ul>
+    </AppCard>
 
-    <!-- ── Обновление обёртки (внутри мобильного/десктопного клиента) ── -->
-    <AppRow v-if="hasShellUpdate" title="Обновление приложения">
-      <template #hint>
-        <template v-if="shellBuild">
-          Установлена {{ shellBuild }}<template v-if="updateInfo">
-            · {{ updateInfo.updateAvailable ? `доступна ${updateInfo.latest}` : 'это последняя версия' }}</template>
-        </template>
-        <template v-else>Оболочка Groove Work</template>
-      </template>
-
-      <button
-        class="ab-row-btn"
-        :class="{ downloading: updProgress != null && updProgress >= 0 }"
-        :style="updateBtnStyle"
-        :disabled="updBusy"
-        type="button"
-        @click="onUpdateClick"
+    <!-- ── Приложения для устройств ── -->
+    <AppCard v-if="showApkCard || showDesktopCard" title="Приложения" :gap="6">
+      <AppRow
+        v-if="showDesktopCard"
+        plain
+        title="Для компьютера"
+        hint="Отдельное окно, значок в трее и системные уведомления — даже когда браузер закрыт."
       >
-        <span class="material-symbols-outlined">{{ updateInfo?.updateAvailable ? 'download' : 'refresh' }}</span>
-        {{ updateBtnLabel }}
-      </button>
-    </AppRow>
+        <AppButton
+          tag="a"
+          :href="desktopFileHref(desktopOs)"
+          download
+          icon="download"
+          :label="DESKTOP_OS_LABELS[desktopOs]"
+        />
+      </AppRow>
+      <p v-if="showDesktopCard" class="ab-os-links">
+        Другие системы:
+        <template v-for="(os, i) in otherOs" :key="os">
+          <a :href="desktopFileHref(os)" download>{{ DESKTOP_OS_LABELS[os] }}</a><template v-if="i < otherOs.length - 1"> · </template>
+        </template>
+      </p>
 
-    <!-- ── Приложения для устройств ──────────────────────────── -->
-    <AppRow
-      v-if="showApkCard"
-      title="Приложение для Android"
-      hint="Задачи, юниты, чаты и звонки на смартфоне — с пуш-уведомлениями."
-    >
-      <a class="ab-row-btn" :href="APK_HREF" :download="apkDownloadName">
-        <span class="material-symbols-outlined">download</span>
-        Скачать APK
-      </a>
-    </AppRow>
-
-    <AppRow v-if="showDesktopCard" title="Приложение для компьютера">
-      <template #hint>
-        Отдельное окно, значок в трее, системные уведомления и звонки — даже
-        когда браузер закрыт.
-        <span class="ab-os-links">
-          Все платформы:
-          <a :href="desktopFileHref('mac')" download>macOS</a> ·
-          <a :href="desktopFileHref('win')" download>Windows</a> ·
-          <a :href="desktopFileHref('linux')" download>Linux</a>
-        </span>
-      </template>
-
-      <a class="ab-row-btn" :href="desktopFileHref(desktopOs)" download>
-        <span class="material-symbols-outlined">download</span>
-        Скачать для {{ DESKTOP_OS_LABELS[desktopOs] }}
-      </a>
-    </AppRow>
+      <AppRow
+        v-if="showApkCard"
+        plain
+        title="Для Android"
+        hint="Задачи, чаты и звонки на смартфоне — с пуш-уведомлениями."
+      >
+        <AppButton tag="a" :href="APK_HREF" :download="apkDownloadName" icon="download" label="APK" />
+      </AppRow>
+    </AppCard>
   </div>
 </template>
 
@@ -155,6 +116,8 @@ import { tapBuildNumber } from '@/utils/devTools.js'
 import { useAppDownloads } from '@/composables/useAppDownloads.js'
 import BrandLogo from '@/components/common/BrandLogo.vue'
 import AppRow from '@/components/ui/AppRow.vue'
+import AppCard from '@/components/ui/AppCard.vue'
+import AppButton from '@/components/ui/AppButton.vue'
 import { WAVE_PATH } from '@/utils/wavePath.js'
 
 const notif = useNotificationsStore()
@@ -177,20 +140,8 @@ const releaseDate = computed(() => {
   const d = new Date(raw)
   return Number.isNaN(d.getTime()) ? raw : d.toLocaleDateString('ru-RU')
 })
-const highlights = computed(() => (release.value?.highlights || []).slice(0, 4))
-
-// Цвета пунктов — из палитры меток (--tag-*-h), по кругу.
-const HIGHLIGHT_HUES = ['var(--tag-blue-h)', 'var(--tag-violet-h)', 'var(--tag-teal-h)', 'var(--tag-amber-h)']
-
-const countWord = computed(() => {
-  const n = highlights.value.length
-  const last = n % 10
-  const tens = n % 100
-  if (tens >= 11 && tens <= 14) return 'нововведений'
-  if (last === 1) return 'нововведение'
-  if (last >= 2 && last <= 4) return 'нововведения'
-  return 'нововведений'
-})
+const highlights = computed(() => release.value?.highlights || [])
+const newsTitle = computed(() => (majorVersion.value ? `Что нового в Groove Work ${majorVersion.value}` : 'Что нового'))
 
 // Здесь версию показывают целиком («что нового», дата) — читаем с сервера,
 // минуя кэш марки: раздел открывают именно чтобы узнать актуальный выпуск.
@@ -202,6 +153,9 @@ const {
   showApk: showApkCard, showDesktop: showDesktopCard,
 } = useAppDownloads()
 
+// Своя система — главной кнопкой, остальные — ссылками под ней.
+const otherOs = computed(() => Object.keys(DESKTOP_OS_LABELS).filter((os) => os !== desktopOs))
+
 /* ── Обновление обёртки изнутри приложения. Мобильная (Capacitor) — нативный
    плагин NativeShell (сборки 2607104+); десктопная (Electron) — мост
    window.GrooveDesktop из preload (версии 1.0.2+). Обвязка общая, различается
@@ -209,6 +163,7 @@ const {
 const hasNativeShell = !!window.Capacitor?.Plugins?.NativeShell
 const desktopShell = window.GrooveDesktop
 const hasShellUpdate = hasNativeShell || !!desktopShell
+const shellLabel = hasNativeShell ? 'Приложение для Android' : 'Приложение для компьютера'
 const shellBuild = ref(null)
 const updateInfo = ref(null)
 const updBusy = ref(false)
@@ -252,13 +207,6 @@ const updateBtnLabel = computed(() => {
   return 'Проверить обновления'
 })
 
-// Кнопка-прогресс: пока идёт скачивание, кнопка заливается цветом слева
-// направо по проценту (--dl), поверх — сам процент.
-const updateBtnStyle = computed(() => {
-  if (updProgress.value == null || updProgress.value < 0) return {}
-  return { '--dl': `${Math.round(updProgress.value * 100)}%` }
-})
-
 async function onUpdateClick() {
   updBusy.value = true
   try {
@@ -292,22 +240,24 @@ async function onUpdateClick() {
   gap: 14px;
 }
 
-.ab-card {
-  padding: 20px;
-  border: 1px solid var(--acrylic-border);
-  border-radius: var(--radius-xl);
-  background: var(--acrylic-card-bg);
-  color: var(--color-text);
-}
-
-/* ── Продукт ── */
+/* ── Марка ── */
 .ab-hero {
   position: relative;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 28px 20px 34px;
+  border: 1px solid var(--acrylic-border);
+  border-radius: var(--radius-xl);
+  background: var(--acrylic-card-bg);
+  text-align: center;
+  color: var(--color-text);
 }
 
 /* Контент и пелена — над волнами. */
-.ab-hero > :not(.ab-waves) { position: relative; z-index: 1; }
+.ab-hero > :not(.ab-waves):not(.ab-frost) { position: relative; z-index: 1; }
 
 /* Волны — нижняя часть карточки, медленный бесшовный дрейф (ширина 200%,
    сдвиг на половину), кверху растворяются маской. */
@@ -363,246 +313,132 @@ async function onUpdateClick() {
   .ab-wave { animation: none; }
 }
 
-.ab-brand {
-  display: flex;
-  align-items: center;
-  gap: 18px;
-  padding: 6px 0 2px;
-}
+.ab-logo { margin-bottom: 6px; }
 
-.ab-brand-name {
+.ab-name {
   display: flex;
   align-items: baseline;
+  justify-content: center;
   flex-wrap: wrap;
   gap: 0.28em;
   margin: 0;
-  font-size: 2.1rem;
+  font-size: 1.9rem;
   line-height: 1.15;
   font-weight: 800;
   letter-spacing: -0.01em;
   color: var(--color-primary);
 }
 
-.ab-brand-major { color: var(--color-text); }
+.ab-name-major { color: var(--color-text); }
 
-.ab-about {
-  margin: 16px 0 0;
+.ab-tagline {
+  margin: 0;
+  max-width: 420px;
   font-size: 0.92rem;
-  line-height: 1.6;
-  color: var(--color-text);
-}
-
-/* Факты выпуска — бейджи-пилюли. */
-.ab-badges {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 20px;
-}
-
-.ab-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  padding: 9px 16px 9px 12px;
-  border: 1px solid var(--acrylic-border);
-  border-radius: 999px;
-  background: var(--glass-bg), var(--acrylic-card-bg);
-  box-shadow: var(--glass-edge);
-  color: var(--color-text);
-}
-
-/* Бейдж сборки нажимаемый (вход в DevTools), но выглядит так же: подсказывать
-   секретный ход курсором-указателем не надо. Снимаем только выделение текста —
-   пять быстрых кликов иначе выделяют номер. */
-.ab-badge-tap { user-select: none; -webkit-tap-highlight-color: transparent; }
-
-.ab-badge.primary {
-  border-color: color-mix(in oklch, var(--color-primary) 40%, var(--acrylic-border));
-  background: var(--glass-bg), var(--color-primary-container);
-  color: var(--color-on-primary-container);
-}
-
-.ab-badge .material-symbols-outlined { font-size: 20px; }
-
-.ab-badge-text {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.15;
-}
-
-.ab-badge-text small {
-  font-size: 0.7rem;
-  letter-spacing: 0.02em;
-  opacity: 0.75;
-}
-
-.ab-badge-text strong { font-size: 0.92rem; font-weight: 700; }
-
-/* ── Что нового ── */
-.ab-news { position: relative; overflow: hidden; }
-
-/* Мягкое свечение в углу карточки — «праздничная» подсветка выпуска. */
-.ab-news::before {
-  content: '';
-  position: absolute;
-  top: -60px;
-  right: -40px;
-  width: 220px;
-  height: 220px;
-  border-radius: 50%;
-  background: radial-gradient(
-    circle,
-    color-mix(in oklch, var(--color-primary) 22%, transparent),
-    transparent 70%
-  );
-  pointer-events: none;
-}
-
-.ab-news > * { position: relative; }
-
-.ab-news-head {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-}
-
-.ab-news-spark {
-  display: grid;
-  place-items: center;
-  width: 44px;
-  min-width: 44px;
-  max-width: 44px;
-  height: 44px;
-  min-height: 44px;
-  max-height: 44px;
-  border-radius: 50%;
-  background: linear-gradient(
-    140deg,
-    var(--color-primary),
-    color-mix(in oklch, var(--color-tertiary) 80%, var(--color-primary))
-  );
-  color: var(--color-on-primary);
-  box-shadow: var(--shadow-md);
-}
-
-.ab-news-spark .material-symbols-outlined {
-  font-size: 24px;
-  animation: ab-spark 4.5s ease-in-out infinite;
-}
-
-@keyframes ab-spark {
-  0%, 72%, 100% { transform: scale(1) rotate(0deg); }
-  80% { transform: scale(1.18) rotate(-12deg); }
-  88% { transform: scale(1.08) rotate(8deg); }
-}
-
-.ab-news-title {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  flex: 1;
-  min-width: 0;
-}
-
-.ab-news-count {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  line-height: 1;
-  color: var(--color-primary);
-}
-
-.ab-news-count strong { font-size: 1.9rem; font-weight: 800; }
-
-.ab-news-count small {
-  font-size: 0.68rem;
-  font-weight: 600;
+  line-height: 1.45;
   color: var(--color-text-dim);
 }
 
-.ab-h {
-  margin: 0;
-  font-size: 1.35rem;
-  font-weight: 700;
-}
-
-.ab-news-tag {
-  align-self: flex-start;
-  padding: 5px 12px;
-  border-radius: 999px;
+.ab-version {
+  margin-top: 8px;
+  padding: 4px 12px;
+  border-radius: var(--radius-full);
   background: var(--color-primary-container);
   color: var(--color-on-primary-container);
-  font-size: 0.78rem;
+  font-size: 0.8rem;
   font-weight: 600;
 }
 
-.ab-news-text {
-  margin: 16px 0 0;
-  font-size: 0.95rem;
-  line-height: 1.6;
+/* ── Сведения: строки «название → значение», разделённые линией ── */
+.ab-facts { margin: 0; }
+
+.ab-fact {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 11px 2px;
+  border-bottom: 1px solid var(--color-outline-dim);
+}
+
+.ab-fact:last-child { border-bottom: none; }
+
+.ab-fact dt {
+  font-size: 0.9rem;
+  color: var(--color-text-dim);
+}
+
+.ab-fact dd {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  font-size: 0.92rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
   color: var(--color-text);
 }
 
-.ab-news-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(230px, 100%), 1fr));
-  gap: 12px;
-  margin: 18px 0 0;
+.ab-fact-note {
+  font-size: 0.78rem;
+  font-weight: 400;
+  color: var(--color-text-dim);
+}
+
+/* Строка сборки нажимаемая (вход в DevTools), но выглядит так же: подсказывать
+   секретный ход курсором-указателем не надо. Снимаем только выделение текста —
+   пять быстрых кликов иначе выделяют номер. */
+.ab-fact-tap { user-select: none; -webkit-tap-highlight-color: transparent; }
+
+.ab-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 12px;
+}
+
+/* ── Что нового ── */
+.ab-news-text {
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.55;
+  color: var(--color-text);
+}
+
+.ab-news-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
   padding: 0;
   list-style: none;
 }
 
-/* Пункт-«карточка»: цветная кромка слева, крупный номер, текст.
-   Появляются лесенкой — выпуск «раскрывается», а не вываливается. */
-.ab-news-item {
+.ab-news-list li {
   display: flex;
-  gap: 12px;
-  padding: 14px;
-  border: 1px solid oklch(0.85 0.05 var(--hue) / 0.5);
-  border-left: 3px solid oklch(0.62 0.16 var(--hue));
-  border-radius: var(--radius-md);
-  background: var(--glass-bg), oklch(0.96 0.03 var(--hue) / 0.55);
-  box-shadow: var(--glass-edge);
-  font-size: 0.85rem;
+  gap: 10px;
+  font-size: 0.9rem;
   line-height: 1.45;
   color: var(--color-text);
-  opacity: 0;
-  animation: ab-news-in 0.42s cubic-bezier(0.2, 0, 0, 1) forwards;
-  animation-delay: var(--delay);
-  transition: transform 0.2s ease;
+  overflow-wrap: anywhere;
 }
 
-.ab-news-item:hover { box-shadow: var(--shadow-md), var(--glass-edge); }
-
-.ab-news-num {
-  font-size: 1.15rem;
-  font-weight: 800;
-  line-height: 1;
-  color: oklch(0.55 0.17 var(--hue));
+.ab-news-mark {
+  flex-shrink: 0;
+  font-size: 20px;
+  color: var(--color-primary);
 }
 
-[data-dark="true"] .ab-news-item {
-  border-color: oklch(0.45 0.06 var(--hue) / 0.6);
-  background: var(--glass-bg), oklch(0.32 0.04 var(--hue) / 0.5);
+/* ── Приложения ── */
+.ab-os-links {
+  margin: -4px 0 4px;
+  padding: 0 12px 10px;
+  border-bottom: 1px solid var(--color-outline-dim);
+  font-size: 0.82rem;
+  color: var(--color-text-dim);
 }
 
-[data-dark="true"] .ab-news-num { color: oklch(0.82 0.13 var(--hue)); }
-
-.ab-news-body { flex: 1; min-width: 0; }
-
-@keyframes ab-news-in {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .ab-news-item { opacity: 1; animation: none; }
-  .ab-news-spark .material-symbols-outlined { animation: none; }
-}
-
-/* ── Строки-карточки устройств (общий SettingRow) ── */
-.ab-os-links { display: block; margin-top: 3px; }
+.ab-os-links:last-child { border-bottom: none; padding-bottom: 0; }
 
 .ab-os-links a {
   color: var(--color-primary);
@@ -611,68 +447,13 @@ async function onUpdateClick() {
 
 .ab-os-links a:hover { text-decoration: underline; }
 
-.ab-row-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 18px;
-  border: none;
-  border-radius: 999px;
-  background: var(--color-primary);
-  color: var(--color-on-primary);
-  font-size: 0.86rem;
-  font-weight: 600;
-  text-decoration: none;
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.ab-row-btn:disabled { opacity: 0.7; cursor: progress; }
-
-.ab-row-btn .material-symbols-outlined { font-size: 19px; }
-
-/* Прогресс скачивания заливкой кнопки. */
-.ab-row-btn.downloading {
-  background: linear-gradient(
-    to right,
-    var(--color-primary) var(--dl, 0%),
-    var(--color-surface-high) var(--dl, 0%)
-  );
-  color: var(--color-text);
-}
-
-/* Узкой бывает ПАНЕЛЬ раздела, а не экран (настройки живут окном рабочего
-   стола) — поэтому перенос считаем от контейнера; @media оставлен дублем для
-   старого WebView, который @container не знает. */
-@container (max-width: 620px) {
-  .ab-row-btn { width: 100%; justify-content: center; }
-  .ab-news-head { flex-wrap: wrap; }
-  .ab-badge { flex: 1 1 auto; }
-}
-
-/* Тесная панель: марка перестаёт ломаться на две строки (значок мельче, кегль
-   тянется за шириной), карточка теряет лишние поля, описание — короче строкой.
-   Без этого «Groove Work 7» занимал на телефоне пол-экрана. */
 @container (max-width: 520px) {
-  .ab-card { padding: 16px; }
-  .ab-brand { gap: 12px; }
-  .ab-brand-name { font-size: clamp(1.35rem, 7.5vw, 2.1rem); flex-wrap: nowrap; }
-  .ab-brand :deep(svg), .ab-brand :deep(img) { width: 44px; height: 44px; }
-  .ab-about { margin-top: 12px; font-size: 0.88rem; line-height: 1.5; }
-  .ab-badges { margin-top: 14px; gap: 8px; }
-  .ab-badge { padding: 7px 12px 7px 10px; }
-}
-
-@media (max-width: 620px) {
-  .ab-row-btn { width: 100%; justify-content: center; }
+  .ab-hero { padding: 22px 16px 28px; }
+  .ab-name { font-size: 1.6rem; }
 }
 
 @media (max-width: 520px) {
-  .ab-card { padding: 16px; }
-  .ab-brand { gap: 12px; }
-  .ab-brand-name { font-size: clamp(1.35rem, 7.5vw, 2.1rem); flex-wrap: nowrap; }
-  .ab-brand :deep(svg), .ab-brand :deep(img) { width: 44px; height: 44px; }
-  .ab-about { margin-top: 12px; font-size: 0.88rem; line-height: 1.5; }
-  .ab-badges { margin-top: 14px; gap: 8px; }
+  .ab-hero { padding: 22px 16px 28px; }
+  .ab-name { font-size: 1.6rem; }
 }
 </style>

@@ -2,13 +2,12 @@
   <AppDialog
     :model-value="modelValue"
     tone="tertiary"
-    size="lg"
+    size="xl"
     title="Оформление чата"
     dialog-class="chatbg-dialog"
     :actions="actions"
-    :busy="saving"
     @update:model-value="$emit('update:modelValue', $event)"
-    @confirm="apply"
+    @confirm="emit('update:modelValue', false)"
   >
     <!-- Область применения -->
     <div v-if="conversation" class="cbg-scope" role="tablist">
@@ -22,7 +21,7 @@
       >Все чаты</button>
     </div>
 
-    <BackgroundEditor :recipe="recipe" :upload-fn="uploadFn" @update:recipe="(r) => Object.assign(recipe, r)" />
+    <BackgroundEditor :recipe="recipe" :upload-fn="uploadFn" @update:recipe="save" />
 
     <p class="cbg-hint">
       Оформление личное и синхронизируется на всех ваших устройствах — собеседник
@@ -32,13 +31,14 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, watch } from 'vue'
+import { ref, computed, watch } from 'vue'
 import AppDialog from '@/components/ui/AppDialog.vue'
 import BackgroundEditor from '@/components/common/BackgroundEditor.vue'
 import { useMessengerStore } from '@/stores/messenger.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { uploadAttachment } from '@/api/messenger.js'
-import { DEFAULT_RECIPE, normalizeRecipe, cloneRecipe } from '@/utils/chatBackgrounds.js'
+import { useRecipeUndo } from '@/composables/useRecipeUndo.js'
+import { DEFAULT_RECIPE, normalizeRecipe } from '@/utils/chatBackgrounds.js'
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
@@ -51,70 +51,46 @@ const messenger = useMessengerStore()
 const notif = useNotificationsStore()
 
 const scope = ref('chat')
-const saving = ref(false)
-const recipe = reactive(cloneRecipe(DEFAULT_RECIPE))
-
 const uploadFn = (file) => uploadAttachment(file)
 
-// Эффективный рецепт выбранной области (для инициализации рабочей копии).
-function storedForScope(s) {
-  if (s === 'all') return messenger.chatBgDefault || null
-  const cid = props.conversation?.id
-  return (cid != null && messenger.chatBgByConv[cid]) || messenger.chatBgDefault || null
+const convId = computed(() => (scope.value === 'all' ? null : props.conversation?.id ?? null))
+
+// Собственная настройка области: у чата — его переопределение, у «всех» — дефолт.
+const stored = computed(() => (convId.value == null
+  ? messenger.chatBgDefault
+  : messenger.chatBgByConv[convId.value]) || null)
+
+// Что видно в области сейчас: своё, иначе общее, иначе заводское.
+const recipe = computed(() => normalizeRecipe(stored.value || messenger.chatBgDefault) || DEFAULT_RECIPE)
+
+/* Оформление применяется сразу — как темы и обои стола. */
+function save(r) {
+  messenger.saveChatBackground(convId.value, r)
+    .catch((e) => notif.error(e?.message || 'Не удалось сохранить оформление'))
 }
 
-function loadScope(s) {
-  const stored = normalizeRecipe(storedForScope(s))
-  Object.assign(recipe, cloneRecipe(stored || DEFAULT_RECIPE))
+function reset() {
+  messenger.resetChatBackground(convId.value)
+    .catch((e) => notif.error(e?.message || 'Не удалось сбросить оформление'))
 }
+
+const undo = useRecipeUndo(() => stored.value, (r) => (r ? save(r) : reset()))
 
 function setScope(s) {
   scope.value = s
-  loadScope(s)
+  undo.capture()
 }
 
 watch(() => props.modelValue, (open) => {
   if (!open) return
-  scope.value = props.conversation ? 'chat' : 'all'
-  loadScope(scope.value)
+  setScope(props.conversation ? 'chat' : 'all')
 })
 
-const hasStored = computed(() => !!storedForScope(scope.value))
-
-const actions = computed(() => {
-  const out = [{ kind: 'cancel', label: 'Отмена' }]
-  if (hasStored.value) out.push({ kind: 'neutral', label: 'Сбросить', onClick: resetScope })
-  out.push({ kind: 'confirm', label: 'Применить', icon: 'check' })
-  return out
-})
-
-async function apply() {
-  if (saving.value) return
-  saving.value = true
-  try {
-    const convId = scope.value === 'all' ? null : props.conversation?.id
-    await messenger.saveChatBackground(convId ?? null, cloneRecipe(recipe))
-    emit('update:modelValue', false)
-  } catch (e) {
-    notif.error(e?.message || 'Не удалось сохранить оформление')
-  } finally {
-    saving.value = false
-  }
-}
-
-async function resetScope() {
-  if (saving.value) return
-  saving.value = true
-  try {
-    const convId = scope.value === 'all' ? null : props.conversation?.id
-    await messenger.resetChatBackground(convId ?? null)
-    emit('update:modelValue', false)
-  } catch (e) {
-    notif.error(e?.message || 'Не удалось сбросить оформление')
-  } finally {
-    saving.value = false
-  }
-}
+const actions = computed(() => [
+  { kind: 'neutral', label: 'Вернуть как было', icon: 'undo', disabled: !undo.changed.value, onClick: undo.undo },
+  { kind: 'neutral', label: 'Сбросить', icon: 'restart_alt', disabled: !stored.value, onClick: reset },
+  { kind: 'confirm', label: 'Готово', icon: 'check' },
+])
 </script>
 
 <style scoped>

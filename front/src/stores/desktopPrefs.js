@@ -38,6 +38,9 @@ function emptyLayout() {
     labels: {},
     appGroup: {},
     collapsed: {},
+    // Избранное меню «Пуск» в своём порядке. null — человек его ещё не
+    // трогал, и показывается набор по умолчанию (DEFAULT_FAVORITES).
+    favorites: null,
   }
 }
 
@@ -60,9 +63,11 @@ function empty() {
     // Где висит панель задач: снизу (как было), сверху, слева или справа.
     // Только про стол — на телефоне панель всегда снизу, своей настройки нет.
     taskbarSide: 'bottom',
-    // Меню «Пуск» всегда открывается во весь экран (иначе — обычная панель,
-    // а полный экран включается кнопкой в самом меню). Тоже только про стол.
-    startFullscreen: false,
+    // Экраны меню «Пуск» стола: избранное и лента «Моя активность». Без
+    // избранного меню открывается сразу на всех разделах, без ленты —
+    // одной колонкой.
+    startFavorites: true,
+    startActivity: true,
     // Боковая панель каркаса «Виджеты»: ширина в пикселях (0 — пятая часть
     // экрана по умолчанию), свёрнутость до полоски значков и что показывать —
     // избранное (закреплённые) или все разделы по категориям.
@@ -88,6 +93,7 @@ function normalizeLayout(raw) {
     labels: p.labels && typeof p.labels === 'object' ? { ...p.labels } : {},
     appGroup: p.appGroup && typeof p.appGroup === 'object' ? { ...p.appGroup } : {},
     collapsed: p.collapsed && typeof p.collapsed === 'object' ? { ...p.collapsed } : {},
+    favorites: Array.isArray(p.favorites) ? p.favorites.filter((id) => typeof id === 'string') : null,
   }
 }
 
@@ -113,7 +119,8 @@ function normalize(raw) {
     liveTiles: p.liveTiles !== false,
     tileLive: p.tileLive && typeof p.tileLive === 'object' ? { ...p.tileLive } : {},
     taskbarSide: TASKBAR_SIDES.includes(p.taskbarSide) ? p.taskbarSide : 'bottom',
-    startFullscreen: p.startFullscreen === true,
+    startFavorites: p.startFavorites !== false,
+    startActivity: p.startActivity !== false,
     widgetsWidth: Number.isFinite(p.widgetsWidth) ? Math.max(0, Math.round(p.widgetsWidth)) : 0,
     widgetsCollapsed: p.widgetsCollapsed === true,
     widgetsView: p.widgetsView === 'all' ? 'all' : 'pinned',
@@ -130,7 +137,8 @@ export const useDesktopPrefsStore = defineStore('desktopPrefs', () => {
   const wallpapers = computed(() => prefs.value.wallpapers)
   const liveTiles = computed(() => prefs.value.liveTiles)
   const taskbarSide = computed(() => prefs.value.taskbarSide)
-  const startFullscreen = computed(() => prefs.value.startFullscreen)
+  const startFavorites = computed(() => prefs.value.startFavorites)
+  const startActivity = computed(() => prefs.value.startActivity)
   const widgetsWidth = computed(() => prefs.value.widgetsWidth)
   const widgetsCollapsed = computed(() => prefs.value.widgetsCollapsed)
   const widgetsView = computed(() => prefs.value.widgetsView)
@@ -263,6 +271,27 @@ export const useDesktopPrefsStore = defineStore('desktopPrefs', () => {
     scheduleSave()
   }
 
+  /* ── Избранное меню «Пуск» ──
+     Список хранится целиком, только когда человек его изменил: до того набор
+     по умолчанию может меняться вместе с платформой. */
+  function favoritesList(platform, fallback = []) {
+    return layoutState(platform).favorites ?? fallback
+  }
+
+  function isFavorite(platform, appId, fallback = []) {
+    return favoritesList(platform, fallback).includes(appId)
+  }
+
+  function setFavorites(platform, ids) {
+    layoutState(platform).favorites = [...new Set(ids)]
+    scheduleSave()
+  }
+
+  function toggleFavorite(platform, appId, fallback = []) {
+    const list = favoritesList(platform, fallback)
+    setFavorites(platform, list.includes(appId) ? list.filter((id) => id !== appId) : [...list, appId])
+  }
+
   function togglePin(platform, appId) {
     isPinned(platform, appId) ? unpin(platform, appId) : pin(platform, appId)
   }
@@ -308,9 +337,13 @@ export const useDesktopPrefsStore = defineStore('desktopPrefs', () => {
     scheduleSave()
   }
 
-  /** Открывать ли меню «Пуск» сразу во весь экран. Только рабочий стол. */
-  function setStartFullscreen(on) {
-    prefs.value.startFullscreen = !!on
+  function setStartFavorites(on) {
+    prefs.value.startFavorites = !!on
+    scheduleSave()
+  }
+
+  function setStartActivity(on) {
+    prefs.value.startActivity = !!on
     scheduleSave()
   }
 
@@ -332,25 +365,25 @@ export const useDesktopPrefsStore = defineStore('desktopPrefs', () => {
     scheduleSave()
   }
 
+  // Обои применяются на каждом движении ползунка: запись в сервер и так
+  // отложенная, поэтому частые вызовы стоят одну запись.
   function setWallpaper(recipe) {
     prefs.value.wallpaper = recipe ? { ...recipe } : null
-    const url = recipe?.image?.url
-    if (url) {
-      prefs.value.wallpapers = [url, ...prefs.value.wallpapers.filter((u) => u !== url)]
-        .slice(0, WALLPAPER_HISTORY)
-    }
     scheduleSave()
   }
 
-  // Обои запертого экрана. История картинок общая с рабочим столом: человек
-  // выбирает из одного набора, а показываются они в разных местах.
   function setLockWallpaper(recipe) {
     prefs.value.lockWallpaper = recipe ? { ...recipe } : null
-    const url = recipe?.image?.url
-    if (url) {
-      prefs.value.wallpapers = [url, ...prefs.value.wallpapers.filter((u) => u !== url)]
-        .slice(0, WALLPAPER_HISTORY)
-    }
+    scheduleSave()
+  }
+
+  // История своих картинок пополняется ЗАГРУЗКОЙ, а не выбором: иначе ряд
+  // недавних переставлялся бы под курсором на каждом клике. Общая для стола и
+  // экрана блокировки — набор один, показываются картинки в разных местах.
+  function rememberWallpaper(url) {
+    if (!url) return
+    prefs.value.wallpapers = [url, ...prefs.value.wallpapers.filter((u) => u !== url)]
+      .slice(0, WALLPAPER_HISTORY)
     scheduleSave()
   }
 
@@ -368,12 +401,14 @@ export const useDesktopPrefsStore = defineStore('desktopPrefs', () => {
 
   return {
     prefs, loaded, wallpaper, wallpapers, liveTiles, customized,
-    taskbarSide, taskbarVertical, startFullscreen, setTaskbarSide, setStartFullscreen,
+    taskbarSide, taskbarVertical, setTaskbarSide,
+    startFavorites, startActivity, setStartFavorites, setStartActivity,
     widgetsWidth, widgetsCollapsed, widgetsView,
     setWidgetsWidth, setWidgetsCollapsed, setWidgetsView,
     layout, tileSize, isPinned, pinnedList, load, setTileSize, setGroupOrder, moveTileToGroup,
     addGroup, renameGroup, removeGroup, isCollapsed, toggleCollapsed,
     pin, unpin, togglePin, setPinnedOrder, setLiveTiles, isTileLive, setTileLive, toggleTileLive,
-    setWallpaper, setLockWallpaper, lockWallpaper, forgetWallpaper, reset,
+    favoritesList, isFavorite, setFavorites, toggleFavorite,
+    setWallpaper, setLockWallpaper, lockWallpaper, rememberWallpaper, forgetWallpaper, reset,
   }
 })

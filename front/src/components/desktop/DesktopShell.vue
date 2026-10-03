@@ -154,7 +154,7 @@ function openDeskMenu(e) {
 function onDeskMenuSelect(action) {
   if (action === 'minimize-all') desktop.windows.forEach((w) => desktop.minimize(w.id))
   else if (action === 'restore-all') desktop.windows.forEach((w) => desktop.restore(w.id))
-  else if (action === 'personalize') desktop.open('/settings?section=theme')
+  else if (action === 'personalize') desktop.open('/settings?section=theme&tab=wallpaper')
   else if (action === 'close-all') desktop.closeAll()
 }
 

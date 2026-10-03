@@ -5,6 +5,7 @@ import * as api from '@/api/portal.js'
 import { getDirectory } from '@/api/users.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { normalizeRecipe } from '@/utils/chatBackgrounds.js'
+import { createDebouncedSaver } from '@/utils/debouncedSaver.js'
 import { logActivity } from '@/utils/activityLog.js'
 import { rememberReaction } from '@/utils/reactions.js'
 
@@ -38,6 +39,7 @@ export const usePortalStore = defineStore('portal', () => {
 
   // Личное оформление ленты портала (нормализованный рецепт или null).
   const background = ref(null)
+  const bgSaver = createDebouncedSaver()
 
   const authorMap = ref(new Map())
   const commentsByPost = reactive({})
@@ -530,12 +532,14 @@ export const usePortalStore = defineStore('portal', () => {
     } catch { /* оформление не критично для ленты */ }
   }
 
+  // Применяется сразу, на сервер уходит последнее значение после паузы.
   async function saveBackground(recipe) {
     background.value = normalizeRecipe(recipe)
-    await api.setBackground(recipe)
+    await bgSaver.save('feed', () => api.setBackground(recipe))
   }
 
   async function resetBackground() {
+    bgSaver.cancel('feed')
     background.value = null
     await api.deleteBackground()
   }
@@ -546,6 +550,7 @@ export const usePortalStore = defineStore('portal', () => {
   }
 
   function reset() {
+    bgSaver.clear()
     topics.value = []
     background.value = null
     popularTags.value = []

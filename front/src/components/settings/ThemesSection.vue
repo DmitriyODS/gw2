@@ -1,122 +1,106 @@
 <template>
   <div class="ts">
-    <!-- ── Режим оформления ──────────────────────────────────── -->
-    <AppCard>
-      <AppRow
-        title="Режим оформления"
-        hint="Светлая или тёмная тема, как в системе либо по расписанию."
-        stack
-      >
-        <div class="mode-seg" role="tablist">
-          <button
-            v-for="m in THEME_MODES"
-            :key="m.value"
-            class="mode-btn"
-            :class="{ active: themeStore.mode === m.value }"
-            role="tab"
-            type="button"
-            :aria-selected="themeStore.mode === m.value"
-            @click="themeStore.setMode(m.value)"
-          >
-            <span class="material-symbols-outlined">{{ m.icon }}</span>
-            <span class="mode-label">{{ m.label }}</span>
-          </button>
-        </div>
-      </AppRow>
+    <!-- Три вкладки вместо стопки карточек: у каждой короткий экран, и
+         миниатюра обоев и эффектов стоит рядом с настройкой. Всё оформление
+         применяется сразу — у тем, обоев и эффектов одно поведение. -->
+    <AppTabs v-model="tab" :tabs="TABS" />
 
-      <Transition name="ts-reveal">
+    <template v-if="tab === 'theme'">
+      <!-- ── Режим оформления ──────────────────────────────────── -->
+      <AppCard>
         <AppRow
-          v-if="themeStore.mode === 'schedule'"
-          title="Расписание"
-          hint="Когда включать и выключать тёмную тему."
+          title="Режим оформления"
+          hint="Светлая или тёмная тема, как в системе либо по расписанию."
           stack
         >
-          <div class="mode-times">
-            <label class="mode-time">
-              <span class="mode-time-label">Включить тёмную тему:</span>
-              <TimePicker
-                :model-value="themeStore.schedule.from"
-                icon="dark_mode"
-                @update:model-value="(v) => onSchedule('from', v)"
-              />
-            </label>
-            <label class="mode-time">
-              <span class="mode-time-label">Выключить тёмную тему:</span>
-              <TimePicker
-                :model-value="themeStore.schedule.to"
-                icon="light_mode"
-                @update:model-value="(v) => onSchedule('to', v)"
-              />
-            </label>
+          <div class="mode-seg" role="tablist">
+            <button
+              v-for="m in THEME_MODES"
+              :key="m.value"
+              class="mode-btn"
+              :class="{ active: themeStore.mode === m.value }"
+              role="tab"
+              type="button"
+              :aria-selected="themeStore.mode === m.value"
+              @click="themeStore.setMode(m.value)"
+            >
+              <span class="material-symbols-outlined">{{ m.icon }}</span>
+              <span class="mode-label">{{ m.label }}</span>
+            </button>
           </div>
         </AppRow>
-      </Transition>
-    </AppCard>
 
-    <!-- ── Фон приложения ────────────────────────────────────
-         Обои и градиент живут здесь, а не в «Рабочем столе»: это про то, КАК
-         приложение выглядит, а не как оно раскладывает разделы, и рисуются
-         они одинаково во всех каркасах. -->
-    <AppGradientCard />
-    <DesktopWallpaperCard />
+        <Transition name="ts-reveal">
+          <AppRow
+            v-if="themeStore.mode === 'schedule'"
+            title="Расписание"
+            hint="Когда включать и выключать тёмную тему."
+            stack
+          >
+            <div class="mode-times">
+              <label class="mode-time">
+                <span class="mode-time-label">Включить тёмную тему:</span>
+                <TimePicker
+                  :model-value="themeStore.schedule.from"
+                  icon="dark_mode"
+                  @update:model-value="(v) => onSchedule('from', v)"
+                />
+              </label>
+              <label class="mode-time">
+                <span class="mode-time-label">Выключить тёмную тему:</span>
+                <TimePicker
+                  :model-value="themeStore.schedule.to"
+                  icon="light_mode"
+                  @update:model-value="(v) => onSchedule('to', v)"
+                />
+              </label>
+            </div>
+          </AppRow>
+        </Transition>
+      </AppCard>
 
-    <!-- ── Встроенные темы ───────────────────────────────────── -->
-    <SettingsAccordion title="Встроенные темы">
-      <div class="theme-grid">
-        <ThemeCard
-          v-for="preset in themeStore.presetNames"
-          :key="preset"
-          :name="themeStore.presetLabels[preset]"
-          :vars="themeStore.getVars(preset)"
-          :active="themeStore.currentPreset === preset"
-          @apply="themeStore.applyTheme(preset)"
-        />
-      </div>
-    </SettingsAccordion>
+      <!-- ── Цветовая тема: встроенные и свои одной сеткой ──────── -->
+      <AppCard title="Цветовая тема" hint="Применяется сразу. Свои темы стоят в той же сетке — их можно изменить или удалить.">
+        <div class="theme-grid">
+          <ThemeCard
+            v-for="preset in themeStore.presetNames"
+            :key="preset"
+            :name="themeStore.presetLabels[preset]"
+            :vars="themeStore.getVars(preset)"
+            :active="themeStore.currentPreset === preset"
+            @apply="themeStore.applyTheme(preset)"
+          />
+          <ThemeCard
+            v-for="t in themeStore.customThemes"
+            :key="`my-${t.name}`"
+            :name="t.name"
+            :vars="t.vars"
+            :active="themeStore.currentPreset === t.name"
+            editable
+            @apply="themeStore.applyTheme(t.name)"
+            @edit="openEditor(t)"
+            @remove="askRemove(t)"
+          />
 
-    <!-- ── Магазин: витрина откроется вместе с оплатой (utils/release.js) ── -->
-    <SettingsAccordion v-if="SUBSCRIPTIONS_VISIBLE" title="Загруженные из магазина">
-      <AppRow
-        title="Темы из магазина"
-        hint="Здесь появятся темы, которые вы возьмёте в магазине оформления."
-      >
-        <AppButton label="В магазин" icon="shopping_bag" @click="router.push('/store')" />
-      </AppRow>
-    </SettingsAccordion>
+          <button class="theme-new" type="button" @click="openEditor(null)">
+            <span class="material-symbols-outlined">add</span>
+            <span>Создать свою</span>
+          </button>
+        </div>
 
-    <!-- ── Свои темы ─────────────────────────────────────────── -->
-    <SettingsAccordion title="Созданные мной" :badge="themeStore.customThemes.length || ''">
-      <div class="theme-grid">
-        <ThemeCard
-          v-for="t in themeStore.customThemes"
-          :key="t.name"
-          :name="t.name"
-          :vars="t.vars"
-          :active="themeStore.currentPreset === t.name"
-          editable
-          @apply="themeStore.applyTheme(t.name)"
-          @edit="openEditor(t)"
-          @remove="askRemove(t)"
-        />
+        <div class="ts-io">
+          <AppButton variant="text" icon="upload" label="Загрузить из файла" @click="importInput?.click()" />
+          <AppButton variant="text" icon="download" label="Сохранить текущую в файл" @click="exportCurrent" />
+          <!-- Магазин: витрина откроется вместе с оплатой (utils/release.js). -->
+          <AppButton v-if="SUBSCRIPTIONS_VISIBLE" variant="text" icon="shopping_bag" label="Темы из магазина" @click="router.push('/store')" />
+          <input ref="importInput" type="file" accept=".json" hidden @change="onImport" />
+        </div>
+      </AppCard>
+    </template>
 
-        <button class="theme-new" type="button" @click="openEditor(null)">
-          <span class="material-symbols-outlined">add</span>
-          <span>Создать свою</span>
-        </button>
-      </div>
+    <DesktopWallpaperCard v-else-if="tab === 'wallpaper'" />
 
-      <div class="ts-io">
-        <label class="ts-io-btn">
-          <span class="material-symbols-outlined">upload</span>
-          Импортировать из файла
-          <input type="file" accept=".json" @change="onImport" />
-        </label>
-        <button class="ts-io-btn" type="button" @click="exportCurrent">
-          <span class="material-symbols-outlined">download</span>
-          Сохранить текущую в файл
-        </button>
-      </div>
-    </SettingsAccordion>
+    <AppearanceEffectsCard v-else />
 
     <ThemeEditorDialog v-model="editorOpen" :source="editorSource" />
 
@@ -133,17 +117,17 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import TimePicker from '@/components/common/TimePicker.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppCard from '@/components/ui/AppCard.vue'
 import AppRow from '@/components/ui/AppRow.vue'
-import SettingsAccordion from '@/components/settings/SettingsAccordion.vue'
+import AppTabs from '@/components/ui/AppTabs.vue'
 import ThemeCard from '@/components/settings/ThemeCard.vue'
 import ThemeEditorDialog from '@/components/settings/ThemeEditorDialog.vue'
-import AppGradientCard from '@/components/settings/AppGradientCard.vue'
+import AppearanceEffectsCard from '@/components/settings/AppearanceEffectsCard.vue'
 import DesktopWallpaperCard from '@/components/settings/DesktopWallpaperCard.vue'
 import { useThemeStore } from '@/stores/theme.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
@@ -152,6 +136,21 @@ import { SUBSCRIPTIONS_VISIBLE } from '@/utils/release.js'
 const themeStore = useThemeStore()
 const notif = useNotificationsStore()
 const router = useRouter()
+const route = useRoute()
+
+const TABS = [
+  { value: 'theme', label: 'Тема', icon: 'palette' },
+  { value: 'wallpaper', label: 'Обои', icon: 'wallpaper' },
+  { value: 'effects', label: 'Эффекты', icon: 'blur_on' },
+]
+
+/* Вкладка приходит адресом: «Персонализация» с рабочего стола ведёт сразу в
+   обои (`?section=theme&tab=wallpaper`). */
+const tabFromRoute = () => (TABS.some((t) => t.value === route.query.tab) ? route.query.tab : null)
+const tab = ref(tabFromRoute() || 'theme')
+watch(() => route.query.tab, () => { const t = tabFromRoute(); if (t) tab.value = t })
+
+const importInput = ref(null)
 
 const THEME_MODES = [
   { value: 'system', label: 'Системная', icon: 'brightness_auto' },
@@ -310,36 +309,13 @@ async function onImport(event) {
 
 .theme-new .material-symbols-outlined { font-size: 20px; }
 
-/* ── Вход в магазин тем ── */
-
 /* ── Импорт/экспорт и кнопки-действия секций ── */
 .ts-io {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 14px;
+  gap: 6px;
+  margin-top: 4px;
 }
-
-.ts-io-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 16px;
-  border: 1px solid var(--acrylic-border);
-  border-radius: 999px;
-  background: var(--color-surface-low);
-  color: var(--color-text);
-  font-size: 0.86rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.2s ease;
-}
-
-.ts-io-btn:hover { background: var(--color-surface-high); }
-
-.ts-io-btn .material-symbols-outlined { font-size: 20px; }
-
-.ts-io-btn input[type="file"] { display: none; }
 
 /* ── Раскрытие ── */
 .ts-reveal-enter-active, .ts-reveal-leave-active {

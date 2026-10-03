@@ -1,14 +1,17 @@
 <script setup>
-/* Общий редактор оформления фона (чаты мессенджера и лента портала): живой
-   предпросмотр + своя картинка с размытием + градиент-пресеты + узор (SVG-фигуры
-   или эмодзи). Рецептом владеет родитель: каждая правка приходит к нему НОВЫМ
-   объектом через событие `update:recipe`, он же применяет/сбрасывает.
-   Загрузку картинки делегирует `uploadFn`,
-   чтобы каждый раздел грузил в своё хранилище. */
-import { ref, computed } from 'vue'
-import AppButton from '@/components/ui/AppButton.vue'
+/* Общий редактор фона: обои рабочего стола и экрана блокировки, фон чатов и
+   ленты портала. Миниатюра 16:9 всегда на виду (`PreviewLayout`).
+
+   Рецептом владеет родитель и применяет его СРАЗУ: каждая правка приходит к
+   нему новым объектом через `update:recipe`. Основа фона одна — готовые обои,
+   своя картинка, цвет или градиент, — узор ложится поверх любой. Сохранённые
+   раньше сочетания слоёв рисуются как прежде и сводятся к одной основе при
+   первой правке. Загрузку картинки делегирует `uploadFn`. */
+import { ref, computed, watch } from 'vue'
 import Slider from 'primevue/slider'
-import ChatBackgroundLayer from '@/components/common/ChatBackgroundLayer.vue'
+import AppTabs from '@/components/ui/AppTabs.vue'
+import BackgroundPreview from '@/components/common/BackgroundPreview.vue'
+import PreviewLayout from '@/components/common/PreviewLayout.vue'
 import EmojiPicker from '@/components/common/EmojiPicker.vue'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { useThemeStore } from '@/stores/theme.js'
@@ -18,44 +21,107 @@ import {
 } from '@/utils/chatBackgrounds.js'
 
 const props = defineProps({
-  // Рабочий рецепт; правки уходят событием update:recipe.
   recipe: { type: Object, required: true },
   // async (File) => { url }: загрузка картинки в хранилище раздела.
   uploadFn: { type: Function, required: true },
-  // Что рисовать поверх фона в предпросмотре: переписку (по умолчанию) или
-  // сцену рабочего стола — обои живут под окнами, а не под пузырями чата.
+  // Сцена миниатюры: рабочий стол или переписка.
   preview: { type: String, default: 'chat' }, // chat | desktop
-  // Готовые картинки раздела: [{ key, label, light, dark }] — встроенные обои
-  // рабочего стола. Пусто — секции выбора нет.
+  // Готовые картинки: [{ key, label, light, dark }]. Пусто — вкладки нет.
   presets: { type: Array, default: () => [] },
+  // Недавно загруженные картинки (адреса). Пусто — ряда нет.
+  recent: { type: Array, default: () => [] },
 })
 
-const emit = defineEmits(['update:recipe'])
-
-/** Правка рецепта: новый объект верхнего уровня, вложенные части — тоже копии. */
-function update(patch) {
-  emit('update:recipe', { ...props.recipe, ...patch })
-}
-const setGradient = (patch) => update({ gradient: { ...props.recipe.gradient, ...patch } })
-const setPattern = (patch) => update({ pattern: { ...props.recipe.pattern, ...patch } })
-const setImage = (patch) => update({ image: { ...props.recipe.image, ...patch } })
-const setSolid = (patch) => update({ solid: { ...props.recipe.solid, ...patch } })
+const emit = defineEmits(['update:recipe', 'uploaded', 'forget-recent'])
 
 const notif = useNotificationsStore()
 const theme = useThemeStore()
 const uploading = ref(false)
 const fileInput = ref(null)
 
-const gradientPreset = computed(() => props.recipe.gradient.preset)
 const previewRecipe = computed(() => normalizeRecipe(props.recipe))
 
-function pickPreset(key) {
-  setGradient({ preset: key, blobs: null })
+function update(patch) {
+  emit('update:recipe', { ...props.recipe, ...patch })
 }
 
-function generate() {
-  setGradient({ preset: 'custom', blobs: randomGradientBlobs() })
+const PLAIN = { preset: 'plain', blobs: null }
+
+/* ── Основа ── */
+const BASES = computed(() => [
+  ...(props.presets.length ? [{ value: 'preset', label: 'Готовые' }] : []),
+  { value: 'image', label: 'Своя картинка' },
+  { value: 'solid', label: 'Цвет' },
+  { value: 'gradient', label: 'Градиент' },
+])
+
+function baseOf(r) {
+  if (r.image?.key && props.presets.length) return 'preset'
+  if (r.image?.url) return 'image'
+  if (r.solid?.role) return 'solid'
+  return 'gradient'
 }
+
+/* Вкладка основы следует за рецептом, но сама его не меняет: открыть «Цвет»
+   и передумать — фон остаётся прежним, пока не выбран вариант. */
+const base = ref(baseOf(props.recipe))
+watch(() => baseOf(props.recipe), (b) => { base.value = b })
+
+function setImage(image) {
+  update({ image, solid: null, gradient: { ...PLAIN } })
+}
+
+function pickWallpaper(w) {
+  setImage({ key: w.key, url: w.light, dark: w.dark, blur: props.recipe.image?.blur ?? 0 })
+}
+
+function pickRecent(url) {
+  setImage({ url, blur: props.recipe.image?.blur ?? 0 })
+}
+
+function pickImageFile() { fileInput.value?.click() }
+
+async function onImagePicked(e) {
+  const file = e.target.files?.[0]
+  e.target.value = ''
+  if (!file) return
+  if (!file.type.startsWith('image/')) {
+    notif.error('Нужен файл-картинка')
+    return
+  }
+  uploading.value = true
+  try {
+    const res = await props.uploadFn(file)
+    setImage({ url: res.url, blur: 0 })
+    emit('uploaded', res.url)
+  } catch (err) {
+    notif.error(err?.message || 'Не удалось загрузить картинку')
+  } finally {
+    uploading.value = false
+  }
+}
+
+function pickSolid(role) {
+  update({
+    solid: { role, amount: props.recipe.solid?.amount ?? 40 },
+    image: null,
+    gradient: { ...PLAIN },
+  })
+}
+
+function pickGradient(key) {
+  update({ gradient: { preset: key, blobs: null }, image: null, solid: null })
+}
+
+function generateGradient() {
+  update({ gradient: { preset: 'custom', blobs: randomGradientBlobs() }, image: null, solid: null })
+}
+
+const setBlur = (blur) => update({ image: { ...props.recipe.image, blur } })
+const setSolidAmount = (amount) => update({ solid: { ...props.recipe.solid, amount } })
+
+/* ── Узор ── */
+const setPattern = (patch) => update({ pattern: { ...props.recipe.pattern, ...patch } })
 
 function pickPattern(key) {
   const p = { ...props.recipe.pattern, key, emoji: null } // фигура и эмодзи взаимоисключимы
@@ -72,50 +138,7 @@ function pickEmoji(e) {
   update({ pattern: p })
 }
 
-/* Готовые обои хранятся ключом: пути к светлой и тёмной картинке
-   пересобираются при чтении настроек, а тёмный режим сам берёт свою. */
-function pickWallpaper(w) {
-  update({ image: { key: w.key, url: w.light, dark: w.dark, blur: 0 } })
-}
-
-function pickImageFile() { fileInput.value?.click() }
-
-async function onImagePicked(e) {
-  const file = e.target.files?.[0]
-  e.target.value = ''
-  if (!file) return
-  if (!file.type.startsWith('image/')) {
-    notif.error('Нужен файл-картинка')
-    return
-  }
-  uploading.value = true
-  try {
-    const res = await props.uploadFn(file)
-    update({ image: { url: res.url, blur: props.recipe.image?.blur ?? 12 } })
-  } catch (err) {
-    notif.error(err?.message || 'Не удалось загрузить картинку')
-  } finally {
-    uploading.value = false
-  }
-}
-
-function removeImage() { update({ image: null }) }
-
-/* Однотонная заливка: цвет — роль токена, поэтому следует теме. Выбор заливки
-   гасит градиент — вместе они дают не «ровный цвет», а грязь; вернуть пятна
-   можно тут же, кнопкой градиента. */
-function pickSolid(role) {
-  if (!role) {
-    update({ solid: null })
-    return
-  }
-  update({
-    solid: { role, amount: props.recipe.solid?.amount ?? 40 },
-    gradient: { ...props.recipe.gradient, preset: 'plain', blobs: null },
-  })
-}
-
-// IMAGE_BLUR_MAX используется в шаблоне (импорт доступен из script setup).
+const hasPattern = computed(() => !!(props.recipe.pattern?.key || props.recipe.pattern?.emoji))
 
 function patternSwatchStyle(key) {
   const uri = patternDataUri(key)
@@ -130,416 +153,306 @@ function patternSwatchStyle(key) {
 </script>
 
 <template>
-  <div class="bg-editor">
-    <!-- Живой предпросмотр -->
-    <div class="cbg-preview" :class="{ 'is-desktop': preview === 'desktop' }">
-      <ChatBackgroundLayer :recipe="previewRecipe" />
+  <PreviewLayout>
+    <template #preview>
+      <BackgroundPreview :recipe="previewRecipe" :scene="preview" />
+    </template>
+    <template v-if="$slots.actions" #actions><slot name="actions" /></template>
 
-      <!-- Сцена рабочего стола: два окна и панель задач под ними. -->
-      <div v-if="preview === 'desktop'" class="cbg-desk">
-        <div class="cbg-win back">
-          <span class="cbg-win-bar"><i /><i /><i /></span>
-          <span class="cbg-win-line" />
-          <span class="cbg-win-line short" />
-        </div>
-        <div class="cbg-win front">
-          <span class="cbg-win-bar"><i /><i /><i /></span>
-          <span class="cbg-win-line" />
-          <span class="cbg-win-line short" />
-        </div>
-        <div class="cbg-taskbar">
-          <span class="cbg-tb-start" />
-          <span class="cbg-tb-btn" />
-          <span class="cbg-tb-btn" />
-          <span class="cbg-tb-clock" />
-        </div>
-      </div>
+    <!-- Основа -->
+    <section class="bge-section">
+      <h4 class="bge-title">Основа</h4>
+      <AppTabs v-model="base" variant="tint" dense :tabs="BASES" class="bge-bases" />
 
-      <div v-else class="cbg-bubbles">
-        <div class="cbg-bubble in">Пример карточки</div>
-        <div class="cbg-bubble out">А вот и фон 🎨</div>
-        <div class="cbg-bubble in">Красота ✨</div>
-      </div>
-    </div>
-
-    <!-- Готовые обои -->
-    <div v-if="presets.length" class="cbg-section">
-      <div class="cbg-section-title">Готовые обои</div>
-      <div class="cbg-papers">
+      <div v-if="base === 'preset'" class="bge-papers">
         <button
           v-for="w in presets"
           :key="w.key"
           type="button"
-          class="cbg-paper"
+          class="bge-paper"
           :class="{ active: recipe.image?.key === w.key }"
           :title="w.label"
           @click="pickWallpaper(w)"
         >
           <img loading="lazy" decoding="async" :src="theme.dark ? w.dark : w.light" alt="" />
-          <span class="cbg-paper-label">{{ w.label }}</span>
+          <span class="bge-paper-label">{{ w.label }}</span>
         </button>
       </div>
-    </div>
 
-    <!-- Своя картинка -->
-    <div class="cbg-section">
-      <div class="cbg-section-title">Своя картинка</div>
-      <div class="cbg-image-row">
-        <AppButton
-          class="cbg-image-btn"
-          :icon="uploading ? 'hourglass_top' : 'add_photo_alternate'"
-          :label="uploading ? 'Загружаем…' : (recipe.image ? 'Заменить картинку' : 'Загрузить картинку')"
-          :disabled="uploading"
-          @click="pickImageFile"
-        />
-        <AppButton
-          v-if="recipe.image"
-          icon="delete"
-          label="Убрать"
-          class="cbg-image-remove"
-          @click="removeImage"
-        />
+      <template v-else-if="base === 'image'">
+        <div class="bge-papers">
+          <button type="button" class="bge-paper bge-upload" :disabled="uploading" @click="pickImageFile">
+            <span class="material-symbols-outlined">{{ uploading ? 'hourglass_top' : 'add_photo_alternate' }}</span>
+            <span>{{ uploading ? 'Загружаем…' : 'Загрузить' }}</span>
+          </button>
+          <div
+            v-for="url in recent"
+            :key="url"
+            class="bge-paper bge-recent"
+            :class="{ active: !recipe.image?.key && recipe.image?.url === url }"
+          >
+            <button type="button" class="bge-recent-pick" title="Поставить эту картинку" @click="pickRecent(url)">
+              <img loading="lazy" decoding="async" :src="url" alt="" />
+            </button>
+            <button type="button" class="bge-recent-remove" title="Убрать из недавних" @click="emit('forget-recent', url)">
+              <span class="material-symbols-outlined">close</span>
+            </button>
+          </div>
+        </div>
         <input ref="fileInput" type="file" accept="image/*" hidden @change="onImagePicked" />
-      </div>
-      <div v-if="recipe.image" class="cbg-slider">
-        <label>Размытие</label>
-        <Slider :model-value="recipe.image.blur" :min="0" :max="IMAGE_BLUR_MAX" class="cbg-slider-ctl" @update:model-value="(v) => setImage({ blur: v })" />
-        <span class="cbg-slider-val">{{ recipe.image.blur }}</span>
-      </div>
-    </div>
+      </template>
 
-    <!-- Градиент -->
-    <div class="cbg-section">
-      <div class="cbg-section-title">Градиент</div>
-      <div class="cbg-swatches">
+      <template v-else-if="base === 'solid'">
+        <div class="bge-swatches">
+          <button
+            v-for="r in SOLID_ROLES"
+            :key="r.key"
+            type="button"
+            class="bge-swatch"
+            :class="{ active: recipe.solid?.role === r.key }"
+            :title="r.label"
+            :style="{ backgroundColor: solidCss({ role: r.key, amount: recipe.solid?.amount ?? 40 }) }"
+            @click="pickSolid(r.key)"
+          />
+        </div>
+        <div v-if="recipe.solid" class="bge-slider">
+          <label>Насыщенность</label>
+          <Slider :model-value="recipe.solid.amount" :min="0" :max="100" class="bge-slider-ctl" @update:model-value="setSolidAmount" />
+          <span class="bge-slider-val">{{ recipe.solid.amount }}</span>
+        </div>
+      </template>
+
+      <div v-else class="bge-swatches">
         <button
           v-for="p in GRADIENT_PRESETS"
           :key="p.key"
           type="button"
-          class="cbg-swatch"
-          :class="{ active: gradientPreset === p.key }"
+          class="bge-swatch"
+          :class="{ active: !recipe.image && !recipe.solid && recipe.gradient.preset === p.key }"
           :title="p.label"
           :style="{ backgroundImage: gradientCss(p.blobs) }"
-          @click="pickPreset(p.key)"
+          @click="pickGradient(p.key)"
         >
-          <span v-if="!p.blobs.length" class="material-symbols-outlined cbg-swatch-ico">block</span>
+          <span v-if="!p.blobs.length" class="material-symbols-outlined bge-swatch-ico">block</span>
         </button>
         <button
           type="button"
-          class="cbg-swatch cbg-swatch-gen"
-          :class="{ active: gradientPreset === 'custom' }"
-          title="Свой (сгенерировать)"
-          :style="gradientPreset === 'custom' ? { backgroundImage: gradientCss(recipe.gradient.blobs) } : null"
-          @click="generate"
+          class="bge-swatch bge-swatch-alt"
+          :class="{ active: !recipe.image && !recipe.solid && recipe.gradient.preset === 'custom' }"
+          title="Случайная композиция"
+          :style="recipe.gradient.preset === 'custom' ? { backgroundImage: gradientCss(recipe.gradient.blobs) } : null"
+          @click="generateGradient"
         >
-          <span class="material-symbols-outlined cbg-swatch-ico">casino</span>
+          <span class="material-symbols-outlined bge-swatch-ico">casino</span>
         </button>
       </div>
-    </div>
 
-    <!-- Однотонная заливка -->
-    <div class="cbg-section">
-      <div class="cbg-section-title">Однотонный цвет</div>
-      <div class="cbg-swatches">
-        <button
-          type="button"
-          class="cbg-swatch"
-          :class="{ active: !recipe.solid }"
-          title="Без заливки"
-          @click="pickSolid(null)"
-        >
-          <span class="material-symbols-outlined cbg-swatch-ico">block</span>
-        </button>
-        <button
-          v-for="r in SOLID_ROLES"
-          :key="r.key"
-          type="button"
-          class="cbg-swatch"
-          :class="{ active: recipe.solid?.role === r.key }"
-          :title="r.label"
-          :style="{ backgroundColor: solidCss({ role: r.key, amount: recipe.solid?.amount ?? 40 }) }"
-          @click="pickSolid(r.key)"
-        />
+      <!-- Размытие — свойство картинки, какой бы она ни была. -->
+      <div v-if="(base === 'preset' || base === 'image') && recipe.image" class="bge-slider">
+        <label>Размытие</label>
+        <Slider :model-value="recipe.image.blur" :min="0" :max="IMAGE_BLUR_MAX" class="bge-slider-ctl" @update:model-value="setBlur" />
+        <span class="bge-slider-val">{{ recipe.image.blur }}</span>
       </div>
+    </section>
 
-      <div v-if="recipe.solid" class="cbg-slider">
-        <label>Насыщённость</label>
-        <Slider :model-value="recipe.solid.amount" :min="0" :max="100" class="cbg-slider-ctl" @update:model-value="(v) => setSolid({ amount: v })" />
-        <span class="cbg-slider-val">{{ recipe.solid.amount }}</span>
-      </div>
-    </div>
-
-    <!-- Узор -->
-    <div class="cbg-section">
-      <div class="cbg-section-title">Узор</div>
-      <div class="cbg-swatches">
+    <!-- Узор поверх основы -->
+    <section class="bge-section">
+      <h4 class="bge-title">Узор поверх</h4>
+      <div class="bge-swatches">
         <button
           v-for="p in PATTERNS"
           :key="p.key || 'none'"
           type="button"
-          class="cbg-swatch cbg-swatch-pat"
+          class="bge-swatch bge-swatch-alt"
           :class="{ active: recipe.pattern.key === p.key && !recipe.pattern.emoji }"
           :title="p.label"
           @click="pickPattern(p.key)"
         >
-          <span v-if="p.key" class="cbg-pat-fill" :style="patternSwatchStyle(p.key)" />
-          <span v-else class="material-symbols-outlined cbg-swatch-ico">block</span>
+          <span v-if="p.key" class="bge-pat-fill" :style="patternSwatchStyle(p.key)" />
+          <span v-else class="material-symbols-outlined bge-swatch-ico">block</span>
         </button>
         <div
           v-if="recipe.pattern.emoji"
-          class="cbg-swatch cbg-swatch-pat active cbg-swatch-emoji"
+          class="bge-swatch bge-swatch-alt active bge-swatch-emoji"
           title="Эмодзи-узор"
         >{{ recipe.pattern.emoji }}</div>
-        <div class="cbg-swatch cbg-swatch-pat cbg-swatch-pick" title="Эмодзи как узор">
+        <div class="bge-swatch bge-swatch-alt bge-swatch-pick" title="Эмодзи как узор">
           <EmojiPicker @pick="pickEmoji" />
         </div>
       </div>
 
-      <template v-if="recipe.pattern.key || recipe.pattern.emoji">
-        <div class="cbg-slider">
-          <label>Насыщённость</label>
-          <Slider :model-value="recipe.pattern.alpha" :min="1" :max="recipe.pattern.emoji ? 30 : 15" class="cbg-slider-ctl" @update:model-value="(v) => setPattern({ alpha: v })" />
-          <span class="cbg-slider-val">{{ recipe.pattern.alpha }}</span>
+      <template v-if="hasPattern">
+        <div class="bge-slider">
+          <label>Насыщенность</label>
+          <Slider :model-value="recipe.pattern.alpha" :min="1" :max="recipe.pattern.emoji ? 30 : 15" class="bge-slider-ctl" @update:model-value="(v) => setPattern({ alpha: v })" />
+          <span class="bge-slider-val">{{ recipe.pattern.alpha }}</span>
         </div>
-        <div class="cbg-slider">
+        <div class="bge-slider">
           <label>Размер</label>
-          <Slider :model-value="recipe.pattern.size" :min="64" :max="240" :step="8" class="cbg-slider-ctl" @update:model-value="(v) => setPattern({ size: v })" />
-          <span class="cbg-slider-val">{{ recipe.pattern.size }}</span>
+          <Slider :model-value="recipe.pattern.size" :min="64" :max="240" :step="8" class="bge-slider-ctl" @update:model-value="(v) => setPattern({ size: v })" />
+          <span class="bge-slider-val">{{ recipe.pattern.size }}</span>
         </div>
       </template>
-    </div>
-  </div>
+    </section>
+  </PreviewLayout>
 </template>
 
 <style scoped>
-.cbg-preview {
-  position: relative;
-  isolation: isolate;
-  height: 150px;
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-  border: 1px solid var(--color-outline-dim);
-  margin-bottom: 16px;
-}
-
-/* Сцене рабочего стола нужно больше воздуха: окна и панель задач в 150px
-   выглядели полоской. */
-.cbg-preview.is-desktop { height: 180px; }
-
-.cbg-bubbles {
-  position: relative;
-  z-index: 1;
-  height: 100%;
-  padding: 12px;
+.bge-section {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  justify-content: center;
+  gap: 12px;
 }
 
-.cbg-bubble {
-  max-width: 72%;
-  padding: 8px 12px;
-  border-radius: 16px;
-  font-size: 13px;
-  line-height: 1.3;
-  box-shadow: var(--shadow-sm);
-}
-
-.cbg-bubble.in {
-  align-self: flex-start;
-  background: var(--color-surface-high);
-  color: var(--color-text);
-  border-bottom-left-radius: 5px;
-}
-
-.cbg-bubble.out {
-  align-self: flex-end;
-  background: var(--color-primary);
-  color: var(--color-on-primary);
-  border-bottom-right-radius: 5px;
-}
-
-/* ── Сцена рабочего стола в предпросмотре ── */
-.cbg-desk {
-  position: relative;
-  z-index: 1;
-  height: 100%;
-  padding: 12px 12px 0;
-}
-
-.cbg-win {
-  position: absolute;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 8px;
-  border: 1px solid var(--acrylic-border);
-  border-radius: 10px;
-  background: var(--glass-bg), var(--acrylic-card-bg);
-  box-shadow: var(--shadow-md), var(--glass-edge);
-}
-
-.cbg-win.back { left: 10%; top: 16px; width: 42%; height: 74px; }
-.cbg-win.front { left: 34%; top: 40px; width: 46%; height: 82px; }
-
-.cbg-win-bar { display: flex; gap: 4px; }
-
-.cbg-win-bar i {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--color-outline-dim);
-}
-
-.cbg-win-line {
-  height: 6px;
-  border-radius: 999px;
-  background: var(--color-surface-highest);
-}
-
-.cbg-win-line.short { width: 55%; }
-
-.cbg-taskbar {
-  position: absolute;
-  left: 50%;
-  bottom: 10px;
-  transform: translateX(-50%);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 8px;
-  border: 1px solid var(--acrylic-border);
-  border-radius: 999px;
-  background: var(--glass-bg), var(--acrylic-card-bg);
-  box-shadow: var(--shadow-sm), var(--glass-edge);
-}
-
-.cbg-tb-start,
-.cbg-tb-btn,
-.cbg-tb-clock {
-  height: 12px;
-  border-radius: 999px;
-  background: var(--color-surface-highest);
-}
-
-.cbg-tb-start { width: 12px; border-radius: 50%; background: var(--color-primary); }
-.cbg-tb-btn { width: 22px; }
-.cbg-tb-clock { width: 26px; }
-
-.cbg-section { margin-bottom: 16px; }
-
-.cbg-section-title {
+.bge-title {
+  margin: 0;
   font-size: 12.5px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.03em;
   color: var(--color-text-dim);
-  margin-bottom: 8px;
 }
 
-/* ── Готовые обои ── */
-.cbg-papers {
-  display: flex;
-  flex-wrap: wrap;
+.bge-bases { max-width: 100%; flex-wrap: wrap; }
+
+/* ── Картинки: готовые, загрузка, недавние ── */
+.bge-papers {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(120px, 100%), 1fr));
   gap: 10px;
 }
 
-.cbg-paper {
+.bge-paper {
+  position: relative;
   display: flex;
   flex-direction: column;
-  width: 132px;
   padding: 0;
   overflow: hidden;
   border: 2px solid var(--color-outline-dim);
   border-radius: var(--radius-md);
   background: var(--color-surface-low);
+  color: var(--color-text-dim);
   cursor: pointer;
   transition: border-color 0.15s;
 }
 
-.cbg-paper:hover { border-color: color-mix(in oklch, var(--color-primary) 45%, var(--color-outline-dim)); }
-.cbg-paper.active { border-color: var(--color-primary); }
+.bge-paper:hover { border-color: color-mix(in oklch, var(--color-primary) 45%, var(--color-outline-dim)); }
+.bge-paper.active { border-color: var(--color-primary); }
 
-.cbg-paper img {
+.bge-paper img {
   width: 100%;
-  height: 72px;
+  aspect-ratio: 16 / 9;
   object-fit: cover;
   display: block;
 }
 
-.cbg-paper-label {
+.bge-paper-label {
   padding: 5px 8px 6px;
   font-size: 11.5px;
   font-weight: 650;
   text-align: left;
-  color: var(--color-text-dim);
+  overflow-wrap: anywhere;
 }
 
-.cbg-paper.active .cbg-paper-label { color: var(--color-primary); }
+.bge-paper.active .bge-paper-label { color: var(--color-primary); }
 
-.cbg-image-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.cbg-image-btn,
-.cbg-image-remove {
-  display: inline-flex;
+.bge-upload {
+  aspect-ratio: 16 / 9;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
+  gap: 4px;
+  border-style: dashed;
+  font-size: 12px;
+  font-weight: 650;
 }
 
-.cbg-image-btn .material-symbols-outlined,
-.cbg-image-remove .material-symbols-outlined { font-size: 20px; }
+.bge-upload .material-symbols-outlined { font-size: 24px; }
+.bge-upload:disabled { cursor: progress; opacity: 0.7; }
 
-.cbg-swatches {
+.bge-recent { cursor: default; }
+
+.bge-recent-pick {
+  display: block;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+
+.bge-recent-remove {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 22px;
+  min-width: 22px;
+  max-width: 22px;
+  height: 22px;
+  min-height: 22px;
+  max-height: 22px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-full);
+  background: var(--acrylic-bg-strong);
+  color: var(--color-text);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.bge-recent:hover .bge-recent-remove,
+.bge-recent-remove:focus-visible { opacity: 1; }
+.bge-recent-remove .material-symbols-outlined { font-size: 14px; }
+
+@media (hover: none) {
+  .bge-recent-remove { opacity: 1; }
+}
+
+/* ── Образцы цвета, градиента и узора ── */
+.bge-swatches {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
 }
 
-.cbg-swatch {
+.bge-swatch {
+  position: relative;
   width: 52px;
   min-width: 52px;
   max-width: 52px;
   height: 52px;
   min-height: 52px;
   max-height: 52px;
-  border-radius: var(--radius-md);
+  display: grid;
+  place-items: center;
+  padding: 0;
+  overflow: hidden;
   border: 2px solid var(--color-outline-dim);
+  border-radius: var(--radius-md);
   background-color: var(--color-bg);
   background-size: cover;
   cursor: pointer;
-  display: grid;
-  place-items: center;
-  overflow: hidden;
-  padding: 0;
-  transition: border-color 0.15s, transform 0.12s;
+  transition: border-color 0.15s;
 }
 
-.cbg-swatch:hover { border-color: var(--color-primary); }
+.bge-swatch:hover { border-color: var(--color-primary); }
 
-.cbg-swatch.active {
+.bge-swatch.active {
   border-color: var(--color-primary);
   box-shadow: 0 0 0 2px var(--color-primary) inset;
 }
 
-.cbg-swatch-ico {
+.bge-swatch-ico {
   font-size: 22px;
   color: var(--color-text-dim);
 }
 
-.cbg-swatch-gen { background-color: var(--color-surface-high); }
+.bge-swatch-alt { background-color: var(--color-surface-high); }
+.bge-swatch-emoji { font-size: 26px; line-height: 1; }
 
-.cbg-swatch-pat { position: relative; background-color: var(--color-surface-high); }
-
-.cbg-swatch-emoji { font-size: 26px; line-height: 1; }
-
-.cbg-swatch-pick { padding: 0; }
-.cbg-swatch-pick :deep(.emoji-picker-wrap),
-.cbg-swatch-pick :deep(.emoji-btn) {
+.bge-swatch-pick :deep(.emoji-picker-wrap),
+.bge-swatch-pick :deep(.emoji-btn) {
   width: 100%;
   height: 100%;
   min-height: 0;
@@ -547,33 +460,34 @@ function patternSwatchStyle(key) {
   background: transparent;
   border-radius: 0;
 }
-.cbg-swatch-pick :deep(.emoji-btn .material-symbols-outlined) {
+
+.bge-swatch-pick :deep(.emoji-btn .material-symbols-outlined) {
   font-size: 24px;
   color: var(--color-text-dim);
 }
 
-.cbg-pat-fill {
+.bge-pat-fill {
   position: absolute;
   inset: 0;
 }
 
-.cbg-slider {
+/* ── Ползунки ── */
+.bge-slider {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-top: 12px;
 }
 
-.cbg-slider label {
+.bge-slider label {
   width: 108px;
   flex-shrink: 0;
   font-size: 13px;
   color: var(--color-text);
 }
 
-.cbg-slider-ctl { flex: 1; }
+.bge-slider-ctl { flex: 1; min-width: 0; }
 
-.cbg-slider-val {
+.bge-slider-val {
   width: 34px;
   text-align: right;
   font-variant-numeric: tabular-nums;
@@ -582,8 +496,9 @@ function patternSwatchStyle(key) {
 }
 
 @media (max-width: 560px) {
-  .cbg-slider label { width: 84px; }
-  .cbg-swatch {
+  .bge-slider label { width: 84px; }
+
+  .bge-swatch {
     width: 46px;
     min-width: 46px;
     max-width: 46px;

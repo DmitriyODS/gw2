@@ -48,8 +48,9 @@
       </nav>
 
       <!-- Лента последних действий — здесь же, под кнопками: своей колонки она
-           не заслуживает, а колонка аккаунта без неё полупустая. -->
-      <ActivityPanel class="mst-activity" @open="open" />
+           не заслуживает, а колонка аккаунта без неё полупустая. Выключается в
+           настройках меню «Пуск». -->
+      <ActivityPanel v-if="prefs.startActivity" class="mst-activity" @open="open" />
     </aside>
 
     <div class="mstart-body" @contextmenu.self.prevent="openDeskMenu">
@@ -62,6 +63,7 @@
           <BrandWordmark />
         </button>
 
+        <slot name="brand-actions" />
         <button
           class="mst-hola"
           type="button"
@@ -73,49 +75,102 @@
         </button>
       </header>
 
-      <section v-for="group in visibleGroups" :key="group.key" class="mst-group">
-        <button class="mst-group-head" type="button" @click="prefs.toggleCollapsed(platform, group.key)">
-          <span class="mst-group-label">{{ group.label }}</span>
-          <span
-            class="material-symbols-outlined mst-group-chev"
-            :class="{ collapsed: prefs.isCollapsed(platform, group.key) }"
-          >expand_more</span>
-        </button>
-
-        <div class="mst-group-body" :class="{ collapsed: prefs.isCollapsed(platform, group.key) }">
-          <div class="mst-group-inner">
-            <div class="mst-tiles">
-              <button
-                v-for="(app, i) in group.items"
-                :key="app.id"
-                class="mst-tile"
-                :class="[`is-${sizeOf(app)}`, { pinned: prefs.isPinned(platform, app.id) }]"
-                type="button"
+      <!-- Два экрана, как в «Пуске» рабочего стола: избранное — повседневные
+           разделы крупными плитками, все разделы — компактный каталог по
+           категориям. Открывается всегда на избранном. -->
+      <Transition :name="showFavorites ? 'mst-back' : 'mst-fwd'" mode="out-in">
+        <div v-if="showFavorites" key="favorites" class="mst-screen">
+          <div v-if="favoriteApps.length" class="mst-tiles">
+            <button
+              v-for="(app, i) in favoriteApps"
+              :key="app.id"
+              class="mst-tile"
+              :class="[`is-${sizeOf(app)}`, { pinned: prefs.isPinned(platform, app.id) }]"
+              type="button"
+              :title="app.title"
+              @click="launch(app)"
+              @pointerdown="longPress.start(app, $event)"
+              @pointermove="longPress.move($event)"
+              @pointerup="longPress.cancel()"
+              @pointercancel="longPress.cancel()"
+              @contextmenu.prevent="openTileMenu(app, $event)"
+            >
+              <LiveTile
                 :title="app.title"
-                @click="launch(app)"
-                @pointerdown="longPress.start(app, $event)"
-                @pointermove="longPress.move($event)"
-                @pointerup="longPress.cancel()"
-                @pointercancel="longPress.cancel()"
-                @contextmenu.prevent="openTileMenu(app, $event)"
-              >
-                <LiveTile
-                  :title="app.title"
-                  :icon="app.icon"
-                  :faces="facesOf(app)"
-                  :wide="sizeOf(app) === 'wide'"
-                  :order="i"
-                  dense
-                />
-                <span v-if="badgeOf(app)" class="mst-badge" :class="{ alert: badgeOf(app) === '!' }">
-                  {{ badgeOf(app) }}
-                </span>
-                <span v-if="prefs.isPinned(platform, app.id)" class="mst-pin material-symbols-outlined">keep</span>
-              </button>
-            </div>
+                :icon="app.icon"
+                :faces="facesOf(app)"
+                :wide="sizeOf(app) === 'wide'"
+                :order="i"
+                dense
+              />
+              <span v-if="badgeOf(app)" class="mst-badge" :class="{ alert: badgeOf(app) === '!' }">
+                {{ badgeOf(app) }}
+              </span>
+              <span v-if="prefs.isPinned(platform, app.id)" class="mst-pin material-symbols-outlined">keep</span>
+            </button>
           </div>
+          <p v-else class="mst-empty">
+            Избранное пусто. Откройте «Все разделы» и отметьте звёздочкой то, чем пользуетесь каждый день.
+          </p>
         </div>
-      </section>
+
+        <div v-else key="all" class="mst-screen">
+          <section v-for="group in visibleGroups" :key="group.key" class="mst-group">
+            <button class="mst-group-head" type="button" @click="prefs.toggleCollapsed(platform, group.key)">
+              <span class="mst-group-label">{{ group.label }}</span>
+              <span
+                class="material-symbols-outlined mst-group-chev"
+                :class="{ collapsed: prefs.isCollapsed(platform, group.key) }"
+              >expand_more</span>
+            </button>
+
+            <div class="mst-group-body" :class="{ collapsed: prefs.isCollapsed(platform, group.key) }">
+              <div class="mst-group-inner">
+                <div class="mst-rows">
+                  <div v-for="app in group.items" :key="app.id" class="mst-row">
+                    <button
+                      class="mst-row-open"
+                      type="button"
+                      @click="launch(app)"
+                      @pointerdown="longPress.start(app, $event)"
+                      @pointermove="longPress.move($event)"
+                      @pointerup="longPress.cancel()"
+                      @pointercancel="longPress.cancel()"
+                      @contextmenu.prevent="openTileMenu(app, $event)"
+                    >
+                      <span class="material-symbols-outlined mst-row-icon">{{ app.icon }}</span>
+                      <span class="mst-row-title">{{ app.title }}</span>
+                      <span v-if="badgeOf(app)" class="mst-row-badge" :class="{ alert: badgeOf(app) === '!' }">
+                        {{ badgeOf(app) }}
+                      </span>
+                    </button>
+                    <button
+                      class="mst-row-star"
+                      :class="{ on: isFavorite(app.id) }"
+                      type="button"
+                      :aria-label="isFavorite(app.id) ? 'Убрать из избранного' : 'В избранное'"
+                      @click="toggleFavorite(app.id)"
+                    >
+                      <span class="material-symbols-outlined">star</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+      </Transition>
+
+      <div v-if="prefs.startFavorites" class="mst-switch">
+        <AppButton
+          v-if="showFavorites"
+          variant="text"
+          label="Все разделы"
+          trailing-icon="chevron_right"
+          @click="screen = 'all'"
+        />
+        <AppButton v-else variant="text" icon="chevron_left" label="Избранное" @click="screen = 'favorites'" />
+      </div>
     </div>
 
     <ContextMenu
@@ -156,7 +211,7 @@ import { useNotificationsStore } from '@/stores/notifications.js'
 import { usePermission } from '@/composables/usePermission.js'
 import { useCompanySettings } from '@/composables/useCompanySettings.js'
 import { useLongPress } from '@/composables/useLongPress.js'
-import { menuGroups } from '@/desktop/apps.js'
+import { DEFAULT_FAVORITES, menuGroups } from '@/desktop/apps.js'
 import { tileFaces } from '@/desktop/liveTiles.js'
 import { avatarUrl } from '@/utils/avatar.js'
 import { shortFio } from '@/utils/people.js'
@@ -166,6 +221,7 @@ import BrandWordmark from '@/components/common/BrandWordmark.vue'
 import HolaIcon from '@/components/common/HolaIcon.vue'
 import ContextMenu from '@/components/common/ContextMenu.vue'
 import CompanySelect from '@/components/common/CompanySelect.vue'
+import AppButton from '@/components/ui/AppButton.vue'
 import LiveTile from '@/components/desktop/LiveTile.vue'
 import ActivityPanel from '@/components/desktop/ActivityPanel.vue'
 
@@ -179,9 +235,12 @@ const props = defineProps({
   platform: { type: String, default: 'mobile' },
   /* Планшет: плитку можно открыть во ВТОРУЮ зону — в меню появляется пункт. */
   split: { type: Boolean, default: false },
+  /* Планшетный вид при чужой раскладке: «Пуск» рабочего стола, развёрнутый
+     во весь экран, рисуется так же, но плитки и категории — настольные. */
+  tabletLayout: { type: Boolean, default: false },
 })
 
-const tablet = computed(() => props.platform === 'tablet')
+const tablet = computed(() => props.tabletLayout || props.platform === 'tablet')
 
 const auth = useAuthStore()
 const screenLock = useScreenLock()
@@ -214,11 +273,29 @@ const appById = computed(() => {
   return map
 })
 
-// Раздел, индекс и общее число плиток в нём — для меню «переместить выше/ниже».
+/* ── Экраны: избранное и все разделы ── */
+const screen = ref('favorites')
+// Избранное можно выключить в настройках — тогда экран целиком каталог.
+const showFavorites = computed(() => prefs.startFavorites && screen.value === 'favorites')
+
+const favoriteIds = computed(() => prefs.favoritesList(props.platform, DEFAULT_FAVORITES))
+const isFavorite = (id) => favoriteIds.value.includes(id)
+const toggleFavorite = (id) => prefs.toggleFavorite(props.platform, id, DEFAULT_FAVORITES)
+// Недоступные сейчас разделы не показываются, но из списка не выпадают.
+const favoriteApps = computed(() => favoriteIds.value.map((id) => appById.value.get(id)).filter(Boolean))
+
+/* Позиция для меню «переместить выше/ниже»: в избранном — его порядок, в
+   каталоге — порядок внутри категории. */
 function tilePosition(appId) {
+  if (showFavorites.value) {
+    const ids = favoriteApps.value.map((a) => a.id)
+    const index = ids.indexOf(appId)
+    return index === -1 ? null : { ids, index, total: ids.length }
+  }
   for (const g of groups.value) {
-    const index = g.items.findIndex((a) => a.id === appId)
-    if (index !== -1) return { group: g, index, total: g.items.length }
+    const ids = g.items.map((a) => a.id)
+    const index = ids.indexOf(appId)
+    if (index !== -1) return { group: g, ids, index, total: ids.length }
   }
   return null
 }
@@ -228,9 +305,11 @@ function moveTile(appId, delta) {
   if (!pos) return
   const to = pos.index + delta
   if (to < 0 || to >= pos.total) return
-  const ids = pos.group.items.map((a) => a.id)
+  const ids = pos.ids
   ;[ids[pos.index], ids[to]] = [ids[to], ids[pos.index]]
-  prefs.moveTileToGroup(props.platform, appId, pos.group.key, ids)
+  if (pos.group) prefs.moveTileToGroup(props.platform, appId, pos.group.key, ids)
+  // Скрытые сейчас разделы избранного остаются в списке — в его конце.
+  else prefs.setFavorites(props.platform, [...ids, ...favoriteIds.value.filter((id) => !ids.includes(id))])
 }
 
 const sizeOf = (app) => prefs.tileSize(props.platform, app.id, app.tile || 'square')
@@ -286,6 +365,18 @@ const menuItems = computed(() => {
   }
   const size = sizeOf(appById.value.get(id) || { id })
   const pos = tilePosition(id)
+  // Размер и живость — свойства плитки, а плитки есть только в избранном.
+  const tileItems = showFavorites.value
+    ? [
+        { label: 'Широкая плитка', icon: size === 'wide' ? 'check' : 'width_wide', action: 'wide' },
+        { label: 'Квадратная плитка', icon: size === 'square' ? 'check' : 'crop_square', action: 'square' },
+        { divider: true },
+        prefs.liveTiles
+          ? { label: 'Живая плитка', icon: prefs.isTileLive(id) ? 'check' : 'dashboard', action: 'live' }
+          : { label: 'Живые плитки выключены', icon: 'toggle_off', disabled: true },
+        { divider: true },
+      ]
+    : []
   return [
     { label: 'Открыть', icon: 'open_in_new', action: 'open' },
     // Планшет: раздел можно сразу поставить рядом с текущим — второй зоной.
@@ -297,13 +388,10 @@ const menuItems = computed(() => {
     { label: 'Переместить выше', icon: 'arrow_upward', action: 'moveUp', disabled: !pos || pos.index === 0 },
     { label: 'Переместить ниже', icon: 'arrow_downward', action: 'moveDown', disabled: !pos || pos.index === pos.total - 1 },
     { divider: true },
-    { label: 'Широкая плитка', icon: size === 'wide' ? 'check' : 'width_wide', action: 'wide' },
-    { label: 'Квадратная плитка', icon: size === 'square' ? 'check' : 'crop_square', action: 'square' },
-    { divider: true },
-    prefs.liveTiles
-      ? { label: 'Живая плитка', icon: prefs.isTileLive(id) ? 'check' : 'dashboard', action: 'live' }
-      : { label: 'Живые плитки выключены', icon: 'toggle_off', disabled: true },
-    { divider: true },
+    ...tileItems,
+    isFavorite(id)
+      ? { label: 'Убрать из избранного', icon: 'star_border', action: 'unfavorite' }
+      : { label: 'В избранное', icon: 'star', action: 'favorite' },
     prefs.isPinned(props.platform, id)
       ? { label: 'Открепить от панели задач', icon: 'keep_off', action: 'unpin' }
       : { label: 'Закрепить на панели задач', icon: 'keep', action: 'pin' },
@@ -336,7 +424,7 @@ const LOGOUT_ACTIONS = [
 ]
 
 function onMenuSelect(action) {
-  if (action === 'personalize') return open('/settings?section=theme')
+  if (action === 'personalize') return open('/settings?section=theme&tab=wallpaper')
   if (action === 'help') return open('/settings?section=help')
   if (action === 'logout') { logoutAsk.value = true; return }
   if (action === 'lock') { screenLock.lock(); return }
@@ -353,6 +441,7 @@ function onMenuSelect(action) {
     if (prefs.isTileLive(id)) live.refresh([id]).catch(() => {})
     return
   }
+  if (action === 'favorite' || action === 'unfavorite') return toggleFavorite(id)
   if (action === 'pin') return prefs.pin(props.platform, id)
   if (action === 'unpin') return prefs.unpin(props.platform, id)
   if (action === 'shortcut') return void addShortcut(appById.value.get(id))
@@ -579,6 +668,8 @@ async function addShortcut(app) {
 }
 
 .mst-brand {
+  /* Марка слева, всё остальное (знак Hola, кнопки каркаса) — прижато вправо. */
+  margin-right: auto;
   display: flex;
   padding: 2px 4px;
   border: none;
@@ -693,6 +784,119 @@ async function addShortcut(app) {
 }
 
 .mst-badge.alert { background: var(--color-error); }
+
+/* ── Экраны и переключатель ── */
+.mst-screen {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.mst-fwd-enter-active, .mst-fwd-leave-active,
+.mst-back-enter-active, .mst-back-leave-active {
+  transition: opacity 0.14s ease, transform 0.18s cubic-bezier(0.2, 0, 0, 1);
+}
+
+.mst-fwd-enter-from, .mst-back-leave-to { opacity: 0; transform: translate3d(24px, 0, 0); }
+.mst-fwd-leave-to, .mst-back-enter-from { opacity: 0; transform: translate3d(-24px, 0, 0); }
+
+.mst-switch {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.mst-empty {
+  margin: 24px auto;
+  max-width: 340px;
+  text-align: center;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  color: var(--color-text-dim);
+}
+
+/* ── Каталог: строки разделов ── */
+.mst-rows {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(220px, 100%), 1fr));
+  gap: 4px 8px;
+}
+
+.mst-row {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  border-radius: var(--radius-md);
+  background: var(--acrylic-card-bg);
+}
+
+.mst-row-open {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 46px;
+  padding: 0 6px 0 12px;
+  border: none;
+  background: transparent;
+  color: var(--color-text);
+  font-size: 0.95rem;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mst-row-icon {
+  font-size: 22px;
+  color: var(--color-primary);
+}
+
+.mst-row-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mst-row-badge {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 20px;
+  text-align: center;
+}
+
+.mst-row-badge.alert { background: var(--color-error); }
+
+/* Звёздочка видна всегда: наведения у пальца нет. */
+.mst-row-star {
+  width: 40px;
+  min-width: 40px;
+  max-width: 40px;
+  height: 40px;
+  min-height: 40px;
+  max-height: 40px;
+  display: grid;
+  place-items: center;
+  margin-right: 3px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: color-mix(in oklch, var(--color-text-dim) 60%, transparent);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mst-row-star .material-symbols-outlined { font-size: 20px; }
+.mst-row-star.on { color: var(--color-primary); }
+.mst-row-star.on .material-symbols-outlined { font-variation-settings: 'FILL' 1; }
 
 .mst-pin {
   position: absolute;

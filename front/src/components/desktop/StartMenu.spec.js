@@ -21,7 +21,8 @@ function setup() {
   desktop.setArea({ x: 12, y: 12, w: 1400, h: 800 })
   const prefs = useDesktopPrefsStore()
   const wrapper = mount(StartMenu, {
-    global: { stubs: { CompanySelect: true, ContextMenu: true } },
+    // Смена экранов — <Transition mode="out-in">: заглушка меняет их сразу.
+    global: { stubs: { CompanySelect: true, ContextMenu: true, transition: true } },
   })
   return { desktop, prefs, wrapper }
 }
@@ -31,51 +32,131 @@ function dataTransfer() {
   return { effectAllowed: '', setData: vi.fn() }
 }
 
-// Название раздела на плитке рисует LiveTile (.lt-title).
+// Название раздела на плитке избранного рисует LiveTile (.lt-title), в
+// каталоге — строка (.sm-row-title).
 const labels = (wrapper) => wrapper.findAll('.lt-title').map((n) => n.text())
+const rowLabels = (wrapper) => wrapper.findAll('.sm-row-title').map((n) => n.text())
+const rowOf = (wrapper, title) => wrapper.findAll('.sm-row').find((r) => r.find('.sm-row-title').text() === title)
+
+async function switchScreen(wrapper) {
+  await wrapper.find('.sm-switch button').trigger('click')
+}
 
 describe('меню «Пуск»', () => {
   beforeEach(() => { localStorage.clear() })
 
-  it('плитки идут группами в порядке реестра', () => {
+  it('открывается на избранном: повседневные разделы по умолчанию', () => {
     const { wrapper } = setup()
-    expect(labels(wrapper).slice(0, 3)).toEqual(['Задачи', 'Реестры', 'Календари'])
+    expect(labels(wrapper).slice(0, 3)).toEqual(['Мессенджер', 'Задачи', 'Заметки'])
+    expect(wrapper.find('.sm-row').exists()).toBe(false)
   })
 
-  it('перетаскивание меняет порядок внутри группы и запоминает его', async () => {
+  it('«Все разделы» показывают каталог по категориям и ведут обратно в избранное', async () => {
+    const { wrapper } = setup()
+    await switchScreen(wrapper)
+    expect(wrapper.find('.sm-tile').exists()).toBe(false)
+    expect(rowLabels(wrapper).slice(0, 3)).toEqual(['Задачи', 'Реестры', 'Календари'])
+
+    await switchScreen(wrapper)
+    expect(wrapper.find('.sm-row').exists()).toBe(false)
+    expect(labels(wrapper)[0]).toBe('Мессенджер')
+  })
+
+  it('звёздочка в каталоге добавляет раздел в избранное и убирает его', async () => {
+    const { prefs, wrapper } = setup()
+    await switchScreen(wrapper)
+
+    await rowOf(wrapper, 'Реестры').find('.sm-row-star').trigger('click')
+    expect(prefs.favoritesList('desktop')).toContain('registries')
+    // Набор по умолчанию при первой правке становится своим списком целиком.
+    expect(prefs.favoritesList('desktop')).toContain('messenger')
+
+    await rowOf(wrapper, 'Мессенджер').find('.sm-row-star').trigger('click')
+    expect(prefs.favoritesList('desktop')).not.toContain('messenger')
+
+    await switchScreen(wrapper)
+    expect(labels(wrapper)).toContain('Реестры')
+    expect(labels(wrapper)).not.toContain('Мессенджер')
+  })
+
+  it('без избранного меню сразу показывает все разделы и не предлагает переключение', async () => {
+    const { prefs, wrapper } = setup()
+    prefs.setStartFavorites(false)
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('.sm-tile').exists()).toBe(false)
+    expect(rowLabels(wrapper)[0]).toBe('Задачи')
+    expect(wrapper.find('.sm-switch').exists()).toBe(false)
+  })
+
+  it('кнопка «во весь экран» переводит меню в планшетный вид и обратно', async () => {
+    const { desktop, wrapper } = setup()
+    await wrapper.find('.sm-full').trigger('click')
+    expect(desktop.startFull).toBe(true)
+    expect(wrapper.find('.start-menu').exists()).toBe(false)
+    expect(wrapper.find('.sm-tablet').exists()).toBe(true)
+
+    desktop.startFull = false
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('.start-menu').exists()).toBe(true)
+  })
+
+  it('ленту активности можно спрятать — меню становится одной колонкой', async () => {
+    const { prefs, wrapper } = setup()
+    expect(wrapper.find('.ap').exists()).toBe(true)
+    prefs.setStartActivity(false)
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('.ap').exists()).toBe(false)
+    expect(wrapper.find('.start-menu').classes()).toContain('no-activity')
+  })
+
+  it('перетаскивание в избранном меняет порядок и запоминает его', async () => {
     const { prefs, wrapper } = setup()
     const tiles = wrapper.findAll('.sm-tile')
 
-    await tiles[0].trigger('dragstart', { dataTransfer: dataTransfer() }) // «Задачи»
-    await tiles[2].trigger('dragover') // отпускаем над «Календарями»
+    await tiles[0].trigger('dragstart', { dataTransfer: dataTransfer() }) // «Мессенджер»
+    await tiles[2].trigger('dragover') // над «Заметками»
     await tiles[0].trigger('dragend')
+
+    expect(prefs.favoritesList('desktop').slice(0, 3)).toEqual(['tasks', 'notes', 'messenger'])
+    expect(labels(wrapper).slice(0, 3)).toEqual(['Задачи', 'Заметки', 'Мессенджер'])
+  })
+
+  it('перетаскивание в каталоге меняет порядок внутри категории', async () => {
+    const { prefs, wrapper } = setup()
+    await switchScreen(wrapper)
+    const rows = wrapper.findAll('.sm-row')
+
+    await rows[0].trigger('dragstart', { dataTransfer: dataTransfer() }) // «Задачи»
+    await rows[2].trigger('dragover') // над «Календарями»
+    await rows[0].trigger('dragend')
 
     expect(prefs.prefs.layouts.desktop.order.work.slice(0, 3)).toEqual(['registries', 'calendars', 'tasks'])
-    expect(labels(wrapper).slice(0, 3)).toEqual(['Реестры', 'Календари', 'Задачи'])
+    expect(rowLabels(wrapper).slice(0, 3)).toEqual(['Реестры', 'Календари', 'Задачи'])
   })
 
-  it('перетаскивание в другой раздел переносит плитку туда', async () => {
+  it('перетаскивание в другую категорию переносит раздел туда', async () => {
     const { prefs, wrapper } = setup()
-    const tiles = wrapper.findAll('.sm-tile')
-    const messengerTile = tiles.find((t) => t.find('.lt-title').text() === 'Мессенджер')
+    await switchScreen(wrapper)
+    const rows = wrapper.findAll('.sm-row')
 
-    await tiles[0].trigger('dragstart', { dataTransfer: dataTransfer() }) // «Задачи»
-    await messengerTile.trigger('dragover') // цель — раздел «Коммуникация»
-    await tiles[0].trigger('dragend')
+    await rows[0].trigger('dragstart', { dataTransfer: dataTransfer() }) // «Задачи»
+    await rowOf(wrapper, 'Мессенджер').trigger('dragover') // категория «Коммуникация»
+    await rows[0].trigger('dragend')
 
     expect(prefs.prefs.layouts.desktop.appGroup.tasks).toBe('team')
     expect(prefs.prefs.layouts.desktop.order.team[0]).toBe('tasks')
-    expect(labels(wrapper).slice(0, 2)).toEqual(['Реестры', 'Календари'])
+    expect(rowLabels(wrapper).slice(0, 2)).toEqual(['Реестры', 'Календари'])
   })
 
-  it('свой раздел создаётся, переименовывается и удаляется без потери плиток', async () => {
+  it('своя категория создаётся, переименовывается и удаляется без потери разделов', async () => {
     const { prefs, wrapper } = setup()
+    await switchScreen(wrapper)
     await wrapper.find('.sm-add-group').trigger('click')
 
     const key = prefs.prefs.layouts.desktop.groups[0].key
     expect(key).toBeTruthy()
 
-    // Новый раздел сразу открыт на переименование — вводим имя и жмём Enter.
+    // Новая категория сразу открыта на переименование — вводим имя и жмём Enter.
     const input = wrapper.find('.sm-group-input')
     await input.setValue('Мои дела')
     await input.trigger('keyup.enter')
@@ -83,7 +164,7 @@ describe('меню «Пуск»', () => {
     await wrapper.vm.$nextTick()
     expect(wrapper.findAll('.sm-group-label').map((n) => n.text())).toContain('Мои дела')
 
-    // Плитка, перенесённая в свой раздел, возвращается в родной при удалении.
+    // Раздел, перенесённый в свою категорию, возвращается в родную при удалении.
     prefs.moveTileToGroup('desktop', 'notes', key, ['notes'])
     expect(prefs.prefs.layouts.desktop.appGroup.notes).toBe(key)
     prefs.removeGroup('desktop', key)
@@ -91,8 +172,9 @@ describe('меню «Пуск»', () => {
     expect(prefs.prefs.layouts.desktop.appGroup.notes).toBeUndefined()
   })
 
-  it('раздел сворачивается кликом по заголовку', async () => {
+  it('категория сворачивается кликом по заголовку', async () => {
     const { prefs, wrapper } = setup()
+    await switchScreen(wrapper)
     await wrapper.find('.sm-group-toggle').trigger('click')
     expect(prefs.isCollapsed('desktop', 'work')).toBe(true)
     await wrapper.vm.$nextTick()
@@ -144,9 +226,10 @@ describe('меню «Пуск»', () => {
 
   it('размер плитки берётся из настроек', async () => {
     const { prefs, wrapper } = setup()
-    expect(wrapper.find('.sm-tile').classes()).toContain('is-wide')
+    const tasksTile = () => wrapper.findAll('.sm-tile').find((t) => t.find('.lt-title').text() === 'Задачи')
+    expect(tasksTile().classes()).toContain('is-wide')
     prefs.setTileSize('desktop', 'tasks', 'square')
     await wrapper.vm.$nextTick()
-    expect(wrapper.find('.sm-tile').classes()).toContain('is-square')
+    expect(tasksTile().classes()).toContain('is-square')
   })
 })

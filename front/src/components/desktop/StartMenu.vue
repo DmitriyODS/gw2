@@ -1,80 +1,55 @@
 <template>
   <div class="sm-backdrop" :data-taskbar="prefs.taskbarSide" @pointerdown.self="desktop.startOpen = false">
-    <section class="start-menu" :class="{ full }" role="menu">
-      <div class="sm-columns">
-        <!-- Левая колонка: марка, компания, плитки и карточка пользователя —
-             всё, что относится к запуску разделов, живёт только здесь. -->
-        <div class="sm-main">
-        <div class="sm-panel">
+    <!-- Во весь экран — тот же «Пуск» в планшетном виде: плитки и категории
+         стола крупно, аккаунт и лента колонкой слева. Занимает весь стол:
+         панель задач на это время прячется (DesktopTaskbar), выход — кнопкой
+         рядом с Hola, запуском раздела или Esc. -->
+    <div v-if="desktop.startFull" class="sm-tablet">
+      <MobileStart platform="desktop" tablet-layout>
+        <template #brand-actions>
+          <button class="sm-full" type="button" title="Обычное меню" @click="desktop.startFull = false">
+            <span class="material-symbols-outlined">close_fullscreen</span>
+          </button>
+        </template>
+      </MobileStart>
+    </div>
+
+    <!-- Две стеклянные панели без общей подложки: слева запуск разделов,
+         справа лента «Моя активность». Разделяет их только пустота. -->
+    <section v-else class="start-menu" :class="{ 'no-activity': !prefs.startActivity }" role="menu">
+      <div class="sm-panel sm-main">
         <header class="sm-head">
           <button class="sm-brand" type="button" title="О приложении" @click="openAbout">
             <BrandWordmark />
           </button>
-          <button
-            class="sm-full"
-            type="button"
-            :title="full ? 'Свернуть меню' : 'Развернуть на весь экран'"
-            @click="full = !full"
-          >
-            <span class="material-symbols-outlined">{{ full ? 'close_fullscreen' : 'open_in_full' }}</span>
+          <span class="sm-screen-title">{{ showFavorites ? 'Избранное' : 'Все разделы' }}</span>
+          <button class="sm-full" type="button" title="Во весь экран" @click="desktop.startFull = true">
+            <span class="material-symbols-outlined">open_in_full</span>
           </button>
         </header>
 
-        <div class="sm-body">
-        <section v-for="group in visibleGroups" :key="group.key" class="sm-group">
-          <div class="sm-group-head" @contextmenu.prevent="openGroupMenu(group, $event)">
-            <button
-              class="sm-group-toggle"
-              type="button"
-              :title="prefs.isCollapsed(PLATFORM, group.key) ? 'Развернуть раздел' : 'Свернуть раздел'"
-              @click="prefs.toggleCollapsed(PLATFORM, group.key)"
-            >
-              <span
-                class="material-symbols-outlined sm-group-chev"
-                :class="{ collapsed: prefs.isCollapsed(PLATFORM, group.key) }"
-              >expand_more</span>
-              <InputText
-                v-if="editing === group.key"
-                ref="editorRef"
-                v-model="editLabel"
-                class="sm-group-input"
-                @click.stop
-                @keyup.enter="commitRename(group)"
-                @keyup.esc="editing = null"
-                @blur="commitRename(group)"
-              />
-              <span v-else class="sm-group-label">{{ group.label }}</span>
-              <span class="sm-group-count">{{ group.items.length }}</span>
-            </button>
-            <button
-              class="sm-group-more"
-              type="button"
-              title="Настроить раздел"
-              @click.stop="openGroupMenu(group, $event)"
-            >
-              <span class="material-symbols-outlined">more_horiz</span>
-            </button>
-          </div>
-
-          <!-- Свёрнутый раздел схлопывается по высоте (grid-template-rows). -->
-          <div class="sm-group-body" :class="{ collapsed: prefs.isCollapsed(PLATFORM, group.key) }">
-            <div class="sm-group-inner">
-              <div class="sm-tiles" @dragover.prevent="onDragOverGroup(group)" @drop.prevent="onDragEnd">
+        <!-- Два экрана, как в «Пуске» Windows 11: избранное — то, чем человек
+             пользуется каждый день, все разделы — полный каталог. Меню всегда
+             открывается на избранном. -->
+        <div class="sm-screens">
+          <Transition :name="showFavorites ? 'sm-back' : 'sm-fwd'" mode="out-in">
+            <div v-if="showFavorites" key="favorites" class="sm-body">
+              <div v-if="favoriteApps.length" class="sm-tiles">
                 <button
-                  v-for="(app, i) in group.items"
+                  v-for="(app, i) in favoriteApps"
                   :key="app.id"
                   class="sm-tile"
-                  :class="[`is-${sizeOf(app)}`, { pinned: prefs.isPinned(PLATFORM, app.id), dragging: drag.appId === app.id }]"
+                  :class="[`is-${sizeOf(app)}`, { dragging: drag.appId === app.id }]"
                   type="button"
                   draggable="true"
                   :title="app.title"
-                  @dragstart="onDragStart(group, app, $event)"
-                  @dragover.prevent.stop="onDragOver(group, app)"
+                  @dragstart="onFavDragStart(app, $event)"
+                  @dragover.prevent.stop="onFavDragOver(app)"
                   @drop.prevent="onDragEnd"
                   @dragend="onDragEnd"
                   @click="launch(app, $event)"
                   @auxclick.middle.prevent="desktop.open(app.path, { newWindow: true })"
-                  @contextmenu.prevent.stop="openTileMenu(app, $event)"
+                  @contextmenu.prevent.stop="openAppMenu(app, 'tile', $event)"
                   @pointerenter="hovered = app.id"
                   @pointerleave="hovered = hovered === app.id ? null : hovered"
                 >
@@ -91,18 +66,121 @@
                   </span>
                   <span v-if="prefs.isPinned(PLATFORM, app.id)" class="sm-tile-pin material-symbols-outlined">keep</span>
                 </button>
-
-                <p v-if="!group.items.length" class="sm-group-empty">Перетащите сюда плитку</p>
               </div>
-            </div>
-          </div>
-        </section>
 
-        <button class="sm-add-group" type="button" @click="createGroup">
-          <span class="material-symbols-outlined">add</span>
-          Новый раздел
-        </button>
+              <p v-else class="sm-empty">
+                Избранное пусто. Откройте «Все разделы» и отметьте звёздочкой то, чем пользуетесь каждый день.
+              </p>
+            </div>
+
+            <div v-else key="all" class="sm-body">
+              <section v-for="group in visibleGroups" :key="group.key" class="sm-group">
+                <div class="sm-group-head" @contextmenu.prevent="openGroupMenu(group, $event)">
+                  <button
+                    class="sm-group-toggle"
+                    type="button"
+                    :title="prefs.isCollapsed(PLATFORM, group.key) ? 'Развернуть раздел' : 'Свернуть раздел'"
+                    @click="prefs.toggleCollapsed(PLATFORM, group.key)"
+                  >
+                    <span
+                      class="material-symbols-outlined sm-group-chev"
+                      :class="{ collapsed: prefs.isCollapsed(PLATFORM, group.key) }"
+                    >expand_more</span>
+                    <InputText
+                      v-if="editing === group.key"
+                      ref="editorRef"
+                      v-model="editLabel"
+                      class="sm-group-input"
+                      @click.stop
+                      @keyup.enter="commitRename(group)"
+                      @keyup.esc="editing = null"
+                      @blur="commitRename(group)"
+                    />
+                    <span v-else class="sm-group-label">{{ group.label }}</span>
+                    <span class="sm-group-count">{{ group.items.length }}</span>
+                  </button>
+                  <button
+                    class="sm-group-more"
+                    type="button"
+                    title="Настроить раздел"
+                    @click.stop="openGroupMenu(group, $event)"
+                  >
+                    <span class="material-symbols-outlined">more_horiz</span>
+                  </button>
+                </div>
+
+                <!-- Свёрнутый раздел схлопывается по высоте (grid-template-rows). -->
+                <div class="sm-group-body" :class="{ collapsed: prefs.isCollapsed(PLATFORM, group.key) }">
+                  <div class="sm-group-inner">
+                    <div class="sm-rows" @dragover.prevent="onDragOverGroup(group)" @drop.prevent="onDragEnd">
+                      <div
+                        v-for="app in group.items"
+                        :key="app.id"
+                        class="sm-row"
+                        :class="{ dragging: drag.appId === app.id }"
+                        draggable="true"
+                        @dragstart="onDragStart(group, app, $event)"
+                        @dragover.prevent.stop="onDragOver(group, app)"
+                        @drop.prevent="onDragEnd"
+                        @dragend="onDragEnd"
+                        @contextmenu.prevent.stop="openAppMenu(app, 'row', $event)"
+                      >
+                        <button
+                          class="sm-row-open"
+                          type="button"
+                          :title="app.title"
+                          @click="launch(app, $event)"
+                          @auxclick.middle.prevent="desktop.open(app.path, { newWindow: true })"
+                        >
+                          <span class="material-symbols-outlined sm-row-icon">{{ app.icon }}</span>
+                          <span class="sm-row-title">{{ app.title }}</span>
+                          <span v-if="badgeOf(app)" class="sm-row-badge" :class="{ alert: badgeOf(app) === '!' }">
+                            {{ badgeOf(app) }}
+                          </span>
+                        </button>
+                        <button
+                          class="sm-row-star"
+                          :class="{ on: isFavorite(app.id) }"
+                          type="button"
+                          :title="isFavorite(app.id) ? 'Убрать из избранного' : 'В избранное'"
+                          @click="toggleFavorite(app.id)"
+                        >
+                          <span class="material-symbols-outlined">star</span>
+                        </button>
+                      </div>
+
+                      <p v-if="!group.items.length" class="sm-group-empty">Перетащите сюда раздел</p>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <button class="sm-add-group" type="button" @click="createGroup">
+                <span class="material-symbols-outlined">add</span>
+                Новая категория
+              </button>
+            </div>
+          </Transition>
         </div>
+
+        <!-- Без избранного переключать нечего: меню — один каталог. -->
+        <div v-if="prefs.startFavorites" class="sm-switch">
+          <AppButton
+            v-if="showFavorites"
+            variant="text"
+            size="sm"
+            label="Все разделы"
+            trailing-icon="chevron_right"
+            @click="screen = 'all'"
+          />
+          <AppButton
+            v-else
+            variant="text"
+            size="sm"
+            icon="chevron_left"
+            label="Избранное"
+            @click="screen = 'favorites'"
+          />
         </div>
 
         <!-- Подвал: кто я, активная компания, настройки и выход — одной строкой. -->
@@ -136,21 +214,18 @@
             <span class="material-symbols-outlined">logout</span>
           </button>
         </footer>
-        </div>
-
-        <!-- Правая колонка целиком отдана ленте: ни выбора компании, ни
-             карточки пользователя над ней и под ней. -->
-        <ActivityPanel class="sm-activity" @open="launchPath" />
       </div>
+
+      <ActivityPanel v-if="prefs.startActivity" class="sm-panel sm-activity" @open="launchPath" />
     </section>
 
     <ContextMenu
-      :visible="tileMenu.open"
-      :x="tileMenu.x"
-      :y="tileMenu.y"
-      :items="tileMenuItems"
-      @select="onTileMenuSelect"
-      @close="tileMenu.open = false"
+      :visible="appMenu.open"
+      :x="appMenu.x"
+      :y="appMenu.y"
+      :items="appMenuItems"
+      @select="onAppMenuSelect"
+      @close="appMenu.open = false"
     />
 
     <ContextMenu
@@ -179,7 +254,7 @@
 import { avatarUrl } from '@/utils/avatar.js'
 import { shortFio } from '@/utils/people.js'
 import { useScreenLock } from '@/composables/useScreenLock.js'
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onMounted, reactive, ref } from 'vue'
 import InputText from 'primevue/inputtext'
 import { useAuthStore } from '@/stores/auth.js'
 import { useDesktopStore } from '@/stores/desktop.js'
@@ -190,16 +265,20 @@ import { useTasksStore } from '@/stores/tasks.js'
 import { usePetsStore } from '@/stores/pets.js'
 import { usePermission } from '@/composables/usePermission.js'
 import { useCompanySettings } from '@/composables/useCompanySettings.js'
-import { menuGroups } from '@/desktop/apps.js'
+import { DEFAULT_FAVORITES, menuGroups } from '@/desktop/apps.js'
 import { tileFaces } from '@/desktop/liveTiles.js'
 import { useLiveTilesStore } from '@/stores/liveTiles.js'
 import { useUnitsStore } from '@/stores/units.js'
 import BrandWordmark from '@/components/common/BrandWordmark.vue'
 import CompanySelect from '@/components/common/CompanySelect.vue'
 import ContextMenu from '@/components/common/ContextMenu.vue'
+import AppButton from '@/components/ui/AppButton.vue'
 import AppDialog from '@/components/ui/AppDialog.vue'
 import LiveTile from './LiveTile.vue'
 import ActivityPanel from './ActivityPanel.vue'
+
+// Планшетный вид нужен только по кнопке — его чанк не грузим вместе с меню.
+const MobileStart = defineAsyncComponent(() => import('@/components/mobile/MobileStart.vue'))
 
 // Раскладка «Пуска» стола хранится отдельно от мобилы — desktopPrefs держит
 // обе, здесь работаем только со своей.
@@ -217,16 +296,9 @@ const live = useLiveTilesStore()
 const { isSuperAdmin, hasActiveCompany } = usePermission()
 const { settings } = useCompanySettings()
 
-onMounted(() => {
-  /* Сводки живых плиток рабочий стол тянет заранее и обновляет по таймеру —
-     здесь лишь подстраховка: свежие данные запрос не повторяют (TTL стора). */
-  if (prefs.liveTiles) {
-    const ids = groups.value
-      .flatMap((g) => g.items.map((a) => a.id))
-      .filter((id) => prefs.isTileLive(id))
-    live.refresh(ids).catch(() => {})
-  }
-})
+const screen = ref('favorites')
+// Избранное можно выключить в настройках — тогда меню целиком каталог.
+const showFavorites = computed(() => prefs.startFavorites && screen.value === 'favorites')
 
 function openAbout() {
   desktop.open('/settings?section=about')
@@ -244,17 +316,32 @@ const groups = computed(() => menuGroups({
 const visibleGroups = computed(() =>
   groups.value.filter((g) => g.items.length || g.custom || prefs.customized(PLATFORM)))
 
-const avatarSrc = computed(() => {
-  const user = auth.user
-  if (!user) return ''
-  return avatarUrl(user)
-})
-
 const appById = computed(() => {
   const map = new Map()
   for (const g of groups.value) for (const a of g.items) map.set(a.id, a)
   return map
 })
+
+/* ── Избранное ── */
+const favoriteIds = computed(() => prefs.favoritesList(PLATFORM, DEFAULT_FAVORITES))
+const isFavorite = (id) => favoriteIds.value.includes(id)
+const toggleFavorite = (id) => prefs.toggleFavorite(PLATFORM, id, DEFAULT_FAVORITES)
+
+// Недоступные сейчас разделы (сменилась компания, выключена фича) не
+// показываются, но из списка не выпадают — вернутся, когда снова доступны.
+const favoriteApps = computed(() => favoriteIds.value.map((id) => appById.value.get(id)).filter(Boolean))
+
+onMounted(() => {
+  /* Сводки живых плиток рабочий стол тянет заранее и обновляет по таймеру —
+     здесь лишь подстраховка: свежие данные запрос не повторяют (TTL стора).
+     Живые плитки — только в избранном, у строк каталога сводок нет. */
+  if (prefs.liveTiles && showFavorites.value) {
+    const ids = favoriteApps.value.map((a) => a.id).filter((id) => prefs.isTileLive(id))
+    live.refresh(ids).catch(() => {})
+  }
+})
+
+const avatarSrc = computed(() => (auth.user ? avatarUrl(auth.user) : ''))
 
 const sizeOf = (app) => prefs.tileSize(PLATFORM, app.id, app.tile || 'square')
 
@@ -296,21 +383,41 @@ function launchPath(path) {
   desktop.startOpen = false
 }
 
-/* ── Перетаскивание плиток ─────────────────────────────────────
-   Внутри раздела меняется порядок, между разделами — принадлежность плитки.
-   Всё пишется в личные настройки, поэтому раскладка едет между устройствами. */
+/* ── Перетаскивание ─────────────────────────────────────────────
+   В избранном меняется порядок плиток; в каталоге — порядок внутри категории
+   и принадлежность ей. Всё пишется в личные настройки, поэтому раскладка
+   едет между устройствами. */
 const drag = reactive({ appId: null, groupKey: null })
 
-function onDragStart(group, app, e) {
-  drag.appId = app.id
-  drag.groupKey = group.key
+function startDrag(appId, e) {
+  drag.appId = appId
   e.dataTransfer.effectAllowed = 'move'
   // Firefox не начинает перетаскивание без данных в буфере.
-  e.dataTransfer.setData('text/plain', app.id)
+  e.dataTransfer.setData('text/plain', appId)
+}
+
+function onFavDragStart(app, e) {
+  startDrag(app.id, e)
+}
+
+function onFavDragOver(app) {
+  if (!drag.appId || app.id === drag.appId) return
+  const ids = favoriteApps.value.map((a) => a.id)
+  const from = ids.indexOf(drag.appId)
+  const to = ids.indexOf(app.id)
+  if (from < 0 || to < 0) return
+  ids.splice(to, 0, ...ids.splice(from, 1))
+  // Скрытые сейчас разделы остаются в списке — в его конце.
+  prefs.setFavorites(PLATFORM, [...ids, ...favoriteIds.value.filter((id) => !ids.includes(id))])
+}
+
+function onDragStart(group, app, e) {
+  startDrag(app.id, e)
+  drag.groupKey = group.key
 }
 
 function onDragOver(group, app) {
-  if (!drag.appId || app.id === drag.appId) return
+  if (!drag.appId || !drag.groupKey || app.id === drag.appId) return
   const ids = group.items.map((a) => a.id)
 
   if (group.key === drag.groupKey) {
@@ -328,9 +435,9 @@ function onDragOver(group, app) {
   drag.groupKey = group.key
 }
 
-/** Перетаскивание на свободное место раздела — плитка встаёт в конец. */
+/** Перетаскивание на свободное место категории — раздел встаёт в конец. */
 function onDragOverGroup(group) {
-  if (!drag.appId || group.key === drag.groupKey) return
+  if (!drag.appId || !drag.groupKey || group.key === drag.groupKey) return
   const ids = [...group.items.map((a) => a.id), drag.appId]
   prefs.moveTileToGroup(PLATFORM, drag.appId, group.key, ids)
   drag.groupKey = group.key
@@ -341,7 +448,7 @@ function onDragEnd() {
   drag.groupKey = null
 }
 
-/* ── Разделы: создание, переименование, удаление ───────────── */
+/* ── Категории каталога: создание, переименование, удаление ─── */
 const editing = ref(null)
 const editLabel = ref('')
 const editorRef = ref(null)
@@ -369,22 +476,11 @@ function commitRename(group) {
 }
 
 function createGroup() {
-  const key = prefs.addGroup(PLATFORM, 'Новый раздел')
+  const key = prefs.addGroup(PLATFORM, 'Новая категория')
   editing.value = key
-  editLabel.value = 'Новый раздел'
+  editLabel.value = 'Новая категория'
   focusEditor()
 }
-
-/* ── Контекстное меню плитки: размер и закрепление ───────────── */
-/* Полноэкранное меню: разворачивается кнопкой в шапке, а в настройках можно
-   выбрать, чтобы оно ВСЕГДА открывалось во весь экран (тогда кнопка
-   сворачивает его до обычной панели на время сеанса). */
-const full = ref(prefs.startFullscreen)
-watch(() => prefs.startFullscreen, (on) => { full.value = on })
-
-// Пока меню развёрнуто, панель задач прячется: экран занимает только меню.
-watch(full, (on) => { desktop.startFull = on }, { immediate: true })
-onBeforeUnmount(() => { desktop.startFull = false })
 
 // Подтверждение выхода: кнопка стоит рядом с настройками, промахнуться легко.
 const logoutAsk = ref(false)
@@ -400,48 +496,59 @@ const LOGOUT_ACTIONS = [
   { kind: 'confirm', label: 'Выйти', icon: 'logout' },
 ]
 
-const tileMenu = reactive({ open: false, x: 0, y: 0, appId: null })
+/* ── Контекстное меню раздела: плитка избранного или строка каталога ── */
+const appMenu = reactive({ open: false, x: 0, y: 0, appId: null, kind: 'tile' })
 
-const tileMenuItems = computed(() => {
-  const id = tileMenu.appId
+const appMenuItems = computed(() => {
+  const id = appMenu.appId
   if (!id) return []
-  const size = prefs.tileSize(PLATFORM, id, appById.value.get(id)?.tile || 'square')
-  return [
-    { label: 'Широкая плитка', icon: size === 'wide' ? 'check' : 'width_wide', action: 'wide' },
-    { label: 'Квадратная плитка', icon: size === 'square' ? 'check' : 'crop_square', action: 'square' },
-    { divider: true },
-    /* Сводки поимённо: общий тумблер живых плиток главнее — при выключенном
-       пункт объясняет, почему плитка «мёртвая», а не молчит. */
-    prefs.liveTiles
-      ? {
-          label: 'Живая плитка',
-          icon: prefs.isTileLive(id) ? 'check' : 'dashboard',
-          action: 'live',
-        }
-      : { label: 'Живые плитки выключены', icon: 'toggle_off', disabled: true },
-    { divider: true },
+  const items = []
+  if (appMenu.kind === 'tile') {
+    const size = prefs.tileSize(PLATFORM, id, appById.value.get(id)?.tile || 'square')
+    items.push(
+      { label: 'Широкая плитка', icon: size === 'wide' ? 'check' : 'width_wide', action: 'wide' },
+      { label: 'Квадратная плитка', icon: size === 'square' ? 'check' : 'crop_square', action: 'square' },
+      { divider: true },
+      /* Сводки поимённо: общий тумблер живых плиток главнее — при выключенном
+         пункт объясняет, почему плитка «мёртвая», а не молчит. */
+      prefs.liveTiles
+        ? { label: 'Живая плитка', icon: prefs.isTileLive(id) ? 'check' : 'dashboard', action: 'live' }
+        : { label: 'Живые плитки выключены', icon: 'toggle_off', disabled: true },
+      { divider: true },
+    )
+  }
+  items.push(
+    isFavorite(id)
+      ? { label: 'Убрать из избранного', icon: 'star_border', action: 'unfavorite' }
+      : { label: 'В избранное', icon: 'star', action: 'favorite' },
     prefs.isPinned(PLATFORM, id)
       ? { label: 'Открепить от панели задач', icon: 'keep_off', action: 'unpin' }
       : { label: 'Закрепить на панели задач', icon: 'keep', action: 'pin' },
     { label: 'Открыть ещё одно окно', icon: 'add', action: 'new' },
-  ]
+  )
+  return items
 })
 
-function openTileMenu(app, e) {
-  tileMenu.appId = app.id
-  tileMenu.x = e.clientX
-  tileMenu.y = e.clientY
-  tileMenu.open = true
+function openAppMenu(app, kind, e) {
+  appMenu.appId = app.id
+  appMenu.kind = kind
+  appMenu.x = e.clientX
+  appMenu.y = e.clientY
+  appMenu.open = true
 }
 
-function onTileMenuSelect(action) {
-  const id = tileMenu.appId
+function onAppMenuSelect(action) {
+  const id = appMenu.appId
   if (!id) return
   if (action === 'wide' || action === 'square') prefs.setTileSize(PLATFORM, id, action)
   else if (action === 'live') {
     prefs.toggleTileLive(id)
     // Включили обратно — сводку этой плитки надо подтянуть: её не опрашивали.
     if (prefs.isTileLive(id)) live.refresh([id]).catch(() => {})
+  }
+  else if (action === 'favorite' || action === 'unfavorite') {
+    toggleFavorite(id)
+    if (action === 'favorite' && prefs.isTileLive(id)) live.refresh([id]).catch(() => {})
   }
   else if (action === 'pin') prefs.pin(PLATFORM, id)
   else if (action === 'unpin') prefs.unpin(PLATFORM, id)
@@ -451,7 +558,7 @@ function onTileMenuSelect(action) {
   }
 }
 
-/* ── Контекстное меню раздела ───────────────────────────────── */
+/* ── Контекстное меню категории ─────────────────────────────── */
 const groupMenu = reactive({ open: false, x: 0, y: 0, key: null })
 
 const currentGroup = computed(() => visibleGroups.value.find((g) => g.key === groupMenu.key) || null)
@@ -467,11 +574,11 @@ const groupMenuItems = computed(() => {
       action: 'collapse',
     },
     { divider: true },
-    { label: 'Новый раздел', icon: 'add', action: 'create' },
+    { label: 'Новая категория', icon: 'add', action: 'create' },
   ]
   if (group.custom) {
     items.push({ divider: true })
-    items.push({ label: 'Удалить раздел', icon: 'delete', action: 'remove', danger: true })
+    items.push({ label: 'Удалить категорию', icon: 'delete', action: 'remove', danger: true })
   }
   return items
 })
@@ -489,47 +596,16 @@ function onGroupMenuSelect(action) {
   if (action === 'rename') startRename(group)
   else if (action === 'collapse') prefs.toggleCollapsed(PLATFORM, group.key)
   else if (action === 'create') createGroup()
-  // Плитки удалённого раздела возвращаются в свои родные разделы.
+  // Разделы удалённой категории возвращаются в свои родные.
   else if (action === 'remove') prefs.removeGroup(PLATFORM, group.key)
 }
 </script>
 
 <style scoped>
-/* Во весь экран — по-настоящему: без полей, скруглений и панели задач (её
-   прячет рабочий стол по desktop.startFull). Меню держит экран, пока не
-   выберут раздел или не свернут его обратно. Правило идёт ПОСЛЕ раскладок по
-   сторонам панели и перекрывает их. */
-.sm-backdrop .start-menu.full {
-  inset: 0;
-  width: auto;
-  max-width: none;
-  max-height: none;
-  transform: none;
-  border-radius: 0;
-  border: none;
-}
-
-/* Кнопка «во весь экран» — в шапке у правого края. */
-.sm-full {
-  margin-left: auto;
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  border: none;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--color-text-dim);
-  cursor: pointer;
-}
-
-.sm-full:hover { background: var(--color-surface-variant); color: var(--color-text); }
-.sm-full .material-symbols-outlined { font-size: 20px; }
-
 /* Панель задач сверху — меню выезжает вниз; по бокам — от своего края, а по
    вертикали центрируется: тянуться от кнопки «Пуск» через весь экран незачем. */
 .sm-backdrop[data-taskbar='top'] .start-menu {
-  top: calc(var(--taskbar-height) + 24px);
+  top: calc(var(--taskbar-height) + 20px);
   bottom: auto;
   transform-origin: top center;
 }
@@ -540,16 +616,16 @@ function onGroupMenuSelect(action) {
   bottom: auto;
   left: auto;
   transform: translateY(-50%);
-  max-height: min(820px, calc(100dvh - 48px));
+  height: min(640px, calc(100dvh - 48px));
 }
 
 .sm-backdrop[data-taskbar='left'] .start-menu {
-  left: calc(var(--taskbar-height) + 24px);
+  left: calc(var(--taskbar-height) + 20px);
   transform-origin: center left;
 }
 
 .sm-backdrop[data-taskbar='right'] .start-menu {
-  right: calc(var(--taskbar-height) + 24px);
+  right: calc(var(--taskbar-height) + 20px);
   transform-origin: center right;
 }
 
@@ -560,25 +636,18 @@ function onGroupMenuSelect(action) {
   z-index: 950;
 }
 
+/* Сам «Пуск» — только раскладка двух панелей: своей подложки у него нет.
+   Высота постоянная, поэтому переключение экранов меню не дёргает. */
 .start-menu {
-  /* Меню по центру экрана со стороны панели задач (по умолчанию — над ней). */
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
-  bottom: calc(var(--taskbar-height) + 24px);
-  /* Плитки + колонка «Моя активность» (на узком экране колонка скрывается). */
-  width: min(900px, calc(100vw - 24px));
-  max-height: min(820px, calc(100dvh - var(--taskbar-height) - 48px));
-  display: flex;
-  flex-direction: column;
-  padding: 12px;
+  bottom: calc(var(--taskbar-height) + 20px);
+  width: min(860px, calc(100vw - 24px));
+  height: min(640px, calc(100dvh - var(--taskbar-height) - 40px));
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
   gap: 12px;
-  background: var(--acrylic-bg-strong);
-  -webkit-backdrop-filter: var(--acrylic-blur);
-  backdrop-filter: var(--acrylic-blur);
-  border: 1px solid var(--acrylic-border);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-lg);
   /* Меню выезжает из панели задач и въезжает обратно; классы задаёт
      <Transition> рабочего стола на корне компонента. */
   transform-origin: bottom center;
@@ -593,11 +662,42 @@ function onGroupMenuSelect(action) {
   scale: 0.92;
 }
 
-/* ── Шапка: марка (выбор компании живёт в подвале) ── */
+/* Каждая панель — самостоятельное плавающее стекло: общей подложки, которая
+   размывала бы фон за ними, больше нет. */
+.start-menu .sm-panel {
+  min-height: 0;
+  border: 1px solid var(--acrylic-border);
+  border-radius: var(--radius-xl);
+  background: var(--acrylic-bg-strong);
+  -webkit-backdrop-filter: var(--acrylic-blur);
+  backdrop-filter: var(--acrylic-blur);
+  box-shadow: var(--shadow-lg), var(--glass-edge);
+}
+
+.sm-main {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 12px 8px;
+}
+
+/* Без ленты меню — одна колонка и уже: каталогу и плиткам хватает. */
+.start-menu.no-activity {
+  grid-template-columns: minmax(0, 1fr);
+  width: min(600px, calc(100vw - 24px));
+}
+
+/* Узкое окно — лента уступает место разделам. */
+@media (max-width: 860px) {
+  .start-menu { grid-template-columns: minmax(0, 1fr); }
+  .sm-activity { display: none; }
+}
+
+/* ── Шапка: марка и название экрана ── */
 .sm-head {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
   flex-shrink: 0;
 }
 
@@ -609,7 +709,7 @@ function onGroupMenuSelect(action) {
   border: none;
   border-radius: var(--radius-md);
   background: transparent;
-  font-size: 26px;
+  font-size: 22px;
   /* ExtraBlack вариативного Roboto Flex — фирменное начертание wordmark.
      Кнопка не наследует шрифт документа сама, поэтому задаём явно, а вес
      дублируем осью вариативного шрифта. */
@@ -623,45 +723,58 @@ function onGroupMenuSelect(action) {
 
 .sm-brand:hover { background: color-mix(in oklch, var(--color-primary) 10%, transparent); }
 
-.sm-company {
-  flex: 1;
-  min-width: 0;
-  display: flex;
+.sm-screen-title {
+  margin-left: auto;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-dim);
 }
 
-/* ── Разделы и плитки ──
-   Сетка 4 колонки: широкая плитка занимает две, квадратная — одну.
-   Размер, порядок и принадлежность разделу — личные настройки. */
-/* Две колонки: слева всё про запуск разделов (марка, компания, плитки,
-   пользователь), справа — только лента. Прокручиваются независимо. */
-.sm-columns {
-  flex: 1;
-  min-height: 0;
+.sm-full {
+  width: 34px;
+  min-width: 34px;
+  max-width: 34px;
+  height: 34px;
+  min-height: 34px;
+  max-height: 34px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 300px;
-  gap: 14px;
+  place-items: center;
+  flex-shrink: 0;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--color-text-dim);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
 }
 
-.sm-main {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  min-width: 0;
-  min-height: 0;
+.sm-full:hover { background: color-mix(in oklch, var(--color-primary) 10%, transparent); color: var(--color-text); }
+.sm-full .material-symbols-outlined { font-size: 20px; }
+
+/* Планшетный вид — на весь стол, без полей и скруглений. Панель задач спрятана,
+   поэтому резерв под неё у полотна обнуляем. */
+.sm-tablet {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  --taskbar-height: 0px;
+  transform-origin: bottom center;
+  transition: opacity 0.2s ease, scale 0.24s cubic-bezier(0.2, 0, 0, 1);
 }
 
-/* Стеклянная подложка под марку и плитки — парная к панели «Моя активность». */
-.sm-panel {
+.sm-enter-from .sm-tablet,
+.sm-leave-to .sm-tablet {
+  opacity: 0;
+  scale: 0.96;
+}
+
+/* ── Экраны ── */
+.sm-screens {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 12px;
-  border: 1px solid var(--acrylic-border);
-  border-radius: var(--radius-xl);
-  background: var(--glass-bg), var(--acrylic-card-bg);
-  box-shadow: var(--glass-edge);
 }
 
 .sm-body {
@@ -670,12 +783,12 @@ function onGroupMenuSelect(action) {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
   /* Жёлоб под полосу прокрутки резервируется всегда — иначе она ложится
      поверх плиток, а при появлении дёргает всю сетку. Сама полоса — еле
      заметная: меню и так плотное, яркая линия сбоку только мешает. */
   scrollbar-gutter: stable;
-  padding-right: 10px;
+  padding-right: 6px;
   scrollbar-width: thin;
   scrollbar-color: color-mix(in oklch, var(--color-text) 14%, transparent) transparent;
 }
@@ -694,17 +807,113 @@ function onGroupMenuSelect(action) {
   background: color-mix(in oklch, var(--color-text) 26%, transparent);
 }
 
-/* Узкое окно — лента уступает место плиткам. */
-@media (max-width: 860px) {
-  .sm-columns { grid-template-columns: minmax(0, 1fr); }
-  .sm-activity { display: none; }
+/* Каталог — «вглубь» (въезжает справа), избранное — «назад» (слева). */
+.sm-fwd-enter-active, .sm-fwd-leave-active,
+.sm-back-enter-active, .sm-back-leave-active {
+  transition: opacity 0.14s ease, transform 0.18s cubic-bezier(0.2, 0, 0, 1);
 }
 
+.sm-fwd-enter-from, .sm-back-leave-to { opacity: 0; transform: translate3d(24px, 0, 0); }
+.sm-fwd-leave-to, .sm-back-enter-from { opacity: 0; transform: translate3d(-24px, 0, 0); }
+
+.sm-switch {
+  display: flex;
+  justify-content: flex-end;
+  flex-shrink: 0;
+}
+
+.sm-empty {
+  margin: auto;
+  max-width: 340px;
+  padding: 20px;
+  text-align: center;
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--color-text-dim);
+}
+
+/* ── Избранное: живые плитки ──
+   Сетка 4 колонки: широкая плитка занимает две, квадратная — одну. */
+.sm-tiles {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.sm-tile {
+  position: relative;
+  grid-column: span 1;
+  /* Содержимое плитки рисует LiveTile — он растягивается на всю площадь. */
+  display: flex;
+  align-items: stretch;
+  height: 104px;
+  padding: 12px;
+  overflow: hidden;
+  border: 1px solid var(--acrylic-border);
+  border-radius: var(--radius-lg);
+  background: var(--glass-bg);
+  box-shadow: var(--glass-edge);
+  color: var(--color-text);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.sm-tile.is-wide { grid-column: span 2; }
+
+/* Перетаскиваемая плитка — приглушена: её «место» уже занято подсказкой
+   порядка (соседи разъезжаются сразу). */
+.sm-tile.dragging,
+.sm-row.dragging { opacity: 0.45; }
+
+.sm-tile:hover {
+  border-color: color-mix(in oklch, var(--color-primary) 30%, var(--acrylic-border));
+  background: color-mix(in oklch, var(--color-primary) 6%, var(--glass-bg));
+}
+
+.sm-tile-badge,
+.sm-row-badge {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  background: color-mix(in oklch, var(--color-primary) 16%, var(--color-surface));
+  border: 1px solid color-mix(in oklch, var(--color-primary) 24%, transparent);
+  color: var(--color-primary);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.sm-tile-badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+}
+
+.sm-tile-badge.alert,
+.sm-row-badge.alert {
+  background: var(--color-error-container);
+  border-color: color-mix(in oklch, var(--color-error) 30%, transparent);
+  color: var(--color-on-error-container);
+}
+
+/* Закреплённая на панели задач плитка помечается канцелярской кнопкой. */
+.sm-tile-pin {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  font-size: 16px;
+  color: var(--color-text-dim);
+  opacity: 0.7;
+}
+
+/* ── Все разделы: категории компактных строк ── */
 .sm-group-head {
   display: flex;
   align-items: center;
   gap: 4px;
-  margin-bottom: 8px;
+  margin-bottom: 4px;
 }
 
 .sm-group-toggle {
@@ -713,7 +922,7 @@ function onGroupMenuSelect(action) {
   display: flex;
   align-items: center;
   gap: 6px;
-  height: 30px;
+  height: 28px;
   padding: 0 6px;
   border: none;
   border-radius: var(--radius-sm);
@@ -733,8 +942,8 @@ function onGroupMenuSelect(action) {
 .sm-group-chev.collapsed { rotate: -90deg; }
 
 .sm-group-label {
-  font-size: 14px;
-  font-weight: 500;
+  font-size: 13px;
+  font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -746,7 +955,7 @@ function onGroupMenuSelect(action) {
   max-width: 260px;
   height: 26px;
   padding: 0 8px;
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .sm-group-count {
@@ -756,12 +965,12 @@ function onGroupMenuSelect(action) {
 }
 
 .sm-group-more {
-  width: 30px;
-  min-width: 30px;
-  max-width: 30px;
-  height: 30px;
-  min-height: 30px;
-  max-height: 30px;
+  width: 28px;
+  min-width: 28px;
+  max-width: 28px;
+  height: 28px;
+  min-height: 28px;
+  max-height: 28px;
   display: grid;
   place-items: center;
   border: none;
@@ -777,7 +986,7 @@ function onGroupMenuSelect(action) {
 .sm-group-more:hover { background: color-mix(in oklch, var(--color-primary) 12%, transparent); color: var(--color-primary); }
 .sm-group-more .material-symbols-outlined { font-size: 20px; }
 
-/* Сворачивание раздела: 1fr → 0fr даёт плавную высоту без замеров JS. */
+/* Сворачивание категории: 1fr → 0fr даёт плавную высоту без замеров JS. */
 .sm-group-body {
   display: grid;
   grid-template-rows: 1fr;
@@ -791,27 +1000,90 @@ function onGroupMenuSelect(action) {
 
 .sm-group-inner { overflow: hidden; }
 
-/* Обычное меню: РОВНО четыре колонки, то есть две широкие плитки в ряд.
-   Ширину колонки считает сама сетка — подбирать её в пикселях бессмысленно,
-   доступное место зависит от полосы прокрутки и колонки «Моя активность». */
-.sm-tiles {
+.sm-rows {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-  min-height: 44px;
+  grid-template-columns: repeat(auto-fill, minmax(min(180px, 100%), 1fr));
+  gap: 2px 6px;
+  min-height: 36px;
 }
 
-/* Во весь экран плитки НЕ растягиваются: ширина фиксируется той же, что в
-   обычном меню, и плитки просто перетекают на освободившееся место. */
-.start-menu.full .sm-tiles {
-  grid-template-columns: repeat(auto-fill, var(--sm-tile-w, 132px));
-  justify-content: start;
+.sm-row {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  border-radius: var(--radius-md);
+  transition: background 0.15s;
 }
+
+.sm-row:hover { background: color-mix(in oklch, var(--color-primary) 8%, transparent); }
+
+.sm-row-open {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 36px;
+  padding: 0 4px 0 8px;
+  border: none;
+  background: transparent;
+  color: var(--color-text);
+  font-size: 13.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sm-row-icon {
+  font-size: 20px;
+  color: var(--color-primary);
+}
+
+.sm-row-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Звёздочка избранного: у отмеченных видна всегда, у остальных — под
+   курсором, чтобы каталог не рябил пустыми контурами. */
+.sm-row-star {
+  width: 30px;
+  min-width: 30px;
+  max-width: 30px;
+  height: 30px;
+  min-height: 30px;
+  max-height: 30px;
+  display: grid;
+  place-items: center;
+  margin-right: 3px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--color-text-dim);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s, background 0.15s;
+}
+
+.sm-row-star .material-symbols-outlined { font-size: 18px; }
+.sm-row:hover .sm-row-star,
+.sm-row-star:focus-visible { opacity: 1; }
+.sm-row-star:hover { background: color-mix(in oklch, var(--color-primary) 12%, transparent); }
+
+.sm-row-star.on {
+  opacity: 1;
+  color: var(--color-primary);
+}
+
+.sm-row-star.on .material-symbols-outlined { font-variation-settings: 'FILL' 1; }
 
 .sm-group-empty {
   grid-column: 1 / -1;
   margin: 0;
-  padding: 14px;
+  padding: 10px;
   border: 1px dashed var(--acrylic-border);
   border-radius: var(--radius-lg);
   text-align: center;
@@ -824,12 +1096,13 @@ function onGroupMenuSelect(action) {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  height: 40px;
+  flex-shrink: 0;
+  height: 36px;
   border: 1px dashed var(--acrylic-border);
   border-radius: var(--radius-lg);
   background: transparent;
   color: var(--color-text-dim);
-  font-size: 13.5px;
+  font-size: 13px;
   font-weight: 500;
   cursor: pointer;
   transition: border-color 0.15s, color 0.15s, background 0.15s;
@@ -843,79 +1116,15 @@ function onGroupMenuSelect(action) {
 
 .sm-add-group .material-symbols-outlined { font-size: 20px; }
 
-.sm-tile {
-  position: relative;
-  grid-column: span 1;
-  /* Содержимое плитки рисует LiveTile — он растягивается на всю площадь. */
-  display: flex;
-  align-items: stretch;
-  height: 112px;
-  padding: 14px;
-  overflow: hidden;
-  border: 1px solid var(--acrylic-border);
-  border-radius: var(--radius-lg);
-  background: var(--glass-bg);
-  box-shadow: var(--glass-edge);
-  color: var(--color-text);
-  cursor: pointer;
-  transition: border-color 0.15s, background 0.15s;
-}
-
-.sm-tile.is-wide { grid-column: span 2; }
-
-/* Перетаскиваемая плитка — приглушена: её «место» уже занято подсказкой
-   порядка (соседи разъезжаются сразу). */
-.sm-tile.dragging { opacity: 0.45; }
-
-.sm-tile:hover {
-  border-color: color-mix(in oklch, var(--color-primary) 30%, var(--acrylic-border));
-  background: color-mix(in oklch, var(--color-primary) 6%, var(--glass-bg));
-}
-
-.sm-tile-badge {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  min-width: 20px;
-  height: 20px;
-  padding: 0 6px;
-  display: grid;
-  place-items: center;
-  border-radius: var(--radius-sm);
-  background: color-mix(in oklch, var(--color-primary) 16%, var(--color-surface));
-  border: 1px solid color-mix(in oklch, var(--color-primary) 24%, transparent);
-  color: var(--color-primary);
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.sm-tile-badge.alert {
-  background: var(--color-error-container);
-  border-color: color-mix(in oklch, var(--color-error) 30%, transparent);
-  color: var(--color-on-error-container);
-}
-
-/* Закреплённая на панели задач плитка помечается канцелярской кнопкой. */
-.sm-tile-pin {
-  position: absolute;
-  right: 10px;
-  bottom: 10px;
-  font-size: 16px;
-  color: var(--color-text-dim);
-  opacity: 0.7;
-}
-
-/* ── Подвал: пользователь, компания, настройки, выход — на своей подложке ── */
+/* ── Подвал: низкая строка внутри панели, отбитая линией ── */
 .sm-foot {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
   flex-shrink: 0;
-  padding: 10px;
-  border: 1px solid var(--acrylic-border);
-  border-radius: var(--radius-xl);
-  background: var(--glass-bg), var(--acrylic-card-bg);
-  box-shadow: var(--glass-edge);
+  margin: 0 -4px;
+  padding: 8px 4px 0;
+  border-top: 1px solid var(--acrylic-border);
 }
 
 /* Аватар — круглая кнопка входа в аккаунт (имя не дублируем: оно в подсказке). */
@@ -923,17 +1132,16 @@ function onGroupMenuSelect(action) {
   display: grid;
   place-items: center;
   flex-shrink: 0;
-  width: 52px;
-  min-width: 52px;
-  max-width: 52px;
-  height: 52px;
-  min-height: 52px;
-  max-height: 52px;
+  width: 36px;
+  min-width: 36px;
+  max-width: 36px;
+  height: 36px;
+  min-height: 36px;
+  max-height: 36px;
   padding: 0;
   border: 1px solid var(--acrylic-border);
   border-radius: 50%;
   background: var(--glass-bg);
-  box-shadow: var(--glass-edge);
   overflow: hidden;
   cursor: pointer;
   transition: border-color 0.15s;
@@ -947,36 +1155,43 @@ function onGroupMenuSelect(action) {
   object-fit: cover;
 }
 
-.sm-icon-btn {
-  width: 52px;
-  min-width: 52px;
-  max-width: 52px;
-  height: 52px;
-  min-height: 52px;
-  max-height: 52px;
-  display: grid;
-  place-items: center;
-  border: 1px solid var(--acrylic-border);
-  border-radius: var(--radius-lg);
-  background: var(--glass-bg);
-  box-shadow: var(--glass-edge);
-  color: var(--color-text);
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
+.sm-company {
+  flex: 1;
+  min-width: 0;
+  display: flex;
 }
 
-.sm-icon-btn .material-symbols-outlined { font-size: 22px; }
+/* Выбор компании — той же высоты, что и кнопки подвала. */
+.sm-company :deep(.company-button) {
+  height: 36px;
+  min-height: 36px;
+}
+
+.sm-icon-btn {
+  width: 36px;
+  min-width: 36px;
+  max-width: 36px;
+  height: 36px;
+  min-height: 36px;
+  max-height: 36px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.sm-icon-btn .material-symbols-outlined { font-size: 20px; }
 
 .sm-icon-btn:hover {
-  border-color: color-mix(in oklch, var(--color-primary) 32%, var(--acrylic-border));
+  background: color-mix(in oklch, var(--color-primary) 10%, transparent);
   color: var(--color-primary);
 }
 
-.sm-icon-btn.danger {
-  background: var(--color-error-container);
-  border-color: color-mix(in oklch, var(--color-error) 20%, transparent);
-  color: var(--color-on-error-container);
-}
-
-.sm-icon-btn.danger:hover { background: color-mix(in oklch, var(--color-error) 22%, var(--color-error-container)); }
+.sm-icon-btn.danger { color: var(--color-error); }
+.sm-icon-btn.danger:hover { background: var(--color-error-container); color: var(--color-on-error-container); }
 </style>

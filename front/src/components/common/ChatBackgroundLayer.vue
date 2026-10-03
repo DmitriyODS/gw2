@@ -6,10 +6,12 @@ import { useThemeStore } from '@/stores/theme.js'
 const props = defineProps({
   // Нормализованный рецепт или null (тогда — базовый фон токена).
   recipe: { type: Object, default: null },
+  // Масштаб миниатюры (превью): см. chatBgStyles.
+  scale: { type: Number, default: 1 },
 })
 
 const theme = useThemeStore()
-const styles = computed(() => chatBgStyles(props.recipe, theme.dark))
+const styles = computed(() => chatBgStyles(props.recipe, theme.dark, props.scale))
 </script>
 
 <template>

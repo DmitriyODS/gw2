@@ -4,7 +4,7 @@
     class="taskbar"
     :class="[
       `side-${side}`,
-      { compact: touch, hidden: !touch && ((desktop.fullscreen && !desktop.taskbarPeek) || desktop.startFull) },
+      { compact: touch, hidden: !touch && ((desktop.fullscreen && !desktop.taskbarPeek) || (desktop.startOpen && desktop.startFull)) },
     ]"
   >
     <button

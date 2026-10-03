@@ -272,8 +272,11 @@ export function recipeBlobs(recipe) {
 
 /* Инлайн-стили для слоя фона: {gradient} — фон градиента, {pattern} — узор
    (или null). Используют и превью-диалог, и боевой слой. `dark` — тёмный режим
-   оформления: у встроенных обоев есть парная тёмная картинка. */
-export function chatBgStyles(recipe, dark = false) {
+   оформления: у встроенных обоев есть парная тёмная картинка. `scale` —
+   масштаб миниатюры: размытие и шаг узора заданы в пикселях экрана, и без него
+   превью стола размывало бы и укрупняло узор во столько раз, во сколько оно
+   меньше экрана. */
+export function chatBgStyles(recipe, dark = false, scale = 1) {
   const blobs = recipeBlobs(recipe)
   /* Однотонная заливка — это ЦВЕТ подложки, поэтому она не спорит с градиентом:
      пятна (если их оставили) лягут поверх неё. */
@@ -286,7 +289,7 @@ export function chatBgStyles(recipe, dark = false) {
   let image = null
   const im = recipe?.image
   if (im && im.url) {
-    const blur = im.blur || 0
+    const blur = (im.blur || 0) * scale
     image = {
       backgroundImage: `url("${(dark && im.dark) || im.url}")`,
       backgroundSize: 'cover',
@@ -299,12 +302,13 @@ export function chatBgStyles(recipe, dark = false) {
   const p = recipe?.pattern
   let pattern = null
   if (p && p.alpha > 0 && (p.emoji || p.key)) {
+    const size = `${Math.max(4, Math.round(p.size * scale))}px`
     if (p.emoji) {
       // Цветной эмодзи — обычный background-image, без mask.
       pattern = {
         backgroundImage: emojiPatternDataUri(p.emoji),
         backgroundRepeat: 'repeat',
-        backgroundSize: `${p.size}px ${p.size}px`,
+        backgroundSize: `${size} ${size}`,
         opacity: p.alpha / 100,
       }
     } else {
@@ -313,7 +317,7 @@ export function chatBgStyles(recipe, dark = false) {
         backgroundColor: `var(--color-${PATTERN_ROLE})`,
         maskImage: uri, WebkitMaskImage: uri,
         maskRepeat: 'repeat', WebkitMaskRepeat: 'repeat',
-        maskSize: `${p.size}px ${p.size}px`, WebkitMaskSize: `${p.size}px ${p.size}px`,
+        maskSize: `${size} ${size}`, WebkitMaskSize: `${size} ${size}`,
         opacity: p.alpha / 100,
       }
     }
